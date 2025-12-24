@@ -1,0 +1,152 @@
+{
+  "featureSummary": [
+    {
+      "relativePath": "classpath:features/users.feature",
+      "packageQualifiedName": "features.users",
+      "name": "User Management API",
+      "description": "API tests for user management endpoints",
+      "durationMillis": 2345,
+      "passedCount": 3,
+      "failedCount": 1,
+      "scenarioCount": 4,
+      "failed": true
+    }
+  ],
+  "scenarioResults": [
+    {
+      "name": "Create new user",
+      "description": "",
+      "durationMillis": 567,
+      "passed": true,
+      "failed": false,
+      "stepResults": [
+        {
+          "keyword": "Given",
+          "name": "url 'https://api.example.com/users'",
+          "passed": true,
+          "durationMillis": 12
+        },
+        {
+          "keyword": "And",
+          "name": "request { name: 'John Doe', email: 'john@example.com' }",
+          "passed": true,
+          "durationMillis": 5
+        },
+        {
+          "keyword": "When",
+          "name": "method POST",
+          "passed": true,
+          "durationMillis": 450
+        },
+        {
+          "keyword": "Then",
+          "name": "status 201",
+          "passed": true,
+          "durationMillis": 10
+        },
+        {
+          "keyword": "And",
+          "name": "match response.id == '#notnull'",
+          "passed": true,
+          "durationMillis": 8
+        }
+      ]
+    },
+    {
+      "name": "Get user by ID",
+      "description": "",
+      "durationMillis": 345,
+      "passed": true,
+      "failed": false,
+      "stepResults": [
+        {
+          "keyword": "Given",
+          "name": "url 'https://api.example.com/users/1'",
+          "passed": true,
+          "durationMillis": 8
+        },
+        {
+          "keyword": "When",
+          "name": "method GET",
+          "passed": true,
+          "durationMillis": 280
+        },
+        {
+          "keyword": "Then",
+          "name": "status 200",
+          "passed": true,
+          "durationMillis": 5
+        },
+        {
+          "keyword": "And",
+          "name": "match response.name == 'John Doe'",
+          "passed": true,
+          "durationMillis": 6
+        }
+      ]
+    },
+    {
+      "name": "Update user profile",
+      "description": "",
+      "durationMillis": 456,
+      "passed": true,
+      "failed": false,
+      "stepResults": [
+        {
+          "keyword": "Given",
+          "name": "url 'https://api.example.com/users/1'",
+          "passed": true,
+          "durationMillis": 7
+        },
+        {
+          "keyword": "And",
+          "name": "request { name: 'Jane Doe' }",
+          "passed": true,
+          "durationMillis": 4
+        },
+        {
+          "keyword": "When",
+          "name": "method PUT",
+          "passed": true,
+          "durationMillis": 380
+        },
+        {
+          "keyword": "Then",
+          "name": "status 200",
+          "passed": true,
+          "durationMillis": 5
+        }
+      ]
+    },
+    {
+      "name": "Delete user requires authentication",
+      "description": "",
+      "durationMillis": 234,
+      "passed": false,
+      "failed": true,
+      "stepResults": [
+        {
+          "keyword": "Given",
+          "name": "url 'https://api.example.com/users/1'",
+          "passed": true,
+          "durationMillis": 6
+        },
+        {
+          "keyword": "When",
+          "name": "method DELETE",
+          "passed": true,
+          "durationMillis": 180
+        },
+        {
+          "keyword": "Then",
+          "name": "status 401",
+          "passed": false,
+          "durationMillis": 8,
+          "errorMessage": "status code was: 403, expected: 401"
+        }
+      ]
+    }
+  ],
+  "elapsedTime": 2345,
+  "totalTime": 2345
+}

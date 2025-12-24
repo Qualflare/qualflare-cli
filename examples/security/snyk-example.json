@@ -1,0 +1,173 @@
+{
+  "ok": false,
+  "dependencyCount": 156,
+  "org": "my-organization",
+  "policy": "# Snyk (https://snyk.io) policy file",
+  "isPrivate": true,
+  "packageManager": "npm",
+  "projectName": "my-web-application",
+  "summary": "4 vulnerable dependency paths",
+  "filePath": "package.json",
+  "uniqueCount": 4,
+  "vulnerabilities": [
+    {
+      "id": "SNYK-JS-LODASH-1018905",
+      "title": "Prototype Pollution",
+      "severity": "critical",
+      "description": "lodash package is vulnerable to Prototype Pollution via the setWith and set functions.",
+      "CVSSv3": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H",
+      "cvssScore": 9.8,
+      "packageName": "lodash",
+      "version": "4.17.15",
+      "from": ["my-web-application@1.0.0", "express@4.17.1", "lodash@4.17.15"],
+      "upgradePath": [false, "express@4.18.2", "lodash@4.17.21"],
+      "isPatchable": false,
+      "isUpgradable": true,
+      "language": "js",
+      "packageManager": "npm",
+      "publicationTime": "2021-02-15T10:00:00Z",
+      "modificationTime": "2023-06-12T14:30:00Z",
+      "identifiers": {
+        "CVE": ["CVE-2021-23337"],
+        "CWE": ["CWE-1321"]
+      },
+      "semver": {
+        "vulnerable": ["<4.17.21"]
+      },
+      "exploit": "Proof of Concept",
+      "fixedIn": ["4.17.21"],
+      "references": [
+        {
+          "url": "https://github.com/lodash/lodash/pull/4336",
+          "title": "GitHub PR"
+        },
+        {
+          "url": "https://snyk.io/vuln/SNYK-JS-LODASH-1018905",
+          "title": "Snyk Advisory"
+        }
+      ]
+    },
+    {
+      "id": "SNYK-JS-AXIOS-1579269",
+      "title": "Server-Side Request Forgery (SSRF)",
+      "severity": "high",
+      "description": "axios is vulnerable to Server-Side Request Forgery when the URL contains a hostname that uses credentials.",
+      "CVSSv3": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:L/A:N",
+      "cvssScore": 8.2,
+      "packageName": "axios",
+      "version": "0.21.1",
+      "from": ["my-web-application@1.0.0", "api-client@2.0.0", "axios@0.21.1"],
+      "upgradePath": [false, "api-client@2.1.0", "axios@0.21.4"],
+      "isPatchable": false,
+      "isUpgradable": true,
+      "language": "js",
+      "packageManager": "npm",
+      "publicationTime": "2021-09-13T12:00:00Z",
+      "modificationTime": "2023-04-18T09:15:00Z",
+      "identifiers": {
+        "CVE": ["CVE-2021-3749"],
+        "CWE": ["CWE-918"]
+      },
+      "semver": {
+        "vulnerable": ["<0.21.4"]
+      },
+      "exploit": "Not Defined",
+      "fixedIn": ["0.21.4"],
+      "references": [
+        {
+          "url": "https://github.com/axios/axios/commit/5b457116e31db0e88fede6c428e969e87f290929",
+          "title": "GitHub Commit"
+        }
+      ]
+    },
+    {
+      "id": "SNYK-JS-MINIMIST-2429795",
+      "title": "Prototype Pollution",
+      "severity": "medium",
+      "description": "minimist package is vulnerable to Prototype Pollution via the setKey function.",
+      "CVSSv3": "CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:L/I:L/A:L",
+      "cvssScore": 5.6,
+      "packageName": "minimist",
+      "version": "1.2.5",
+      "from": ["my-web-application@1.0.0", "mkdirp@0.5.5", "minimist@1.2.5"],
+      "upgradePath": [false, "mkdirp@1.0.4"],
+      "isPatchable": false,
+      "isUpgradable": true,
+      "language": "js",
+      "packageManager": "npm",
+      "publicationTime": "2022-03-21T16:00:00Z",
+      "modificationTime": "2023-02-10T11:45:00Z",
+      "identifiers": {
+        "CVE": ["CVE-2021-44906"],
+        "CWE": ["CWE-1321"]
+      },
+      "semver": {
+        "vulnerable": ["<1.2.6"]
+      },
+      "exploit": "Not Defined",
+      "fixedIn": ["1.2.6"],
+      "references": [
+        {
+          "url": "https://github.com/minimistjs/minimist/commit/c2b981977fa834b223b408cfb860f933c9811e4d",
+          "title": "GitHub Commit"
+        }
+      ]
+    },
+    {
+      "id": "SNYK-JS-ANSIREGEX-1583908",
+      "title": "Regular Expression Denial of Service (ReDoS)",
+      "severity": "low",
+      "description": "ansi-regex package is vulnerable to Regular Expression Denial of Service.",
+      "CVSSv3": "CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:N/I:N/A:L",
+      "cvssScore": 3.7,
+      "packageName": "ansi-regex",
+      "version": "5.0.0",
+      "from": ["my-web-application@1.0.0", "chalk@4.1.0", "ansi-styles@4.3.0", "ansi-regex@5.0.0"],
+      "upgradePath": [],
+      "isPatchable": false,
+      "isUpgradable": false,
+      "language": "js",
+      "packageManager": "npm",
+      "publicationTime": "2021-09-17T14:00:00Z",
+      "modificationTime": "2023-01-05T08:30:00Z",
+      "identifiers": {
+        "CVE": ["CVE-2021-3807"],
+        "CWE": ["CWE-1333"]
+      },
+      "semver": {
+        "vulnerable": [">=3.0.0 <5.0.1", ">=6.0.0 <6.0.1"]
+      },
+      "exploit": "Not Defined",
+      "fixedIn": ["5.0.1", "6.0.1"],
+      "references": [
+        {
+          "url": "https://github.com/chalk/ansi-regex/commit/8d1d7cdb586269882c4bdc1b7325d0c58c8f76f9",
+          "title": "GitHub Commit"
+        }
+      ]
+    }
+  ],
+  "remediation": {
+    "unresolved": [
+      {
+        "id": "SNYK-JS-ANSIREGEX-1583908",
+        "title": "Regular Expression Denial of Service (ReDoS)"
+      }
+    ],
+    "upgrade": {
+      "lodash@4.17.15": {
+        "upgradeTo": "lodash@4.17.21",
+        "upgrades": ["lodash@4.17.15"],
+        "vulns": ["SNYK-JS-LODASH-1018905"]
+      },
+      "axios@0.21.1": {
+        "upgradeTo": "axios@0.21.4",
+        "upgrades": ["axios@0.21.1"],
+        "vulns": ["SNYK-JS-AXIOS-1579269"]
+      }
+    },
+    "patch": {},
+    "ignore": {},
+    "pin": {}
+  }
+}

@@ -1,0 +1,134 @@
+{
+  "project": "E-Commerce Web Application",
+  "environment": "staging",
+  "browser": "chrome",
+  "browserVersion": "120.0.6099.109",
+  "platform": "Windows 10",
+  "startTime": "2024-01-15T10:30:00.000Z",
+  "endTime": "2024-01-15T10:30:25.678Z",
+  "duration": 25678,
+  "passed": 3,
+  "failed": 1,
+  "skipped": 1,
+  "total": 5,
+  "suites": [
+    {
+      "name": "Checkout Flow",
+      "tests": [
+        {
+          "name": "should add item to cart",
+          "className": "com.example.tests.CheckoutTest",
+          "status": "passed",
+          "duration": 4567,
+          "startTime": "2024-01-15T10:30:00.000Z",
+          "steps": [
+            {
+              "action": "navigate",
+              "target": "https://shop.example.com/products",
+              "status": "passed",
+              "duration": 1234
+            },
+            {
+              "action": "click",
+              "target": "//button[@data-testid='add-to-cart']",
+              "status": "passed",
+              "duration": 567
+            },
+            {
+              "action": "assert",
+              "target": "cart count equals 1",
+              "status": "passed",
+              "duration": 234
+            }
+          ]
+        },
+        {
+          "name": "should proceed to checkout",
+          "className": "com.example.tests.CheckoutTest",
+          "status": "passed",
+          "duration": 5678,
+          "startTime": "2024-01-15T10:30:05.000Z",
+          "steps": [
+            {
+              "action": "click",
+              "target": "//a[@href='/cart']",
+              "status": "passed",
+              "duration": 345
+            },
+            {
+              "action": "click",
+              "target": "//button[text()='Proceed to Checkout']",
+              "status": "passed",
+              "duration": 456
+            },
+            {
+              "action": "assert",
+              "target": "url contains /checkout",
+              "status": "passed",
+              "duration": 123
+            }
+          ]
+        },
+        {
+          "name": "should complete payment",
+          "className": "com.example.tests.CheckoutTest",
+          "status": "failed",
+          "duration": 8901,
+          "startTime": "2024-01-15T10:30:11.000Z",
+          "error": {
+            "message": "Element not found: //input[@id='card-number']",
+            "type": "NoSuchElementException",
+            "stackTrace": "org.openqa.selenium.NoSuchElementException: no such element: Unable to locate element: {\"method\":\"xpath\",\"selector\":\"//input[@id='card-number']\"}\n  at CheckoutTest.shouldCompletePayment(CheckoutTest.java:78)"
+          },
+          "steps": [
+            {
+              "action": "sendKeys",
+              "target": "//input[@id='card-number']",
+              "value": "4111111111111111",
+              "status": "failed",
+              "duration": 5000,
+              "error": "Element not found"
+            }
+          ],
+          "screenshot": "screenshots/checkout-failure-1705315820000.png"
+        },
+        {
+          "name": "should apply discount code",
+          "className": "com.example.tests.CheckoutTest",
+          "status": "passed",
+          "duration": 3456,
+          "startTime": "2024-01-15T10:30:20.000Z",
+          "steps": [
+            {
+              "action": "sendKeys",
+              "target": "//input[@id='discount-code']",
+              "value": "SAVE20",
+              "status": "passed",
+              "duration": 234
+            },
+            {
+              "action": "click",
+              "target": "//button[text()='Apply']",
+              "status": "passed",
+              "duration": 345
+            },
+            {
+              "action": "assert",
+              "target": "discount applied message visible",
+              "status": "passed",
+              "duration": 123
+            }
+          ]
+        },
+        {
+          "name": "should handle international shipping",
+          "className": "com.example.tests.CheckoutTest",
+          "status": "skipped",
+          "duration": 0,
+          "startTime": "2024-01-15T10:30:24.000Z",
+          "skipReason": "International shipping feature not enabled in staging"
+        }
+      ]
+    }
+  ]
+}

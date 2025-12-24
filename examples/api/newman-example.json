@@ -1,0 +1,310 @@
+{
+  "collection": {
+    "info": {
+      "_postman_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+      "name": "User API Collection",
+      "description": "API tests for user management endpoints",
+      "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+    }
+  },
+  "run": {
+    "stats": {
+      "iterations": {
+        "total": 1,
+        "pending": 0,
+        "failed": 0
+      },
+      "items": {
+        "total": 4,
+        "pending": 0,
+        "failed": 1
+      },
+      "scripts": {
+        "total": 8,
+        "pending": 0,
+        "failed": 0
+      },
+      "prerequests": {
+        "total": 4,
+        "pending": 0,
+        "failed": 0
+      },
+      "requests": {
+        "total": 4,
+        "pending": 0,
+        "failed": 0
+      },
+      "tests": {
+        "total": 4,
+        "pending": 0,
+        "failed": 1
+      },
+      "assertions": {
+        "total": 12,
+        "pending": 0,
+        "failed": 2
+      },
+      "testScripts": {
+        "total": 4,
+        "pending": 0,
+        "failed": 0
+      },
+      "prerequestScripts": {
+        "total": 4,
+        "pending": 0,
+        "failed": 0
+      }
+    },
+    "timings": {
+      "responseAverage": 234,
+      "responseMin": 89,
+      "responseMax": 456,
+      "responseSd": 123,
+      "dnsMean": 12,
+      "firstByteMean": 45,
+      "started": 1705315800000,
+      "completed": 1705315805678
+    },
+    "executions": [
+      {
+        "id": "item-1",
+        "cursor": {
+          "position": 0,
+          "iteration": 0,
+          "length": 4,
+          "cycles": 1,
+          "empty": false,
+          "eof": false,
+          "bof": true,
+          "cr": false,
+          "ref": "user-1"
+        },
+        "item": {
+          "id": "item-1",
+          "name": "Create User"
+        },
+        "request": {
+          "url": {
+            "protocol": "https",
+            "host": ["api", "example", "com"],
+            "path": ["users"]
+          },
+          "method": "POST"
+        },
+        "response": {
+          "id": "response-1",
+          "status": "Created",
+          "code": 201,
+          "responseTime": 234,
+          "responseSize": 456
+        },
+        "assertions": [
+          {
+            "assertion": "Status code is 201",
+            "skipped": false,
+            "error": null
+          },
+          {
+            "assertion": "Response has user id",
+            "skipped": false,
+            "error": null
+          },
+          {
+            "assertion": "Response time is less than 500ms",
+            "skipped": false,
+            "error": null
+          }
+        ]
+      },
+      {
+        "id": "item-2",
+        "cursor": {
+          "position": 1,
+          "iteration": 0,
+          "length": 4,
+          "cycles": 1,
+          "empty": false,
+          "eof": false,
+          "bof": false,
+          "cr": false,
+          "ref": "user-2"
+        },
+        "item": {
+          "id": "item-2",
+          "name": "Get User"
+        },
+        "request": {
+          "url": {
+            "protocol": "https",
+            "host": ["api", "example", "com"],
+            "path": ["users", "1"]
+          },
+          "method": "GET"
+        },
+        "response": {
+          "id": "response-2",
+          "status": "OK",
+          "code": 200,
+          "responseTime": 89,
+          "responseSize": 234
+        },
+        "assertions": [
+          {
+            "assertion": "Status code is 200",
+            "skipped": false,
+            "error": null
+          },
+          {
+            "assertion": "User name matches",
+            "skipped": false,
+            "error": null
+          },
+          {
+            "assertion": "Email is valid format",
+            "skipped": false,
+            "error": null
+          }
+        ]
+      },
+      {
+        "id": "item-3",
+        "cursor": {
+          "position": 2,
+          "iteration": 0,
+          "length": 4,
+          "cycles": 1,
+          "empty": false,
+          "eof": false,
+          "bof": false,
+          "cr": false,
+          "ref": "user-3"
+        },
+        "item": {
+          "id": "item-3",
+          "name": "Update User"
+        },
+        "request": {
+          "url": {
+            "protocol": "https",
+            "host": ["api", "example", "com"],
+            "path": ["users", "1"]
+          },
+          "method": "PUT"
+        },
+        "response": {
+          "id": "response-3",
+          "status": "OK",
+          "code": 200,
+          "responseTime": 156,
+          "responseSize": 345
+        },
+        "assertions": [
+          {
+            "assertion": "Status code is 200",
+            "skipped": false,
+            "error": null
+          },
+          {
+            "assertion": "Updated name is reflected",
+            "skipped": false,
+            "error": null
+          },
+          {
+            "assertion": "Updated timestamp is recent",
+            "skipped": false,
+            "error": null
+          }
+        ]
+      },
+      {
+        "id": "item-4",
+        "cursor": {
+          "position": 3,
+          "iteration": 0,
+          "length": 4,
+          "cycles": 1,
+          "empty": false,
+          "eof": true,
+          "bof": false,
+          "cr": false,
+          "ref": "user-4"
+        },
+        "item": {
+          "id": "item-4",
+          "name": "Delete User"
+        },
+        "request": {
+          "url": {
+            "protocol": "https",
+            "host": ["api", "example", "com"],
+            "path": ["users", "1"]
+          },
+          "method": "DELETE"
+        },
+        "response": {
+          "id": "response-4",
+          "status": "Forbidden",
+          "code": 403,
+          "responseTime": 456,
+          "responseSize": 123
+        },
+        "assertions": [
+          {
+            "assertion": "Status code is 204",
+            "skipped": false,
+            "error": {
+              "name": "AssertionError",
+              "message": "expected response to have status code 204 but got 403",
+              "index": 0
+            }
+          },
+          {
+            "assertion": "User should not exist after deletion",
+            "skipped": false,
+            "error": {
+              "name": "AssertionError",
+              "message": "expected user to be deleted but still exists",
+              "index": 1
+            }
+          },
+          {
+            "assertion": "Response time is less than 500ms",
+            "skipped": false,
+            "error": null
+          }
+        ]
+      }
+    ],
+    "transfers": {
+      "responseTotal": 1158
+    },
+    "failures": [
+      {
+        "parent": {
+          "id": "item-4",
+          "name": "Delete User"
+        },
+        "source": {
+          "name": "Status code is 204"
+        },
+        "error": {
+          "name": "AssertionError",
+          "message": "expected response to have status code 204 but got 403"
+        }
+      },
+      {
+        "parent": {
+          "id": "item-4",
+          "name": "Delete User"
+        },
+        "source": {
+          "name": "User should not exist after deletion"
+        },
+        "error": {
+          "name": "AssertionError",
+          "message": "expected user to be deleted but still exists"
+        }
+      }
+    ]
+  }
+}

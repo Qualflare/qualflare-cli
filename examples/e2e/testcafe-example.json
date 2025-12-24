@@ -1,0 +1,84 @@
+{
+  "startTime": "2024-01-15T10:30:00.000Z",
+  "endTime": "2024-01-15T10:30:18.456Z",
+  "userAgents": [
+    "Chrome 120.0.6099.109 / macOS 14.2.1"
+  ],
+  "passed": 3,
+  "failed": 1,
+  "skipped": 1,
+  "total": 5,
+  "fixtures": [
+    {
+      "name": "Shopping Cart",
+      "path": "/app/tests/cart.spec.ts",
+      "meta": {
+        "priority": "high",
+        "component": "cart"
+      },
+      "tests": [
+        {
+          "name": "should add product to cart",
+          "meta": {},
+          "errs": [],
+          "durationMs": 3456,
+          "screenshotPath": null,
+          "skipped": false,
+          "unstable": false
+        },
+        {
+          "name": "should update product quantity",
+          "meta": {},
+          "errs": [],
+          "durationMs": 2345,
+          "screenshotPath": null,
+          "skipped": false,
+          "unstable": false
+        },
+        {
+          "name": "should remove product from cart",
+          "meta": {},
+          "errs": [
+            {
+              "apiFnChain": ["click", "Selector"],
+              "isTestCafeError": true,
+              "screenshotPath": "/app/tests/screenshots/cart-remove-error.png",
+              "testRunId": "abc123",
+              "testRunPhase": "inTest",
+              "userAgent": "Chrome 120.0.6099.109 / macOS 14.2.1",
+              "code": "E24",
+              "errMsg": "The specified selector does not match any element in the DOM tree.\n\n > | Selector('[data-testid=\"remove-btn\"]')\n\nBrowser: Chrome 120.0.6099.109 / macOS 14.2.1\n\n   at <anonymous> (/app/tests/cart.spec.ts:45:23)"
+            }
+          ],
+          "durationMs": 5678,
+          "screenshotPath": "/app/tests/screenshots/cart-remove-error.png",
+          "skipped": false,
+          "unstable": false
+        },
+        {
+          "name": "should apply coupon code",
+          "meta": {},
+          "errs": [],
+          "durationMs": 2890,
+          "screenshotPath": null,
+          "skipped": false,
+          "unstable": false
+        },
+        {
+          "name": "should handle out of stock items",
+          "meta": {
+            "skip": "Inventory service not available"
+          },
+          "errs": [],
+          "durationMs": 0,
+          "screenshotPath": null,
+          "skipped": true,
+          "unstable": false
+        }
+      ]
+    }
+  ],
+  "warnings": [
+    "The test run was performed on Chrome 120.0.6099.109. Some features may not work as expected."
+  ]
+}

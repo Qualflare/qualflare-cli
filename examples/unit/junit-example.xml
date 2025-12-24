@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuites name="JUnit Test Suite" tests="5" failures="1" errors="1" skipped="1" time="2.345">
+  <testsuite name="com.example.UserServiceTest" tests="5" failures="1" errors="1" skipped="1" time="2.345" timestamp="2024-01-15T10:30:00">
+    <properties>
+      <property name="java.version" value="17"/>
+      <property name="os.name" value="Linux"/>
+    </properties>
+    <testcase classname="com.example.UserServiceTest" name="testUserCreation" time="0.234">
+    </testcase>
+    <testcase classname="com.example.UserServiceTest" name="testUserAuthentication" time="0.567">
+    </testcase>
+    <testcase classname="com.example.UserServiceTest" name="testUserValidationFails" time="0.123">
+      <failure message="Expected valid email" type="AssertionError">
+java.lang.AssertionError: Expected valid email
+	at com.example.UserServiceTest.testUserValidationFails(UserServiceTest.java:45)
+	at java.base/jdk.internal.reflect.NativeMethodAccessorImpl.invoke0(Native Method)
+      </failure>
+    </testcase>
+    <testcase classname="com.example.UserServiceTest" name="testDatabaseConnection" time="1.234">
+      <error message="Connection refused" type="SQLException">
+java.sql.SQLException: Connection refused
+	at com.example.UserServiceTest.testDatabaseConnection(UserServiceTest.java:67)
+      </error>
+    </testcase>
+    <testcase classname="com.example.UserServiceTest" name="testUserDeletion" time="0.0">
+      <skipped message="Feature not implemented yet"/>
+    </testcase>
+  </testsuite>
+</testsuites>
