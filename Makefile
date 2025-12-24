@@ -184,7 +184,7 @@ help:
 	@echo "  validate-security   Validate security examples"
 	@echo "  validate-<framework> Validate specific framework (e.g., validate-junit)"
 	@echo ""
-	@echo "Example Upload (requires QF_PROJECT, QF_API_KEY, QF_API_ENDPOINT):"
+	@echo "Example Upload (requires QF_API_KEY, QF_API_ENDPOINT):"
 	@echo "  upload-examples     Upload all example files"
 	@echo "  upload-unit         Upload unit test examples"
 	@echo "  upload-bdd          Upload BDD examples"
@@ -286,7 +286,7 @@ validate-sonarqube: build
 	@./$(BUILD_DIR)/$(BINARY_NAME) validate $(EXAMPLES_DIR)/security/sonarqube-example.json
 
 # =============================================================================
-# Example Upload Targets (requires QF_PROJECT, QF_API_KEY, QF_API_ENDPOINT)
+# Example Upload Targets (requires QF_API_KEY, QF_API_ENDPOINT)
 # =============================================================================
 
 # Upload all examples

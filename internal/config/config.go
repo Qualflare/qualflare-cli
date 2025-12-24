@@ -13,7 +13,6 @@ type Config struct {
 	APIEndpoint string
 
 	// Project settings
-	ProjectName string
 	Environment string
 
 	// Git information
@@ -38,8 +37,7 @@ type Config struct {
 func DefaultConfig() *Config {
 	return &Config{
 		APIKey:         "",
-		APIEndpoint:    "http://127.0.0.1:8001/v1/collect",
-		ProjectName:    "",
+		APIEndpoint:    "http://127.0.0.1:8001/api/v1/collect",
 		Environment:    "development",
 		Branch:         "",
 		Commit:         "",
@@ -62,17 +60,11 @@ func NewConfig() *Config {
 
 // LoadFromEnv loads configuration from environment variables
 func (c *Config) LoadFromEnv() {
-	// API settings
 	if v := os.Getenv("QF_API_KEY"); v != "" {
 		c.APIKey = v
 	}
 	if v := os.Getenv("QF_API_ENDPOINT"); v != "" {
 		c.APIEndpoint = v
-	}
-
-	// Project settings
-	if v := os.Getenv("QF_PROJECT"); v != "" {
-		c.ProjectName = v
 	}
 	if v := os.Getenv("QF_ENVIRONMENT"); v != "" {
 		c.Environment = v
@@ -129,13 +121,6 @@ func (c *Config) SetAPIEndpoint(endpoint string) {
 	}
 }
 
-// SetProject sets the project name
-func (c *Config) SetProject(project string) {
-	if project != "" {
-		c.ProjectName = project
-	}
-}
-
 // SetEnvironment sets the environment
 func (c *Config) SetEnvironment(env string) {
 	if env != "" {
@@ -189,11 +174,6 @@ func (c *Config) GetAPIEndpoint() string {
 	return c.APIEndpoint
 }
 
-// GetProject returns the project name
-func (c *Config) GetProject() string {
-	return c.ProjectName
-}
-
 // GetEnvironment returns the environment
 func (c *Config) GetEnvironment() string {
 	return c.Environment
@@ -236,9 +216,7 @@ func (c *Config) IsDryRun() bool {
 
 // Validate validates the configuration
 func (c *Config) Validate() error {
-	if c.ProjectName == "" {
-		return &ValidationError{Field: "project", Message: "project name is required. Set QF_PROJECT or use --project flag"}
-	}
+	// Project is optional - determined from API key on server side
 	return nil
 }
 

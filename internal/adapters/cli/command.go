@@ -101,7 +101,6 @@ The format is auto-detected if not specified.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return c.runUpload(cmd.Context(), args, uploadOptions{
 				format:      format,
-				project:     project,
 				environment: environment,
 				branch:      branch,
 				commit:      commit,
@@ -116,7 +115,7 @@ The format is auto-detected if not specified.`,
 
 	// Flags
 	cmd.Flags().StringVarP(&format, "format", "f", "", "Test framework format (auto-detected if not specified)")
-	cmd.Flags().StringVarP(&project, "project", "p", "", "Project name (required, or set QF_PROJECT)")
+	cmd.Flags().StringVarP(&project, "project", "p", "", "Project name (optional, defaults to API key project)")
 	cmd.Flags().StringVarP(&environment, "environment", "e", "", "Environment name")
 	cmd.Flags().StringVar(&branch, "branch", "", "Git branch name")
 	cmd.Flags().StringVar(&commit, "commit", "", "Git commit hash")
@@ -131,7 +130,6 @@ The format is auto-detected if not specified.`,
 
 type uploadOptions struct {
 	format      string
-	project     string
 	environment string
 	branch      string
 	commit      string
@@ -144,7 +142,6 @@ type uploadOptions struct {
 
 func (c *CLI) runUpload(ctx context.Context, files []string, opts uploadOptions) error {
 	// Apply command line overrides
-	c.config.SetProject(opts.project)
 	c.config.SetEnvironment(opts.environment)
 	c.config.SetBranch(opts.branch)
 	c.config.SetCommit(opts.commit)
