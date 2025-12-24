@@ -2,37 +2,262 @@ package config
 
 import (
 	"os"
+	"strconv"
+	"time"
 )
 
 // Config holds the application configuration
 type Config struct {
+	// API settings
 	APIKey      string
+	APIEndpoint string
+
+	// Project settings
 	ProjectName string
 	Environment string
-	Branch      string
-	Commit      string
+
+	// Git information
+	Branch string
+	Commit string
+
+	// Retry settings
+	RetryMax      int
+	RetryBaseDelay time.Duration
+	RetryMaxDelay  time.Duration
+
+	// Request settings
+	Timeout time.Duration
+
+	// Output settings
+	Verbose bool
+	Quiet   bool
+	DryRun  bool
 }
 
-// NewConfig creates a new configuration instance
-func NewConfig() *Config {
+// DefaultConfig returns the default configuration
+func DefaultConfig() *Config {
 	return &Config{
-		APIKey:      getEnvOrDefault("QF_API_KEY", ""),
-		ProjectName: getEnvOrDefault("QF_PROJECT", "project"),
-		Environment: getEnvOrDefault("QF_ENVIRONMENT", "development"),
-		Branch:      getEnvOrDefault("GIT_BRANCH", ""),
-		Commit:      getEnvOrDefault("GIT_COMMIT", ""),
+		APIKey:         "",
+		APIEndpoint:    "https://api.qualflare.com/v1/collect",
+		ProjectName:    "",
+		Environment:    "development",
+		Branch:         "",
+		Commit:         "",
+		RetryMax:       3,
+		RetryBaseDelay: 1 * time.Second,
+		RetryMaxDelay:  30 * time.Second,
+		Timeout:        30 * time.Second,
+		Verbose:        false,
+		Quiet:          false,
+		DryRun:         false,
 	}
 }
 
-func (c *Config) GetAPIKey() string      { return c.APIKey }
-func (c *Config) GetProject() string     { return c.ProjectName }
-func (c *Config) GetEnvironment() string { return c.Environment }
-func (c *Config) GetBranch() string      { return c.Branch }
-func (c *Config) GetCommit() string      { return c.Commit }
+// NewConfig creates a new configuration instance with environment variable overrides
+func NewConfig() *Config {
+	cfg := DefaultConfig()
+	cfg.LoadFromEnv()
+	return cfg
+}
 
-func getEnvOrDefault(key, defaultValue string) string {
-	if value := os.Getenv(key); value != "" {
-		return value
+// LoadFromEnv loads configuration from environment variables
+func (c *Config) LoadFromEnv() {
+	// API settings
+	if v := os.Getenv("QF_API_KEY"); v != "" {
+		c.APIKey = v
 	}
-	return defaultValue
+	if v := os.Getenv("QF_API_ENDPOINT"); v != "" {
+		c.APIEndpoint = v
+	}
+
+	// Project settings
+	if v := os.Getenv("QF_PROJECT"); v != "" {
+		c.ProjectName = v
+	}
+	if v := os.Getenv("QF_ENVIRONMENT"); v != "" {
+		c.Environment = v
+	}
+
+	// Git information (common CI environment variables)
+	c.Branch = getFirstEnv("QF_BRANCH", "GIT_BRANCH", "GITHUB_REF_NAME", "CI_COMMIT_REF_NAME", "BITBUCKET_BRANCH")
+	c.Commit = getFirstEnv("QF_COMMIT", "GIT_COMMIT", "GITHUB_SHA", "CI_COMMIT_SHA", "BITBUCKET_COMMIT")
+
+	// Retry settings
+	if v := os.Getenv("QF_RETRY_MAX"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n >= 0 {
+			c.RetryMax = n
+		}
+	}
+	if v := os.Getenv("QF_RETRY_DELAY"); v != "" {
+		if d, err := time.ParseDuration(v); err == nil {
+			c.RetryBaseDelay = d
+		}
+	}
+	if v := os.Getenv("QF_RETRY_MAX_DELAY"); v != "" {
+		if d, err := time.ParseDuration(v); err == nil {
+			c.RetryMaxDelay = d
+		}
+	}
+
+	// Request settings
+	if v := os.Getenv("QF_TIMEOUT"); v != "" {
+		if d, err := time.ParseDuration(v); err == nil {
+			c.Timeout = d
+		}
+	}
+
+	// Output settings
+	if v := os.Getenv("QF_VERBOSE"); v == "true" || v == "1" {
+		c.Verbose = true
+	}
+	if v := os.Getenv("QF_QUIET"); v == "true" || v == "1" {
+		c.Quiet = true
+	}
+}
+
+// SetAPIKey sets the API key
+func (c *Config) SetAPIKey(key string) {
+	if key != "" {
+		c.APIKey = key
+	}
+}
+
+// SetAPIEndpoint sets the API endpoint
+func (c *Config) SetAPIEndpoint(endpoint string) {
+	if endpoint != "" {
+		c.APIEndpoint = endpoint
+	}
+}
+
+// SetProject sets the project name
+func (c *Config) SetProject(project string) {
+	if project != "" {
+		c.ProjectName = project
+	}
+}
+
+// SetEnvironment sets the environment
+func (c *Config) SetEnvironment(env string) {
+	if env != "" {
+		c.Environment = env
+	}
+}
+
+// SetBranch sets the git branch
+func (c *Config) SetBranch(branch string) {
+	if branch != "" {
+		c.Branch = branch
+	}
+}
+
+// SetCommit sets the git commit
+func (c *Config) SetCommit(commit string) {
+	if commit != "" {
+		c.Commit = commit
+	}
+}
+
+// SetTimeout sets the request timeout
+func (c *Config) SetTimeout(timeout time.Duration) {
+	if timeout > 0 {
+		c.Timeout = timeout
+	}
+}
+
+// SetVerbose sets verbose mode
+func (c *Config) SetVerbose(verbose bool) {
+	c.Verbose = verbose
+}
+
+// SetQuiet sets quiet mode
+func (c *Config) SetQuiet(quiet bool) {
+	c.Quiet = quiet
+}
+
+// SetDryRun sets dry run mode
+func (c *Config) SetDryRun(dryRun bool) {
+	c.DryRun = dryRun
+}
+
+// GetAPIKey returns the API key
+func (c *Config) GetAPIKey() string {
+	return c.APIKey
+}
+
+// GetAPIEndpoint returns the API endpoint
+func (c *Config) GetAPIEndpoint() string {
+	return c.APIEndpoint
+}
+
+// GetProject returns the project name
+func (c *Config) GetProject() string {
+	return c.ProjectName
+}
+
+// GetEnvironment returns the environment
+func (c *Config) GetEnvironment() string {
+	return c.Environment
+}
+
+// GetBranch returns the git branch
+func (c *Config) GetBranch() string {
+	return c.Branch
+}
+
+// GetCommit returns the git commit
+func (c *Config) GetCommit() string {
+	return c.Commit
+}
+
+// GetRetryConfig returns retry configuration
+func (c *Config) GetRetryConfig() (max int, baseDelay, maxDelay time.Duration) {
+	return c.RetryMax, c.RetryBaseDelay, c.RetryMaxDelay
+}
+
+// GetTimeout returns the request timeout
+func (c *Config) GetTimeout() time.Duration {
+	return c.Timeout
+}
+
+// IsVerbose returns whether verbose mode is enabled
+func (c *Config) IsVerbose() bool {
+	return c.Verbose
+}
+
+// IsQuiet returns whether quiet mode is enabled
+func (c *Config) IsQuiet() bool {
+	return c.Quiet
+}
+
+// IsDryRun returns whether dry run mode is enabled
+func (c *Config) IsDryRun() bool {
+	return c.DryRun
+}
+
+// Validate validates the configuration
+func (c *Config) Validate() error {
+	if c.ProjectName == "" {
+		return &ValidationError{Field: "project", Message: "project name is required. Set QF_PROJECT or use --project flag"}
+	}
+	return nil
+}
+
+// ValidationError represents a configuration validation error
+type ValidationError struct {
+	Field   string
+	Message string
+}
+
+func (e *ValidationError) Error() string {
+	return e.Message
+}
+
+// getFirstEnv returns the first non-empty environment variable value
+func getFirstEnv(keys ...string) string {
+	for _, key := range keys {
+		if v := os.Getenv(key); v != "" {
+			return v
+		}
+	}
+	return ""
 }

@@ -1,0 +1,131 @@
+{
+  "@version": "2.14.0",
+  "@generated": "Mon, 15 Jan 2024 10:30:00",
+  "site": [
+    {
+      "@name": "https://example.com",
+      "@host": "example.com",
+      "@port": "443",
+      "@ssl": "true",
+      "alerts": [
+        {
+          "pluginid": "10016",
+          "alertRef": "10016",
+          "alert": "Web Browser XSS Protection Not Enabled",
+          "name": "Web Browser XSS Protection Not Enabled",
+          "riskcode": "1",
+          "confidence": "2",
+          "riskdesc": "Low (Medium)",
+          "desc": "Web Browser XSS Protection is not enabled, or is disabled by the configuration of the 'X-XSS-Protection' HTTP response header on the web server",
+          "instances": [
+            {
+              "uri": "https://example.com/",
+              "method": "GET",
+              "param": "X-XSS-Protection",
+              "attack": "",
+              "evidence": ""
+            }
+          ],
+          "count": "1",
+          "solution": "Ensure that the web browser's XSS filter is enabled, by setting the X-XSS-Protection HTTP response header to '1'.",
+          "otherinfo": "The X-XSS-Protection HTTP response header allows the web server to enable or disable the web browser's XSS protection mechanism.",
+          "reference": "https://owasp.org/www-community/attacks/xss/",
+          "cweid": "693",
+          "wascid": "14",
+          "sourceid": "3",
+          "tags": {
+            "OWASP_2021_A05": "Security Misconfiguration",
+            "CWE-693": "Protection Mechanism Failure"
+          }
+        },
+        {
+          "pluginid": "10021",
+          "alertRef": "10021",
+          "alert": "X-Content-Type-Options Header Missing",
+          "name": "X-Content-Type-Options Header Missing",
+          "riskcode": "1",
+          "confidence": "2",
+          "riskdesc": "Low (Medium)",
+          "desc": "The Anti-MIME-Sniffing header X-Content-Type-Options was not set to 'nosniff'. This allows older versions of Internet Explorer and Chrome to perform MIME-sniffing on the response body.",
+          "instances": [
+            {
+              "uri": "https://example.com/api/users",
+              "method": "GET",
+              "param": "X-Content-Type-Options",
+              "attack": "",
+              "evidence": ""
+            }
+          ],
+          "count": "1",
+          "solution": "Ensure that the application/web server sets the Content-Type header appropriately, and that it sets the X-Content-Type-Options header to 'nosniff' for all web pages.",
+          "otherinfo": "",
+          "reference": "https://owasp.org/www-project-secure-headers/",
+          "cweid": "693",
+          "wascid": "15",
+          "sourceid": "3",
+          "tags": {}
+        },
+        {
+          "pluginid": "40012",
+          "alertRef": "40012",
+          "alert": "Cross Site Scripting (Reflected)",
+          "name": "Cross Site Scripting (Reflected)",
+          "riskcode": "3",
+          "confidence": "2",
+          "riskdesc": "High (Medium)",
+          "desc": "Cross-site Scripting (XSS) is an attack technique that involves echoing attacker-supplied code into a user's browser instance.",
+          "instances": [
+            {
+              "uri": "https://example.com/search?q=%3Cscript%3Ealert(1)%3C/script%3E",
+              "method": "GET",
+              "param": "q",
+              "attack": "<script>alert(1)</script>",
+              "evidence": "<script>alert(1)</script>"
+            }
+          ],
+          "count": "1",
+          "solution": "Phase: Architecture and Design. Use a vetted library or framework that does not allow this weakness to occur or provides constructs that make this weakness easier to avoid.",
+          "otherinfo": "",
+          "reference": "https://owasp.org/www-community/attacks/xss/",
+          "cweid": "79",
+          "wascid": "8",
+          "sourceid": "1",
+          "tags": {
+            "OWASP_2021_A03": "Injection",
+            "CWE-79": "Improper Neutralization of Input During Web Page Generation"
+          }
+        },
+        {
+          "pluginid": "90011",
+          "alertRef": "90011",
+          "alert": "SQL Injection",
+          "name": "SQL Injection",
+          "riskcode": "3",
+          "confidence": "3",
+          "riskdesc": "High (High)",
+          "desc": "SQL injection may be possible. The page results were successfully manipulated using the boolean conditions.",
+          "instances": [
+            {
+              "uri": "https://example.com/users?id=1'%20OR%20'1'='1",
+              "method": "GET",
+              "param": "id",
+              "attack": "1' OR '1'='1",
+              "evidence": ""
+            }
+          ],
+          "count": "1",
+          "solution": "Do not trust client side input, even if there is client side validation in place. Use parameterized queries, or stored procedures.",
+          "otherinfo": "The query time is controllable using parameter value, which caused the request to take more than the original time.",
+          "reference": "https://owasp.org/www-community/attacks/SQL_Injection",
+          "cweid": "89",
+          "wascid": "19",
+          "sourceid": "1",
+          "tags": {
+            "OWASP_2021_A03": "Injection",
+            "CWE-89": "SQL Injection"
+          }
+        }
+      ]
+    }
+  ]
+}

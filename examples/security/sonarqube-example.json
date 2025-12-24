@@ -1,0 +1,234 @@
+{
+  "total": 5,
+  "p": 1,
+  "ps": 100,
+  "paging": {
+    "pageIndex": 1,
+    "pageSize": 100,
+    "total": 5
+  },
+  "effortTotal": 120,
+  "issues": [
+    {
+      "key": "AYvN1234567890abcdef",
+      "rule": "javascript:S1481",
+      "severity": "MINOR",
+      "component": "my-project:src/utils/helpers.js",
+      "project": "my-project",
+      "line": 42,
+      "textRange": {
+        "startLine": 42,
+        "endLine": 42,
+        "startOffset": 6,
+        "endOffset": 18
+      },
+      "flows": [],
+      "status": "OPEN",
+      "message": "Remove the unused local variable 'unusedVar'.",
+      "effort": "5min",
+      "debt": "5min",
+      "assignee": "",
+      "author": "developer@example.com",
+      "tags": ["unused"],
+      "creationDate": "2024-01-10T09:30:00+0000",
+      "updateDate": "2024-01-10T09:30:00+0000",
+      "type": "CODE_SMELL",
+      "scope": "MAIN",
+      "quickFixAvailable": true
+    },
+    {
+      "key": "AYvN2345678901bcdefg",
+      "rule": "javascript:S3776",
+      "severity": "MAJOR",
+      "component": "my-project:src/services/userService.js",
+      "project": "my-project",
+      "line": 85,
+      "textRange": {
+        "startLine": 85,
+        "endLine": 150,
+        "startOffset": 0,
+        "endOffset": 1
+      },
+      "flows": [],
+      "status": "OPEN",
+      "message": "Refactor this function to reduce its Cognitive Complexity from 25 to the 15 allowed.",
+      "effort": "30min",
+      "debt": "30min",
+      "assignee": "john.doe",
+      "author": "developer@example.com",
+      "tags": ["brain-overload"],
+      "creationDate": "2024-01-12T14:20:00+0000",
+      "updateDate": "2024-01-12T14:20:00+0000",
+      "type": "CODE_SMELL",
+      "scope": "MAIN",
+      "quickFixAvailable": false
+    },
+    {
+      "key": "AYvN3456789012cdefgh",
+      "rule": "javascript:S2068",
+      "severity": "BLOCKER",
+      "component": "my-project:src/config/database.js",
+      "project": "my-project",
+      "line": 12,
+      "textRange": {
+        "startLine": 12,
+        "endLine": 12,
+        "startOffset": 18,
+        "endOffset": 45
+      },
+      "flows": [],
+      "status": "OPEN",
+      "message": "Review this potential hardcoded credential.",
+      "effort": "30min",
+      "debt": "30min",
+      "assignee": "",
+      "author": "developer@example.com",
+      "tags": ["cwe", "owasp-a3", "security"],
+      "creationDate": "2024-01-14T11:45:00+0000",
+      "updateDate": "2024-01-14T11:45:00+0000",
+      "type": "VULNERABILITY",
+      "scope": "MAIN",
+      "quickFixAvailable": false
+    },
+    {
+      "key": "AYvN4567890123defghi",
+      "rule": "javascript:S1134",
+      "severity": "CRITICAL",
+      "component": "my-project:src/api/authController.js",
+      "project": "my-project",
+      "line": 78,
+      "textRange": {
+        "startLine": 78,
+        "endLine": 78,
+        "startOffset": 4,
+        "endOffset": 40
+      },
+      "flows": [],
+      "status": "OPEN",
+      "message": "Take the required action to fix the issue indicated by this \"FIXME\" comment.",
+      "effort": "20min",
+      "debt": "20min",
+      "assignee": "",
+      "author": "developer@example.com",
+      "tags": ["cwe"],
+      "creationDate": "2024-01-15T08:00:00+0000",
+      "updateDate": "2024-01-15T08:00:00+0000",
+      "type": "CODE_SMELL",
+      "scope": "MAIN",
+      "quickFixAvailable": false
+    },
+    {
+      "key": "AYvN5678901234efghij",
+      "rule": "javascript:S4502",
+      "severity": "INFO",
+      "component": "my-project:src/middleware/cors.js",
+      "project": "my-project",
+      "line": 15,
+      "textRange": {
+        "startLine": 15,
+        "endLine": 15,
+        "startOffset": 2,
+        "endOffset": 35
+      },
+      "flows": [],
+      "status": "OPEN",
+      "message": "Make sure that enabling CORS is safe here.",
+      "effort": "10min",
+      "debt": "10min",
+      "assignee": "",
+      "author": "developer@example.com",
+      "tags": ["owasp-a6", "security"],
+      "creationDate": "2024-01-15T08:15:00+0000",
+      "updateDate": "2024-01-15T08:15:00+0000",
+      "type": "SECURITY_HOTSPOT",
+      "scope": "MAIN",
+      "quickFixAvailable": false
+    }
+  ],
+  "components": [
+    {
+      "key": "my-project:src/utils/helpers.js",
+      "enabled": true,
+      "qualifier": "FIL",
+      "name": "helpers.js",
+      "longName": "src/utils/helpers.js",
+      "path": "src/utils/helpers.js"
+    },
+    {
+      "key": "my-project:src/services/userService.js",
+      "enabled": true,
+      "qualifier": "FIL",
+      "name": "userService.js",
+      "longName": "src/services/userService.js",
+      "path": "src/services/userService.js"
+    },
+    {
+      "key": "my-project:src/config/database.js",
+      "enabled": true,
+      "qualifier": "FIL",
+      "name": "database.js",
+      "longName": "src/config/database.js",
+      "path": "src/config/database.js"
+    },
+    {
+      "key": "my-project:src/api/authController.js",
+      "enabled": true,
+      "qualifier": "FIL",
+      "name": "authController.js",
+      "longName": "src/api/authController.js",
+      "path": "src/api/authController.js"
+    },
+    {
+      "key": "my-project:src/middleware/cors.js",
+      "enabled": true,
+      "qualifier": "FIL",
+      "name": "cors.js",
+      "longName": "src/middleware/cors.js",
+      "path": "src/middleware/cors.js"
+    }
+  ],
+  "rules": [
+    {
+      "key": "javascript:S1481",
+      "name": "Unused local variables and functions should be removed",
+      "status": "READY",
+      "lang": "js",
+      "langName": "JavaScript"
+    },
+    {
+      "key": "javascript:S3776",
+      "name": "Cognitive Complexity of functions should not be too high",
+      "status": "READY",
+      "lang": "js",
+      "langName": "JavaScript"
+    },
+    {
+      "key": "javascript:S2068",
+      "name": "Hard-coded credentials are security-sensitive",
+      "status": "READY",
+      "lang": "js",
+      "langName": "JavaScript"
+    },
+    {
+      "key": "javascript:S1134",
+      "name": "Track uses of \"FIXME\" tags",
+      "status": "READY",
+      "lang": "js",
+      "langName": "JavaScript"
+    },
+    {
+      "key": "javascript:S4502",
+      "name": "Disabling CORS is security-sensitive",
+      "status": "READY",
+      "lang": "js",
+      "langName": "JavaScript"
+    }
+  ],
+  "users": [
+    {
+      "login": "john.doe",
+      "name": "John Doe",
+      "active": true
+    }
+  ]
+}

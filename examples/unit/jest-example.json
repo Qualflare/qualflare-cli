@@ -1,0 +1,130 @@
+{
+  "numFailedTestSuites": 1,
+  "numFailedTests": 1,
+  "numPassedTestSuites": 1,
+  "numPassedTests": 3,
+  "numPendingTestSuites": 0,
+  "numPendingTests": 1,
+  "numRuntimeErrorTestSuites": 0,
+  "numTodoTests": 0,
+  "numTotalTestSuites": 2,
+  "numTotalTests": 5,
+  "openHandles": [],
+  "snapshot": {
+    "added": 0,
+    "failure": false,
+    "filesAdded": 0,
+    "filesRemoved": 0,
+    "filesRemovedList": [],
+    "filesUnmatched": 0,
+    "filesUpdated": 0,
+    "matched": 0,
+    "total": 0,
+    "unchecked": 0,
+    "uncheckedKeysByFile": [],
+    "unmatched": 0,
+    "updated": 0
+  },
+  "startTime": 1705315800000,
+  "success": false,
+  "testResults": [
+    {
+      "assertionResults": [
+        {
+          "ancestorTitles": ["UserService"],
+          "duration": 234,
+          "failureDetails": [],
+          "failureMessages": [],
+          "fullName": "UserService should create a new user",
+          "invocations": 1,
+          "location": null,
+          "numPassingAsserts": 3,
+          "retryReasons": [],
+          "status": "passed",
+          "title": "should create a new user"
+        },
+        {
+          "ancestorTitles": ["UserService"],
+          "duration": 156,
+          "failureDetails": [],
+          "failureMessages": [],
+          "fullName": "UserService should authenticate user",
+          "invocations": 1,
+          "location": null,
+          "numPassingAsserts": 2,
+          "retryReasons": [],
+          "status": "passed",
+          "title": "should authenticate user"
+        },
+        {
+          "ancestorTitles": ["UserService"],
+          "duration": 0,
+          "failureDetails": [],
+          "failureMessages": [],
+          "fullName": "UserService should handle admin permissions",
+          "invocations": 1,
+          "location": null,
+          "numPassingAsserts": 0,
+          "retryReasons": [],
+          "status": "pending",
+          "title": "should handle admin permissions"
+        }
+      ],
+      "endTime": 1705315801234,
+      "message": "",
+      "name": "/app/src/__tests__/userService.test.ts",
+      "startTime": 1705315800500,
+      "status": "passed",
+      "summary": ""
+    },
+    {
+      "assertionResults": [
+        {
+          "ancestorTitles": ["AuthService"],
+          "duration": 345,
+          "failureDetails": [],
+          "failureMessages": [],
+          "fullName": "AuthService should validate JWT token",
+          "invocations": 1,
+          "location": null,
+          "numPassingAsserts": 4,
+          "retryReasons": [],
+          "status": "passed",
+          "title": "should validate JWT token"
+        },
+        {
+          "ancestorTitles": ["AuthService"],
+          "duration": 123,
+          "failureDetails": [
+            {
+              "matcherResult": {
+                "actual": "expired",
+                "expected": "valid",
+                "message": "Expected token status to be valid",
+                "name": "toBe",
+                "pass": false
+              }
+            }
+          ],
+          "failureMessages": [
+            "Error: expect(received).toBe(expected)\n\nExpected: \"valid\"\nReceived: \"expired\"\n\n    at Object.<anonymous> (/app/src/__tests__/authService.test.ts:45:23)"
+          ],
+          "fullName": "AuthService should refresh expired token",
+          "invocations": 1,
+          "location": null,
+          "numPassingAsserts": 1,
+          "retryReasons": [],
+          "status": "failed",
+          "title": "should refresh expired token"
+        }
+      ],
+      "endTime": 1705315802000,
+      "message": "",
+      "name": "/app/src/__tests__/authService.test.ts",
+      "startTime": 1705315801500,
+      "status": "failed",
+      "summary": ""
+    }
+  ],
+  "wasInterrupted": false
+}

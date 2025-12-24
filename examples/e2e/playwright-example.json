@@ -1,0 +1,165 @@
+{
+  "config": {
+    "configFile": "/app/playwright.config.ts",
+    "rootDir": "/app",
+    "forbidOnly": false,
+    "fullyParallel": true,
+    "globalSetup": null,
+    "globalTeardown": null,
+    "globalTimeout": 0,
+    "grep": {},
+    "grepInvert": null,
+    "maxFailures": 0,
+    "metadata": {},
+    "preserveOutput": "always",
+    "projects": [
+      {
+        "name": "chromium",
+        "testDir": "/app/tests"
+      }
+    ],
+    "reporter": [["json", {"outputFile": "playwright-results.json"}]],
+    "reportSlowTests": {"max": 5, "threshold": 15000},
+    "quiet": false,
+    "shard": null,
+    "updateSnapshots": "missing",
+    "version": "1.40.0",
+    "workers": 4
+  },
+  "suites": [
+    {
+      "title": "Login Tests",
+      "file": "tests/login.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [],
+      "suites": [
+        {
+          "title": "Authentication",
+          "file": "tests/login.spec.ts",
+          "line": 5,
+          "column": 6,
+          "specs": [
+            {
+              "title": "should login with valid credentials",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 0,
+                      "status": "passed",
+                      "duration": 2345,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2024-01-15T10:30:00.000Z",
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "login-valid",
+              "file": "tests/login.spec.ts",
+              "line": 7,
+              "column": 7
+            },
+            {
+              "title": "should show error for invalid password",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 1,
+                      "status": "passed",
+                      "duration": 1567,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2024-01-15T10:30:02.500Z",
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "login-invalid-password",
+              "file": "tests/login.spec.ts",
+              "line": 20,
+              "column": 7
+            },
+            {
+              "title": "should redirect to dashboard after login",
+              "ok": false,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 2,
+                      "status": "failed",
+                      "duration": 3456,
+                      "errors": [
+                        {
+                          "message": "Error: expect(page).toHaveURL(/dashboard/)\n\nExpected URL to match /dashboard/\nReceived: 'https://example.com/login'\n\n   at tests/login.spec.ts:35:25",
+                          "stack": "Error: expect(page).toHaveURL(/dashboard/)\n    at tests/login.spec.ts:35:25"
+                        }
+                      ],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2024-01-15T10:30:04.000Z",
+                      "attachments": [
+                        {
+                          "name": "screenshot",
+                          "contentType": "image/png",
+                          "path": "test-results/login-should-redirect-chromium/test-failed-1.png"
+                        }
+                      ]
+                    }
+                  ],
+                  "status": "unexpected"
+                }
+              ],
+              "id": "login-redirect",
+              "file": "tests/login.spec.ts",
+              "line": 33,
+              "column": 7
+            }
+          ],
+          "suites": []
+        }
+      ]
+    }
+  ],
+  "errors": [],
+  "stats": {
+    "startTime": "2024-01-15T10:30:00.000Z",
+    "duration": 7500,
+    "expected": 2,
+    "unexpected": 1,
+    "skipped": 0,
+    "flaky": 0
+  }
+}

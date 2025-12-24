@@ -1,0 +1,20 @@
+{"Time":"2024-01-15T10:30:00.123456Z","Action":"run","Package":"github.com/example/myapp","Test":"TestUserService"}
+{"Time":"2024-01-15T10:30:00.234567Z","Action":"output","Package":"github.com/example/myapp","Test":"TestUserService","Output":"=== RUN   TestUserService\n"}
+{"Time":"2024-01-15T10:30:00.345678Z","Action":"output","Package":"github.com/example/myapp","Test":"TestUserService","Output":"--- PASS: TestUserService (0.12s)\n"}
+{"Time":"2024-01-15T10:30:00.345679Z","Action":"pass","Package":"github.com/example/myapp","Test":"TestUserService","Elapsed":0.12}
+{"Time":"2024-01-15T10:30:00.456789Z","Action":"run","Package":"github.com/example/myapp","Test":"TestUserCreation"}
+{"Time":"2024-01-15T10:30:00.567890Z","Action":"output","Package":"github.com/example/myapp","Test":"TestUserCreation","Output":"=== RUN   TestUserCreation\n"}
+{"Time":"2024-01-15T10:30:00.678901Z","Action":"output","Package":"github.com/example/myapp","Test":"TestUserCreation","Output":"--- PASS: TestUserCreation (0.22s)\n"}
+{"Time":"2024-01-15T10:30:00.678902Z","Action":"pass","Package":"github.com/example/myapp","Test":"TestUserCreation","Elapsed":0.22}
+{"Time":"2024-01-15T10:30:00.789012Z","Action":"run","Package":"github.com/example/myapp","Test":"TestUserValidation"}
+{"Time":"2024-01-15T10:30:00.890123Z","Action":"output","Package":"github.com/example/myapp","Test":"TestUserValidation","Output":"=== RUN   TestUserValidation\n"}
+{"Time":"2024-01-15T10:30:00.901234Z","Action":"output","Package":"github.com/example/myapp","Test":"TestUserValidation","Output":"    user_test.go:45: expected valid email, got invalid\n"}
+{"Time":"2024-01-15T10:30:00.901235Z","Action":"output","Package":"github.com/example/myapp","Test":"TestUserValidation","Output":"--- FAIL: TestUserValidation (0.11s)\n"}
+{"Time":"2024-01-15T10:30:00.901236Z","Action":"fail","Package":"github.com/example/myapp","Test":"TestUserValidation","Elapsed":0.11}
+{"Time":"2024-01-15T10:30:01.012345Z","Action":"run","Package":"github.com/example/myapp","Test":"TestUserDeletion"}
+{"Time":"2024-01-15T10:30:01.123456Z","Action":"output","Package":"github.com/example/myapp","Test":"TestUserDeletion","Output":"=== RUN   TestUserDeletion\n"}
+{"Time":"2024-01-15T10:30:01.234567Z","Action":"output","Package":"github.com/example/myapp","Test":"TestUserDeletion","Output":"--- SKIP: TestUserDeletion (0.00s)\n"}
+{"Time":"2024-01-15T10:30:01.234568Z","Action":"output","Package":"github.com/example/myapp","Test":"TestUserDeletion","Output":"    user_test.go:60: skipping: feature not implemented\n"}
+{"Time":"2024-01-15T10:30:01.234569Z","Action":"skip","Package":"github.com/example/myapp","Test":"TestUserDeletion","Elapsed":0}
+{"Time":"2024-01-15T10:30:01.345678Z","Action":"output","Package":"github.com/example/myapp","Output":"FAIL\n"}
+{"Time":"2024-01-15T10:30:01.345679Z","Action":"fail","Package":"github.com/example/myapp","Elapsed":1.22}

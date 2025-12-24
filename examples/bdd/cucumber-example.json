@@ -1,0 +1,143 @@
+[
+  {
+    "keyword": "Feature",
+    "name": "User Registration",
+    "description": "As a new user\nI want to register for an account\nSo that I can access the application",
+    "line": 1,
+    "id": "user-registration",
+    "uri": "features/user_registration.feature",
+    "tags": [
+      {
+        "name": "@registration",
+        "line": 1
+      }
+    ],
+    "elements": [
+      {
+        "keyword": "Scenario",
+        "name": "Successful registration with valid data",
+        "description": "",
+        "line": 7,
+        "id": "user-registration;successful-registration-with-valid-data",
+        "type": "scenario",
+        "tags": [
+          {
+            "name": "@smoke",
+            "line": 6
+          }
+        ],
+        "steps": [
+          {
+            "keyword": "Given ",
+            "name": "I am on the registration page",
+            "line": 8,
+            "result": {
+              "status": "passed",
+              "duration": 234000000
+            }
+          },
+          {
+            "keyword": "When ",
+            "name": "I fill in valid registration details",
+            "line": 9,
+            "result": {
+              "status": "passed",
+              "duration": 567000000
+            }
+          },
+          {
+            "keyword": "And ",
+            "name": "I submit the registration form",
+            "line": 10,
+            "result": {
+              "status": "passed",
+              "duration": 890000000
+            }
+          },
+          {
+            "keyword": "Then ",
+            "name": "I should see a welcome message",
+            "line": 11,
+            "result": {
+              "status": "passed",
+              "duration": 123000000
+            }
+          }
+        ]
+      },
+      {
+        "keyword": "Scenario",
+        "name": "Registration fails with invalid email",
+        "description": "",
+        "line": 14,
+        "id": "user-registration;registration-fails-with-invalid-email",
+        "type": "scenario",
+        "tags": [],
+        "steps": [
+          {
+            "keyword": "Given ",
+            "name": "I am on the registration page",
+            "line": 15,
+            "result": {
+              "status": "passed",
+              "duration": 234000000
+            }
+          },
+          {
+            "keyword": "When ",
+            "name": "I fill in an invalid email address",
+            "line": 16,
+            "result": {
+              "status": "passed",
+              "duration": 345000000
+            }
+          },
+          {
+            "keyword": "And ",
+            "name": "I submit the registration form",
+            "line": 17,
+            "result": {
+              "status": "passed",
+              "duration": 456000000
+            }
+          },
+          {
+            "keyword": "Then ",
+            "name": "I should see an email validation error",
+            "line": 18,
+            "result": {
+              "status": "failed",
+              "duration": 123000000,
+              "error_message": "Expected error message not found\nExpected: 'Please enter a valid email'\nActual: null"
+            }
+          }
+        ]
+      },
+      {
+        "keyword": "Scenario",
+        "name": "Registration with existing email",
+        "description": "",
+        "line": 21,
+        "id": "user-registration;registration-with-existing-email",
+        "type": "scenario",
+        "tags": [
+          {
+            "name": "@pending",
+            "line": 20
+          }
+        ],
+        "steps": [
+          {
+            "keyword": "Given ",
+            "name": "I am on the registration page",
+            "line": 22,
+            "result": {
+              "status": "skipped",
+              "duration": 0
+            }
+          }
+        ]
+      }
+    ]
+  }
+]

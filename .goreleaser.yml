@@ -1,0 +1,130 @@
+# GoReleaser configuration for Qualflare CLI
+version: 2
+
+project_name: qf
+
+before:
+  hooks:
+    - go mod tidy
+    - go generate ./...
+
+builds:
+  - id: qf
+    main: ./cmd
+    binary: qf
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - -s -w
+      - -X qualflare-cli/internal/version.Version={{.Version}}
+      - -X qualflare-cli/internal/version.Commit={{.Commit}}
+      - -X qualflare-cli/internal/version.BuildDate={{.Date}}
+
+archives:
+  - id: default
+    format: tar.gz
+    name_template: >-
+      {{ .ProjectName }}_
+      {{- .Version }}_
+      {{- .Os }}_
+      {{- .Arch }}
+    format_overrides:
+      - goos: windows
+        format: zip
+    files:
+      - LICENSE*
+      - README*
+
+checksum:
+  name_template: 'checksums.txt'
+  algorithm: sha256
+
+snapshot:
+  version_template: "{{ incpatch .Version }}-next"
+
+changelog:
+  sort: asc
+  use: github
+  filters:
+    exclude:
+      - '^docs:'
+      - '^test:'
+      - '^ci:'
+      - '^chore:'
+      - Merge pull request
+      - Merge branch
+  groups:
+    - title: Features
+      regexp: '^.*?feat(\(.+\))?\!?:.+$'
+      order: 0
+    - title: Bug Fixes
+      regexp: '^.*?fix(\(.+\))?\!?:.+$'
+      order: 1
+    - title: Others
+      order: 999
+
+brews:
+  - name: qf
+    repository:
+      owner: qualflare
+      name: homebrew-tap
+      token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
+    folder: Formula
+    homepage: https://github.com/qualflare/qualflare-cli
+    description: CLI tool for uploading test results to Qualflare
+    license: MIT
+    test: |
+      system "#{bin}/qf", "version"
+    install: |
+      bin.install "qf"
+    skip_upload: auto
+
+dockers:
+  - image_templates:
+      - "ghcr.io/qualflare/qf:{{ .Version }}"
+      - "ghcr.io/qualflare/qf:latest"
+    dockerfile: Dockerfile
+    build_flag_templates:
+      - "--pull"
+      - "--label=org.opencontainers.image.created={{.Date}}"
+      - "--label=org.opencontainers.image.title={{.ProjectName}}"
+      - "--label=org.opencontainers.image.revision={{.FullCommit}}"
+      - "--label=org.opencontainers.image.version={{.Version}}"
+    skip_push: auto
+
+release:
+  github:
+    owner: qualflare
+    name: qualflare-cli
+  prerelease: auto
+  draft: false
+  name_template: "{{.ProjectName}} v{{.Version}}"
+  footer: |
+    ## Installation
+
+    ### Homebrew (macOS/Linux)
+    ```bash
+    brew install qualflare/tap/qf
+    ```
+
+    ### Binary Download
+    Download the appropriate binary for your platform from the assets below.
+
+    ### Docker
+    ```bash
+    docker pull ghcr.io/qualflare/qf:{{.Version}}
+    ```
+
+    ## Quick Start
+    ```bash
+    qf upload results.xml --project my-app --api-key YOUR_API_KEY
+    ```
+
+    See `qf --help` for more options.

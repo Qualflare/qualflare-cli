@@ -1,0 +1,112 @@
+{
+  "stats": {
+    "suites": 2,
+    "tests": 5,
+    "passes": 3,
+    "pending": 1,
+    "failures": 1,
+    "start": "2024-01-15T10:30:00.000Z",
+    "end": "2024-01-15T10:30:02.345Z",
+    "duration": 2345
+  },
+  "tests": [
+    {
+      "title": "should create a new user",
+      "fullTitle": "UserService should create a new user",
+      "file": "/app/test/userService.test.js",
+      "duration": 234,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "should update user profile",
+      "fullTitle": "UserService should update user profile",
+      "file": "/app/test/userService.test.js",
+      "duration": 156,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "should delete user",
+      "fullTitle": "UserService should delete user",
+      "file": "/app/test/userService.test.js",
+      "duration": 189,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "should handle concurrent updates",
+      "fullTitle": "UserService should handle concurrent updates",
+      "file": "/app/test/userService.test.js",
+      "duration": 0,
+      "currentRetry": 0,
+      "pending": true,
+      "err": {}
+    },
+    {
+      "title": "should validate email format",
+      "fullTitle": "UserService should validate email format",
+      "file": "/app/test/userService.test.js",
+      "duration": 123,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {
+        "message": "AssertionError: expected 'invalid-email' to match /^[\\w-]+@[\\w-]+\\.[a-z]+$/i",
+        "stack": "AssertionError: expected 'invalid-email' to match /^[\\w-]+@[\\w-]+\\.[a-z]+$/i\n    at Context.<anonymous> (test/userService.test.js:67:25)"
+      }
+    }
+  ],
+  "pending": [
+    {
+      "title": "should handle concurrent updates",
+      "fullTitle": "UserService should handle concurrent updates",
+      "file": "/app/test/userService.test.js"
+    }
+  ],
+  "failures": [
+    {
+      "title": "should validate email format",
+      "fullTitle": "UserService should validate email format",
+      "file": "/app/test/userService.test.js",
+      "duration": 123,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {
+        "message": "AssertionError: expected 'invalid-email' to match /^[\\w-]+@[\\w-]+\\.[a-z]+$/i",
+        "stack": "AssertionError: expected 'invalid-email' to match /^[\\w-]+@[\\w-]+\\.[a-z]+$/i\n    at Context.<anonymous> (test/userService.test.js:67:25)"
+      }
+    }
+  ],
+  "passes": [
+    {
+      "title": "should create a new user",
+      "fullTitle": "UserService should create a new user",
+      "file": "/app/test/userService.test.js",
+      "duration": 234,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "should update user profile",
+      "fullTitle": "UserService should update user profile",
+      "file": "/app/test/userService.test.js",
+      "duration": 156,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    },
+    {
+      "title": "should delete user",
+      "fullTitle": "UserService should delete user",
+      "file": "/app/test/userService.test.js",
+      "duration": 189,
+      "currentRetry": 0,
+      "speed": "fast",
+      "err": {}
+    }
+  ]
+}
