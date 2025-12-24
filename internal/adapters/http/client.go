@@ -177,8 +177,19 @@ func (c *Client) doRequest(ctx context.Context, body []byte) error {
 
 	// Parse error response
 	var errResp ErrorResponse
-	if err := json.Unmarshal(respBody, &errResp); err == nil && errResp.Error != "" {
-		apiErr.Message = errResp.Error
+	if err := json.Unmarshal(respBody, &errResp); err == nil {
+		apiErr.Code = errResp.Code
+
+		// Use user-friendly message for known error codes
+		if friendlyMsg := getUserFriendlyMessage(errResp.Code); friendlyMsg != "" {
+			apiErr.Message = friendlyMsg
+		} else if errResp.Error != "" {
+			apiErr.Message = errResp.Error
+		} else if errResp.Message != "" {
+			apiErr.Message = errResp.Message
+		} else {
+			apiErr.Message = fmt.Sprintf("API request failed with status %d", resp.StatusCode)
+		}
 	} else {
 		apiErr.Message = fmt.Sprintf("API request failed with status %d", resp.StatusCode)
 	}
@@ -227,6 +238,7 @@ func (c *Client) calculateBackoff(attempt int) time.Duration {
 type APIError struct {
 	Op         string
 	Message    string
+	Code       string
 	StatusCode int
 	Err        error
 	Retryable  bool
@@ -257,4 +269,23 @@ type ErrorResponse struct {
 	Error   string `json:"error"`
 	Message string `json:"message"`
 	Code    string `json:"code"`
+}
+
+// API error codes
+const (
+	ErrCodeEnvironmentNotFound = "ENVIRONMENT_NOT_FOUND"
+	ErrCodeMilestoneNotFound   = "MILESTONE_NOT_FOUND"
+	ErrCodeValidationFailed    = "VALIDATION_FAILED"
+)
+
+// getUserFriendlyMessage returns a user-friendly error message for known error codes
+func getUserFriendlyMessage(code string) string {
+	switch code {
+	case ErrCodeEnvironmentNotFound:
+		return "Environment not found. Please check the environment name or create it in Qualflare."
+	case ErrCodeMilestoneNotFound:
+		return "Milestone not found. Please check the milestone ID or create it in Qualflare."
+	default:
+		return ""
+	}
 }
