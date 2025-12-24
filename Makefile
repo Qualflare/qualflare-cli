@@ -17,8 +17,21 @@ GO := go
 # Directories
 BUILD_DIR := build
 CMD_DIR := cmd
+EXAMPLES_DIR := examples
 
 .PHONY: all build clean test lint fmt vet run install help
+.PHONY: validate-examples validate-unit validate-bdd validate-e2e validate-api validate-security
+.PHONY: validate-junit validate-pytest validate-golang validate-jest validate-mocha validate-rspec validate-phpunit
+.PHONY: validate-cucumber validate-karate
+.PHONY: validate-playwright validate-cypress validate-selenium validate-testcafe
+.PHONY: validate-newman validate-k6
+.PHONY: validate-trivy validate-snyk validate-zap validate-sonarqube
+.PHONY: upload-examples upload-unit upload-bdd upload-e2e upload-api upload-security
+.PHONY: upload-junit upload-pytest upload-golang upload-jest upload-mocha upload-rspec upload-phpunit
+.PHONY: upload-cucumber upload-karate
+.PHONY: upload-playwright upload-cypress upload-selenium upload-testcafe
+.PHONY: upload-newman upload-k6
+.PHONY: upload-trivy upload-snyk upload-zap upload-sonarqube
 
 # Default target
 all: build
@@ -161,3 +174,205 @@ help:
 	@echo "  pre-commit   Run all pre-commit checks"
 	@echo "  version      Show version info"
 	@echo "  help         Show this help"
+	@echo ""
+	@echo "Example Validation (local only):"
+	@echo "  validate-examples   Validate all example files"
+	@echo "  validate-unit       Validate unit test examples"
+	@echo "  validate-bdd        Validate BDD examples"
+	@echo "  validate-e2e        Validate E2E examples"
+	@echo "  validate-api        Validate API examples"
+	@echo "  validate-security   Validate security examples"
+	@echo "  validate-<framework> Validate specific framework (e.g., validate-junit)"
+	@echo ""
+	@echo "Example Upload (requires QF_PROJECT, QF_API_KEY, QF_API_ENDPOINT):"
+	@echo "  upload-examples     Upload all example files"
+	@echo "  upload-unit         Upload unit test examples"
+	@echo "  upload-bdd          Upload BDD examples"
+	@echo "  upload-e2e          Upload E2E examples"
+	@echo "  upload-api          Upload API examples"
+	@echo "  upload-security     Upload security examples"
+	@echo "  upload-<framework>  Upload specific framework (e.g., upload-junit)"
+
+# =============================================================================
+# Example Validation Targets
+# =============================================================================
+
+# Validate all examples
+validate-examples: build
+	@echo "Validating all examples..."
+	@./$(BUILD_DIR)/$(BINARY_NAME) validate $(EXAMPLES_DIR)/unit/* $(EXAMPLES_DIR)/bdd/* $(EXAMPLES_DIR)/e2e/* $(EXAMPLES_DIR)/api/* $(EXAMPLES_DIR)/security/*
+
+# Category targets
+validate-unit: build
+	@echo "Validating unit test examples..."
+	@./$(BUILD_DIR)/$(BINARY_NAME) validate $(EXAMPLES_DIR)/unit/*
+
+validate-bdd: build
+	@echo "Validating BDD examples..."
+	@./$(BUILD_DIR)/$(BINARY_NAME) validate $(EXAMPLES_DIR)/bdd/*
+
+validate-e2e: build
+	@echo "Validating E2E examples..."
+	@./$(BUILD_DIR)/$(BINARY_NAME) validate $(EXAMPLES_DIR)/e2e/*
+
+validate-api: build
+	@echo "Validating API examples..."
+	@./$(BUILD_DIR)/$(BINARY_NAME) validate $(EXAMPLES_DIR)/api/*
+
+validate-security: build
+	@echo "Validating security examples..."
+	@./$(BUILD_DIR)/$(BINARY_NAME) validate $(EXAMPLES_DIR)/security/*
+
+# Unit test framework targets
+validate-junit: build
+	@./$(BUILD_DIR)/$(BINARY_NAME) validate $(EXAMPLES_DIR)/unit/junit-example.xml
+
+validate-pytest: build
+	@./$(BUILD_DIR)/$(BINARY_NAME) validate $(EXAMPLES_DIR)/unit/pytest-example.xml
+
+validate-golang: build
+	@./$(BUILD_DIR)/$(BINARY_NAME) validate $(EXAMPLES_DIR)/unit/golang-example.json
+
+validate-jest: build
+	@./$(BUILD_DIR)/$(BINARY_NAME) validate $(EXAMPLES_DIR)/unit/jest-example.json
+
+validate-mocha: build
+	@./$(BUILD_DIR)/$(BINARY_NAME) validate $(EXAMPLES_DIR)/unit/mocha-example.json
+
+validate-rspec: build
+	@./$(BUILD_DIR)/$(BINARY_NAME) validate $(EXAMPLES_DIR)/unit/rspec-example.json
+
+validate-phpunit: build
+	@./$(BUILD_DIR)/$(BINARY_NAME) validate $(EXAMPLES_DIR)/unit/phpunit-example.xml
+
+# BDD framework targets
+validate-cucumber: build
+	@./$(BUILD_DIR)/$(BINARY_NAME) validate $(EXAMPLES_DIR)/bdd/cucumber-example.json
+
+validate-karate: build
+	@./$(BUILD_DIR)/$(BINARY_NAME) validate $(EXAMPLES_DIR)/bdd/karate-example.json
+
+# E2E framework targets
+validate-playwright: build
+	@./$(BUILD_DIR)/$(BINARY_NAME) validate $(EXAMPLES_DIR)/e2e/playwright-example.json
+
+validate-cypress: build
+	@./$(BUILD_DIR)/$(BINARY_NAME) validate $(EXAMPLES_DIR)/e2e/cypress-example.json
+
+validate-selenium: build
+	@./$(BUILD_DIR)/$(BINARY_NAME) validate $(EXAMPLES_DIR)/e2e/selenium-example.json
+
+validate-testcafe: build
+	@./$(BUILD_DIR)/$(BINARY_NAME) validate $(EXAMPLES_DIR)/e2e/testcafe-example.json
+
+# API framework targets
+validate-newman: build
+	@./$(BUILD_DIR)/$(BINARY_NAME) validate $(EXAMPLES_DIR)/api/newman-example.json
+
+validate-k6: build
+	@./$(BUILD_DIR)/$(BINARY_NAME) validate $(EXAMPLES_DIR)/api/k6-example.json
+
+# Security framework targets
+validate-trivy: build
+	@./$(BUILD_DIR)/$(BINARY_NAME) validate $(EXAMPLES_DIR)/security/trivy-example.json
+
+validate-snyk: build
+	@./$(BUILD_DIR)/$(BINARY_NAME) validate $(EXAMPLES_DIR)/security/snyk-example.json
+
+validate-zap: build
+	@./$(BUILD_DIR)/$(BINARY_NAME) validate $(EXAMPLES_DIR)/security/zap-example.json
+
+validate-sonarqube: build
+	@./$(BUILD_DIR)/$(BINARY_NAME) validate $(EXAMPLES_DIR)/security/sonarqube-example.json
+
+# =============================================================================
+# Example Upload Targets (requires QF_PROJECT, QF_API_KEY, QF_API_ENDPOINT)
+# =============================================================================
+
+# Upload all examples
+upload-examples: build
+	@echo "Uploading all examples..."
+	@./$(BUILD_DIR)/$(BINARY_NAME) upload $(EXAMPLES_DIR)/unit/* $(EXAMPLES_DIR)/bdd/* $(EXAMPLES_DIR)/e2e/* $(EXAMPLES_DIR)/api/* $(EXAMPLES_DIR)/security/*
+
+# Category targets
+upload-unit: build
+	@echo "Uploading unit test examples..."
+	@./$(BUILD_DIR)/$(BINARY_NAME) upload $(EXAMPLES_DIR)/unit/*
+
+upload-bdd: build
+	@echo "Uploading BDD examples..."
+	@./$(BUILD_DIR)/$(BINARY_NAME) upload $(EXAMPLES_DIR)/bdd/*
+
+upload-e2e: build
+	@echo "Uploading E2E examples..."
+	@./$(BUILD_DIR)/$(BINARY_NAME) upload $(EXAMPLES_DIR)/e2e/*
+
+upload-api: build
+	@echo "Uploading API examples..."
+	@./$(BUILD_DIR)/$(BINARY_NAME) upload $(EXAMPLES_DIR)/api/*
+
+upload-security: build
+	@echo "Uploading security examples..."
+	@./$(BUILD_DIR)/$(BINARY_NAME) upload $(EXAMPLES_DIR)/security/*
+
+# Unit test framework targets
+upload-junit: build
+	@./$(BUILD_DIR)/$(BINARY_NAME) upload $(EXAMPLES_DIR)/unit/junit-example.xml
+
+upload-pytest: build
+	@./$(BUILD_DIR)/$(BINARY_NAME) upload $(EXAMPLES_DIR)/unit/pytest-example.xml
+
+upload-golang: build
+	@./$(BUILD_DIR)/$(BINARY_NAME) upload $(EXAMPLES_DIR)/unit/golang-example.json
+
+upload-jest: build
+	@./$(BUILD_DIR)/$(BINARY_NAME) upload $(EXAMPLES_DIR)/unit/jest-example.json
+
+upload-mocha: build
+	@./$(BUILD_DIR)/$(BINARY_NAME) upload $(EXAMPLES_DIR)/unit/mocha-example.json
+
+upload-rspec: build
+	@./$(BUILD_DIR)/$(BINARY_NAME) upload $(EXAMPLES_DIR)/unit/rspec-example.json
+
+upload-phpunit: build
+	@./$(BUILD_DIR)/$(BINARY_NAME) upload $(EXAMPLES_DIR)/unit/phpunit-example.xml
+
+# BDD framework targets
+upload-cucumber: build
+	@./$(BUILD_DIR)/$(BINARY_NAME) upload $(EXAMPLES_DIR)/bdd/cucumber-example.json
+
+upload-karate: build
+	@./$(BUILD_DIR)/$(BINARY_NAME) upload $(EXAMPLES_DIR)/bdd/karate-example.json
+
+# E2E framework targets
+upload-playwright: build
+	@./$(BUILD_DIR)/$(BINARY_NAME) upload $(EXAMPLES_DIR)/e2e/playwright-example.json
+
+upload-cypress: build
+	@./$(BUILD_DIR)/$(BINARY_NAME) upload $(EXAMPLES_DIR)/e2e/cypress-example.json
+
+upload-selenium: build
+	@./$(BUILD_DIR)/$(BINARY_NAME) upload $(EXAMPLES_DIR)/e2e/selenium-example.json
+
+upload-testcafe: build
+	@./$(BUILD_DIR)/$(BINARY_NAME) upload $(EXAMPLES_DIR)/e2e/testcafe-example.json
+
+# API framework targets
+upload-newman: build
+	@./$(BUILD_DIR)/$(BINARY_NAME) upload $(EXAMPLES_DIR)/api/newman-example.json
+
+upload-k6: build
+	@./$(BUILD_DIR)/$(BINARY_NAME) upload $(EXAMPLES_DIR)/api/k6-example.json
+
+# Security framework targets
+upload-trivy: build
+	@./$(BUILD_DIR)/$(BINARY_NAME) upload $(EXAMPLES_DIR)/security/trivy-example.json
+
+upload-snyk: build
+	@./$(BUILD_DIR)/$(BINARY_NAME) upload $(EXAMPLES_DIR)/security/snyk-example.json
+
+upload-zap: build
+	@./$(BUILD_DIR)/$(BINARY_NAME) upload $(EXAMPLES_DIR)/security/zap-example.json
+
+upload-sonarqube: build
+	@./$(BUILD_DIR)/$(BINARY_NAME) upload $(EXAMPLES_DIR)/security/sonarqube-example.json

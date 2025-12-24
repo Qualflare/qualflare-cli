@@ -21,7 +21,7 @@ type Config struct {
 	Commit string
 
 	// Retry settings
-	RetryMax      int
+	RetryMax       int
 	RetryBaseDelay time.Duration
 	RetryMaxDelay  time.Duration
 
@@ -38,7 +38,7 @@ type Config struct {
 func DefaultConfig() *Config {
 	return &Config{
 		APIKey:         "",
-		APIEndpoint:    "https://api.qualflare.com/v1/collect",
+		APIEndpoint:    "http://127.0.0.1:8001/v1/collect",
 		ProjectName:    "",
 		Environment:    "development",
 		Branch:         "",
