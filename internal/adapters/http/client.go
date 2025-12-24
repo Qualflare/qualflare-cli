@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"math"
 	"math/rand"
 	"net/http"
@@ -79,6 +80,8 @@ func (c *Client) SendReport(ctx context.Context, report *domain.Launch) error {
 		}
 	}
 
+	log.Printf("Upload request body: %s", string(jsonData))
+
 	var lastErr error
 	for attempt := 0; attempt <= c.maxRetries; attempt++ {
 		if attempt > 0 {
@@ -146,7 +149,7 @@ func (c *Client) doRequest(ctx context.Context, body []byte) error {
 	req.Header.Set("Accept", "application/json")
 
 	if apiKey := c.config.GetAPIKey(); apiKey != "" {
-		req.Header.Set("Authorization", "Bearer "+apiKey)
+		req.Header.Set("QF_TOKEN", apiKey)
 	}
 
 	resp, err := c.client.Do(req)

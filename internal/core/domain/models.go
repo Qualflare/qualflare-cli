@@ -130,7 +130,6 @@ const (
 
 // Launch represents the complete test launch/run
 type Launch struct {
-	Project   string `json:"project"`
 	Framework string `json:"framework"`
 
 	// Platform information

@@ -207,7 +207,6 @@ func (s *ReportService) parseFile(filePath string, parser ports.Parser) (*domain
 // createReport creates a Launch report from test suites
 func (s *ReportService) createReport(testSuites []domain.Suite, framework domain.Framework) *domain.Launch {
 	return &domain.Launch{
-		Project:     s.config.GetProject(),
 		Framework:   string(framework),
 		Platform:    fmt.Sprintf("%s/%s", runtime.GOOS, runtime.GOARCH),
 		OS:          runtime.GOOS,
