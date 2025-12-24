@@ -119,6 +119,7 @@ func (p *Parser) Parse(reader io.Reader) (*domain.Suite, error) {
 
 	suite := &domain.Suite{
 		Name:       "Cypress Test Results",
+		Category:   domain.FrameworkCypress.GetCategory(),
 		TotalTests: report.Stats.Tests,
 		Passed:     report.Stats.Passes,
 		Failed:     report.Stats.Failures,

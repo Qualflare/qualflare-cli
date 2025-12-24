@@ -65,6 +65,7 @@ func (p *Parser) Parse(reader io.Reader) (*domain.Suite, error) {
 
 	suite := &domain.Suite{
 		Name:       "Jest Test Results",
+		Category:   domain.FrameworkJest.GetCategory(),
 		TotalTests: report.NumTotalTests,
 		Passed:     report.NumPassedTests,
 		Failed:     report.NumFailedTests,

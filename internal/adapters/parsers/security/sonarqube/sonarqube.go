@@ -111,6 +111,7 @@ func (p *Parser) Parse(reader io.Reader) (*domain.Suite, error) {
 
 	suite := &domain.Suite{
 		Name:      "SonarQube Analysis",
+		Category:  domain.FrameworkSonarQube.GetCategory(),
 		Timestamp: time.Now(),
 		Cases:     make([]domain.Case, 0),
 	}
@@ -176,14 +177,26 @@ func (p *Parser) convertIssue(issue Issue, components map[string]Component, rule
 		ClassName: componentPath,
 	}
 
-	// Map severity to status
+	// Map severity to status and domain.Severity
 	switch issue.Severity {
-	case "BLOCKER", "CRITICAL", "MAJOR":
+	case "BLOCKER":
 		testCase.Status = domain.StatusFailed
-	case "MINOR", "INFO":
+		testCase.Severity = domain.SeverityCritical
+	case "CRITICAL":
+		testCase.Status = domain.StatusFailed
+		testCase.Severity = domain.SeverityCritical
+	case "MAJOR":
+		testCase.Status = domain.StatusFailed
+		testCase.Severity = domain.SeverityMedium
+	case "MINOR":
 		testCase.Status = domain.StatusPassed
+		testCase.Severity = domain.SeverityLow
+	case "INFO":
+		testCase.Status = domain.StatusPassed
+		testCase.Severity = domain.SeverityInfo
 	default:
 		testCase.Status = domain.StatusPassed
+		testCase.Severity = domain.SeverityUnknown
 	}
 
 	testCase.ErrorMessage = issue.Message

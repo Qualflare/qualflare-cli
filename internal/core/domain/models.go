@@ -7,13 +7,13 @@ type Framework string
 
 const (
 	// Unit Testing Frameworks
-	FrameworkJUnit    Framework = "junit"
-	FrameworkPython   Framework = "python"
-	FrameworkGolang   Framework = "golang"
-	FrameworkJest     Framework = "jest"
-	FrameworkMocha    Framework = "mocha"
-	FrameworkRSpec    Framework = "rspec"
-	FrameworkPHPUnit  Framework = "phpunit"
+	FrameworkJUnit   Framework = "junit"
+	FrameworkPython  Framework = "python"
+	FrameworkGolang  Framework = "golang"
+	FrameworkJest    Framework = "jest"
+	FrameworkMocha   Framework = "mocha"
+	FrameworkRSpec   Framework = "rspec"
+	FrameworkPHPUnit Framework = "phpunit"
 
 	// BDD Frameworks
 	FrameworkCucumber Framework = "cucumber"
@@ -65,11 +65,11 @@ func AllFrameworks() []Framework {
 type FrameworkCategory string
 
 const (
-	CategoryUnitTest   FrameworkCategory = "unit"
-	CategoryBDD        FrameworkCategory = "bdd"
-	CategoryE2E        FrameworkCategory = "e2e"
-	CategoryAPI        FrameworkCategory = "api"
-	CategorySecurity   FrameworkCategory = "security"
+	CategoryUnitTest FrameworkCategory = "unit"
+	CategoryBDD      FrameworkCategory = "bdd"
+	CategoryE2E      FrameworkCategory = "e2e"
+	CategoryAPI      FrameworkCategory = "api"
+	CategorySecurity FrameworkCategory = "security"
 )
 
 // GetCategory returns the category for a framework
@@ -130,13 +130,13 @@ const (
 
 // Launch represents the complete test launch/run
 type Launch struct {
-	// Required fields
 	Project   string `json:"project"`
 	Framework string `json:"framework"`
 
 	// Platform information
 	Platform string `json:"platform,omitempty"`
 	OS       string `json:"os,omitempty"`
+	Browser  string `json:"browser,omitempty"` // Browser for E2E tests
 
 	// Git information
 	Branch string `json:"branch,omitempty"`
@@ -160,13 +160,14 @@ type Launch struct {
 type Metadata struct {
 	Version   string `json:"version"`
 	Timestamp string `json:"timestamp"`
-	CLIName   string `json:"cliName,omitempty"`
+	CLIName   string `json:"cliName"`
 }
 
 // Suite represents a collection of test cases
 type Suite struct {
 	// Identification
-	Name string `json:"name"`
+	Name     string            `json:"name"`
+	Category FrameworkCategory `json:"category,omitempty"`
 
 	// Test counts
 	TotalTests int `json:"total"`
@@ -174,6 +175,9 @@ type Suite struct {
 	Failed     int `json:"failed"`
 	Skipped    int `json:"skipped"`
 	Errors     int `json:"errors,omitempty"`
+	Flaky      int `json:"flaky,omitempty"`      // Tests that passed after retry
+	Assertions int `json:"assertions,omitempty"` // Total assertions executed (API tests)
+	Retries    int `json:"retries,omitempty"`    // Total retry attempts
 
 	// Timing
 	Duration  time.Duration `json:"duration"`
@@ -212,6 +216,9 @@ type Case struct {
 	ErrorMessage string `json:"errorMessage,omitempty"`
 	StackTrace   string `json:"stackTrace,omitempty"`
 	ErrorType    string `json:"errorType,omitempty"`
+
+	// Severity (for security findings)
+	Severity Severity `json:"severity,omitempty"`
 
 	// Categorization
 	Tags []string `json:"tags,omitempty"`

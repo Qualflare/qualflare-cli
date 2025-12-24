@@ -90,6 +90,7 @@ func (p *Parser) Parse(reader io.Reader) (*domain.Suite, error) {
 
 	suite := &domain.Suite{
 		Name:      "PHPUnit Test Results",
+		Category:  domain.FrameworkPHPUnit.GetCategory(),
 		Timestamp: time.Now(),
 		Cases:     make([]domain.Case, 0),
 	}

@@ -3,6 +3,7 @@ package playwright
 import (
 	"encoding/json"
 	"io"
+	"strings"
 	"time"
 
 	"qualflare-cli/internal/core/domain"
@@ -108,6 +109,7 @@ func (p *Parser) Parse(reader io.Reader) (*domain.Suite, error) {
 
 	suite := &domain.Suite{
 		Name:      "Playwright Test Results",
+		Category:  domain.FrameworkPlaywright.GetCategory(),
 		Duration:  time.Duration(report.Stats.Duration) * time.Millisecond,
 		Timestamp: time.Now(),
 		Cases:     make([]domain.Case, 0),
@@ -120,8 +122,29 @@ func (p *Parser) Parse(reader io.Reader) (*domain.Suite, error) {
 		}
 	}
 
-	// Process all suites
-	p.processSuites(report.Suites, suite, "")
+	// Set flaky count from stats
+	suite.Flaky = report.Stats.Flaky
+
+	// Process all suites and track retries
+	browsers := make(map[string]bool)
+	p.processSuites(report.Suites, suite, "", browsers)
+
+	// Store browser in properties for Launch to use
+	if len(browsers) > 0 {
+		browserList := make([]string, 0, len(browsers))
+		for b := range browsers {
+			browserList = append(browserList, b)
+		}
+		if suite.Properties == nil {
+			suite.Properties = make(map[string]string)
+		}
+		if len(browserList) == 1 {
+			suite.Properties["browser"] = browserList[0]
+		} else {
+			// Multiple browsers - join them
+			suite.Properties["browser"] = strings.Join(browserList, ", ")
+		}
+	}
 
 	suite.TotalTests = len(suite.Cases)
 
@@ -129,7 +152,7 @@ func (p *Parser) Parse(reader io.Reader) (*domain.Suite, error) {
 }
 
 // processSuites recursively processes Playwright suites
-func (p *Parser) processSuites(suites []Suite, domainSuite *domain.Suite, prefix string) {
+func (p *Parser) processSuites(suites []Suite, domainSuite *domain.Suite, prefix string, browsers map[string]bool) {
 	for _, s := range suites {
 		currentPrefix := s.Title
 		if prefix != "" {
@@ -141,6 +164,16 @@ func (p *Parser) processSuites(suites []Suite, domainSuite *domain.Suite, prefix
 			for _, test := range spec.Tests {
 				testCase := p.convertTest(spec, test, s.File, currentPrefix)
 				domainSuite.Cases = append(domainSuite.Cases, testCase)
+
+				// Collect browser from project name
+				if test.ProjectName != "" {
+					browsers[test.ProjectName] = true
+				}
+
+				// Track retries (each result beyond the first is a retry)
+				if len(test.Results) > 1 {
+					domainSuite.Retries += len(test.Results) - 1
+				}
 
 				// Update counters
 				switch testCase.Status {
@@ -156,7 +189,7 @@ func (p *Parser) processSuites(suites []Suite, domainSuite *domain.Suite, prefix
 
 		// Process nested suites
 		if len(s.Suites) > 0 {
-			p.processSuites(s.Suites, domainSuite, currentPrefix)
+			p.processSuites(s.Suites, domainSuite, currentPrefix, browsers)
 		}
 	}
 }

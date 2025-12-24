@@ -134,12 +134,14 @@ func (p *Parser) Parse(reader io.Reader) (*domain.Suite, error) {
 
 	suite := &domain.Suite{
 		Name:       base.CoalesceString(report.Collection.Info.Name, "Newman Test Results"),
+		Category:   domain.FrameworkNewman.GetCategory(),
 		TotalTests: totalTests,
 		Passed:     totalTests - failedTests - pendingTests,
 		Failed:     failedTests,
 		Skipped:    pendingTests,
 		Duration:   duration,
 		Timestamp:  time.UnixMilli(report.Run.Timings.Started),
+		Assertions: report.Run.Stats.Assertions.Total,
 		Cases:      make([]domain.Case, 0),
 	}
 

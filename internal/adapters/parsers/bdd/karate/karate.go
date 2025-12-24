@@ -77,6 +77,7 @@ func (p *Parser) Parse(reader io.Reader) (*domain.Suite, error) {
 
 	suite := &domain.Suite{
 		Name:      "Karate Test Results",
+		Category:  domain.FrameworkKarate.GetCategory(),
 		Timestamp: time.Now(),
 		Cases:     make([]domain.Case, 0),
 	}

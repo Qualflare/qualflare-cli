@@ -63,6 +63,7 @@ func (p *Parser) Parse(reader io.Reader) (*domain.Suite, error) {
 
 	suite := &domain.Suite{
 		Name:       "RSpec Test Results",
+		Category:   domain.FrameworkRSpec.GetCategory(),
 		TotalTests: report.Summary.ExampleCount,
 		Failed:     report.Summary.FailureCount,
 		Skipped:    report.Summary.PendingCount,

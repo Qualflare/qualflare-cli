@@ -65,6 +65,7 @@ func (p *Parser) Parse(reader io.Reader) (*domain.Suite, error) {
 
 	suite := &domain.Suite{
 		Name:       "Mocha Test Results",
+		Category:   domain.FrameworkMocha.GetCategory(),
 		TotalTests: report.Stats.Tests,
 		Passed:     report.Stats.Passes,
 		Failed:     report.Stats.Failures,

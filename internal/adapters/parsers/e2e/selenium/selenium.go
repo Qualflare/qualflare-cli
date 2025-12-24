@@ -79,6 +79,7 @@ func (p *Parser) Parse(reader io.Reader) (*domain.Suite, error) {
 
 	suite := &domain.Suite{
 		Name:       "Selenium Test Results",
+		Category:   domain.FrameworkSelenium.GetCategory(),
 		TotalTests: report.Total,
 		Passed:     report.Passed,
 		Failed:     report.Failed,
@@ -95,7 +96,7 @@ func (p *Parser) Parse(reader io.Reader) (*domain.Suite, error) {
 		}
 	}
 
-	// Add browser/platform as properties
+	// Store browser/platform in properties for Launch to use
 	suite.Properties = make(map[string]string)
 	if report.Browser != "" {
 		suite.Properties["browser"] = report.Browser

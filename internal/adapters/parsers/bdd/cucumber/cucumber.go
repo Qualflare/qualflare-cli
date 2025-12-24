@@ -82,6 +82,7 @@ func (p *Parser) Parse(reader io.Reader) (*domain.Suite, error) {
 
 	suite := &domain.Suite{
 		Name:      "Cucumber Features",
+		Category:  domain.FrameworkCucumber.GetCategory(),
 		Timestamp: time.Now(),
 		Cases:     make([]domain.Case, 0),
 	}

@@ -116,6 +116,7 @@ func (p *Parser) Parse(reader io.Reader) (*domain.Suite, error) {
 
 	suite := &domain.Suite{
 		Name:      base.CoalesceString(report.ProjectName, "Snyk Security Scan"),
+		Category:  domain.FrameworkSnyk.GetCategory(),
 		Timestamp: time.Now(),
 		Cases:     make([]domain.Case, 0),
 	}
@@ -158,14 +159,23 @@ func (p *Parser) convertVulnerability(vuln Vulnerability) domain.Case {
 		ClassName: vuln.PackageName,
 	}
 
-	// Map severity to status
+	// Map severity to status and domain.Severity
 	switch vuln.Severity {
-	case "critical", "high", "medium":
+	case "critical":
 		testCase.Status = domain.StatusFailed
+		testCase.Severity = domain.SeverityCritical
+	case "high":
+		testCase.Status = domain.StatusFailed
+		testCase.Severity = domain.SeverityHigh
+	case "medium":
+		testCase.Status = domain.StatusFailed
+		testCase.Severity = domain.SeverityMedium
 	case "low":
 		testCase.Status = domain.StatusPassed // Info level
+		testCase.Severity = domain.SeverityLow
 	default:
 		testCase.Status = domain.StatusPassed
+		testCase.Severity = domain.SeverityUnknown
 	}
 
 	testCase.ErrorMessage = vuln.Title

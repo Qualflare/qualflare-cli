@@ -79,6 +79,7 @@ func (p *Parser) Parse(reader io.Reader) (*domain.Suite, error) {
 
 	suite := &domain.Suite{
 		Name:       testSuite.Name,
+		Category:   domain.FrameworkPython.GetCategory(),
 		TotalTests: testSuite.Tests,
 		Failed:     testSuite.Failures + testSuite.Errors,
 		Skipped:    testSuite.Skips,

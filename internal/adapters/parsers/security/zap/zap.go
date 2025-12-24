@@ -73,6 +73,7 @@ func (p *Parser) Parse(reader io.Reader) (*domain.Suite, error) {
 
 	suite := &domain.Suite{
 		Name:      "OWASP ZAP Security Scan",
+		Category:  domain.FrameworkZAP.GetCategory(),
 		Timestamp: time.Now(),
 		Cases:     make([]domain.Case, 0),
 	}
@@ -126,14 +127,20 @@ func (p *Parser) convertAlert(alert Alert, site Site) domain.Case {
 		ClassName: site.Host,
 	}
 
-	// Map risk to status
+	// Map risk to status and domain.Severity
 	switch riskCode {
-	case 3, 2: // High, Medium
+	case 3: // High
 		testCase.Status = domain.StatusFailed
+		testCase.Severity = domain.SeverityHigh
+	case 2: // Medium
+		testCase.Status = domain.StatusFailed
+		testCase.Severity = domain.SeverityMedium
 	case 1: // Low
 		testCase.Status = domain.StatusPassed
+		testCase.Severity = domain.SeverityLow
 	default: // Informational
 		testCase.Status = domain.StatusPassed
+		testCase.Severity = domain.SeverityInfo
 	}
 
 	testCase.ErrorMessage = alert.Desc

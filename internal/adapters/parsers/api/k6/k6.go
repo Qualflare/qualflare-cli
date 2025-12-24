@@ -74,16 +74,31 @@ func (p *Parser) Parse(reader io.Reader) (*domain.Suite, error) {
 
 	suite := &domain.Suite{
 		Name:      base.CoalesceString(report.RootGroup.Name, "k6 Load Test Results"),
+		Category:  domain.FrameworkK6.GetCategory(),
 		Duration:  time.Duration(report.State.TestRunDurationMs) * time.Millisecond,
 		Timestamp: time.Now(),
 		Cases:     make([]domain.Case, 0),
 	}
 
-	// Process checks from the root group
+	// Process checks from the root group and track assertions
 	p.processGroup(report.RootGroup, suite, "")
 
 	// Process threshold violations as test cases
 	p.processThresholds(report.Metrics, suite)
+
+	// Calculate total assertions from all checks (passes + fails)
+	for _, c := range suite.Cases {
+		if passes, ok := c.Properties["passes"]; ok {
+			var p int
+			fmt.Sscanf(passes, "%d", &p)
+			suite.Assertions += p
+		}
+		if fails, ok := c.Properties["fails"]; ok {
+			var f int
+			fmt.Sscanf(fails, "%d", &f)
+			suite.Assertions += f
+		}
+	}
 
 	// Calculate totals
 	suite.TotalTests = len(suite.Cases)

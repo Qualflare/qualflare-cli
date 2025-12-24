@@ -85,6 +85,7 @@ func (p *Parser) Parse(reader io.Reader) (*domain.Suite, error) {
 
 	suite := &domain.Suite{
 		Name:       "TestCafe Test Results",
+		Category:   domain.FrameworkTestCafe.GetCategory(),
 		TotalTests: report.Total,
 		Passed:     report.Passed,
 		Failed:     report.Failed,
@@ -98,6 +99,13 @@ func (p *Parser) Parse(reader io.Reader) (*domain.Suite, error) {
 	if report.StartTime != "" {
 		if t, err := time.Parse(time.RFC3339, report.StartTime); err == nil {
 			suite.Timestamp = t
+		}
+	}
+
+	// Store browser in properties for Launch to use
+	if len(report.UserAgents) > 0 {
+		suite.Properties = map[string]string{
+			"browser": report.UserAgents[0],
 		}
 	}
 

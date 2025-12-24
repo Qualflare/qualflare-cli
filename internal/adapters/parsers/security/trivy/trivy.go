@@ -107,6 +107,7 @@ func (p *Parser) Parse(reader io.Reader) (*domain.Suite, error) {
 
 	suite := &domain.Suite{
 		Name:      base.CoalesceString(report.ArtifactName, "Trivy Security Scan"),
+		Category:  domain.FrameworkTrivy.GetCategory(),
 		Timestamp: time.Now(),
 		Cases:     make([]domain.Case, 0),
 	}
@@ -161,14 +162,26 @@ func (p *Parser) convertVulnerability(vuln Vulnerability, target string) domain.
 		ClassName: target,
 	}
 
-	// Map severity to status
+	// Map severity to status and domain.Severity
 	switch vuln.Severity {
-	case "CRITICAL", "HIGH", "MEDIUM":
+	case "CRITICAL":
 		testCase.Status = domain.StatusFailed
-	case "LOW", "UNKNOWN":
+		testCase.Severity = domain.SeverityCritical
+	case "HIGH":
+		testCase.Status = domain.StatusFailed
+		testCase.Severity = domain.SeverityHigh
+	case "MEDIUM":
+		testCase.Status = domain.StatusFailed
+		testCase.Severity = domain.SeverityMedium
+	case "LOW":
 		testCase.Status = domain.StatusPassed // Info level, not a failure
+		testCase.Severity = domain.SeverityLow
+	case "UNKNOWN":
+		testCase.Status = domain.StatusPassed
+		testCase.Severity = domain.SeverityUnknown
 	default:
 		testCase.Status = domain.StatusPassed
+		testCase.Severity = domain.SeverityUnknown
 	}
 
 	testCase.ErrorMessage = vuln.Title
@@ -218,6 +231,20 @@ func (p *Parser) convertMisconfig(misconf Misconfig, target string) domain.Case 
 		testCase.StackTrace = misconf.Resolution
 	} else {
 		testCase.Status = domain.StatusPassed
+	}
+
+	// Map severity
+	switch misconf.Severity {
+	case "CRITICAL":
+		testCase.Severity = domain.SeverityCritical
+	case "HIGH":
+		testCase.Severity = domain.SeverityHigh
+	case "MEDIUM":
+		testCase.Severity = domain.SeverityMedium
+	case "LOW":
+		testCase.Severity = domain.SeverityLow
+	default:
+		testCase.Severity = domain.SeverityUnknown
 	}
 
 	testCase.Tags = []string{
