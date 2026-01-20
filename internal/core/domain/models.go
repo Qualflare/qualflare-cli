@@ -212,6 +212,10 @@ type Case struct {
 	Status   Status        `json:"status"`
 	Duration time.Duration `json:"duration"`
 
+	// Retry information
+	RetryCount int  `json:"retryCount"` // Number of retry attempts
+	IsFlaky    bool `json:"isFlaky"`    // True if test passed after one or more retries
+
 	// Error information
 	ErrorMessage string `json:"errorMessage,omitempty"`
 	StackTrace   string `json:"stackTrace,omitempty"`
