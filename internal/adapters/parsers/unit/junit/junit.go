@@ -2,6 +2,7 @@ package junit
 
 import (
 	"encoding/xml"
+	"fmt"
 	"io"
 	"time"
 
@@ -37,14 +38,20 @@ type TestSuite struct {
 }
 
 type TestCase struct {
-	Name      string   `xml:"name,attr"`
-	Classname string   `xml:"classname,attr"`
-	Time      string   `xml:"time,attr"`
-	Failure   *Failure `xml:"failure,omitempty"`
-	Error     *Error   `xml:"error,omitempty"`
-	Skipped   *Skipped `xml:"skipped,omitempty"`
-	SystemOut string   `xml:"system-out,omitempty"`
-	SystemErr string   `xml:"system-err,omitempty"`
+	Name       string     `xml:"name,attr"`
+	Classname  string     `xml:"classname,attr"`
+	Time       string     `xml:"time,attr"`
+	Failure    *Failure   `xml:"failure,omitempty"`
+	Error      *Error     `xml:"error,omitempty"`
+	Skipped    *Skipped   `xml:"skipped,omitempty"`
+	Properties []Property `xml:"properties>property"`
+	SystemOut  string     `xml:"system-out,omitempty"`
+	SystemErr  string     `xml:"system-err,omitempty"`
+}
+
+type Property struct {
+	Name  string `xml:"name,attr"`
+	Value string `xml:"value,attr"`
 }
 
 type Failure struct {
@@ -157,6 +164,17 @@ func (p *Parser) convertTestCase(tc TestCase, suiteName string) domain.Case {
 		testCase.Duration = duration
 	}
 
+	// Parse retry count from properties if present
+	for _, prop := range tc.Properties {
+		if prop.Name == "retries" || prop.Name == "retryCount" {
+			// Parse integer from string value
+			var retryCount int
+			if _, err := fmt.Sscanf(prop.Value, "%d", &retryCount); err == nil {
+				testCase.RetryCount = retryCount
+			}
+		}
+	}
+
 	// Determine status
 	if tc.Failure != nil {
 		testCase.Status = domain.StatusFailed
@@ -173,6 +191,8 @@ func (p *Parser) convertTestCase(tc TestCase, suiteName string) domain.Case {
 		testCase.ErrorMessage = tc.Skipped.Message
 	} else {
 		testCase.Status = domain.StatusPassed
+		// Flaky if passed after retries
+		testCase.IsFlaky = testCase.RetryCount > 0
 	}
 
 	// Add system output as properties if present
