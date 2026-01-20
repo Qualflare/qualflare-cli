@@ -67,6 +67,7 @@ func (c *CLI) createUploadCommand() *cobra.Command {
 		format      string
 		project     string
 		environment string
+		language    string
 		branch      string
 		commit      string
 		apiEndpoint string
@@ -102,6 +103,7 @@ The format is auto-detected if not specified.`,
 			return c.runUpload(cmd.Context(), args, uploadOptions{
 				format:      format,
 				environment: environment,
+				language:    language,
 				branch:      branch,
 				commit:      commit,
 				apiEndpoint: apiEndpoint,
@@ -117,6 +119,7 @@ The format is auto-detected if not specified.`,
 	cmd.Flags().StringVarP(&format, "format", "f", "", "Test framework format (auto-detected if not specified)")
 	cmd.Flags().StringVarP(&project, "project", "p", "", "Project name (optional, defaults to API key project)")
 	cmd.Flags().StringVarP(&environment, "environment", "e", "", "Environment name")
+	cmd.Flags().StringVar(&language, "lang", "en-US", "Language/culture (BCP 47 format, e.g., en-US, de-DE)")
 	cmd.Flags().StringVar(&branch, "branch", "", "Git branch name")
 	cmd.Flags().StringVar(&commit, "commit", "", "Git commit hash")
 	cmd.Flags().StringVar(&apiEndpoint, "api-endpoint", "", "API endpoint URL")
@@ -131,6 +134,7 @@ The format is auto-detected if not specified.`,
 type uploadOptions struct {
 	format      string
 	environment string
+	language    string
 	branch      string
 	commit      string
 	apiEndpoint string
@@ -143,6 +147,7 @@ type uploadOptions struct {
 func (c *CLI) runUpload(ctx context.Context, files []string, opts uploadOptions) error {
 	// Apply command line overrides
 	c.config.SetEnvironment(opts.environment)
+	c.config.SetLanguage(opts.language)
 	c.config.SetBranch(opts.branch)
 	c.config.SetCommit(opts.commit)
 	c.config.SetAPIEndpoint(opts.apiEndpoint)
