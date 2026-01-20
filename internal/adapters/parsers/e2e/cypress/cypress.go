@@ -63,22 +63,29 @@ type Suite struct {
 }
 
 type Test struct {
-	Title      string `json:"title"`
-	FullTitle  string `json:"fullTitle"`
-	TimedOut   bool   `json:"timedOut"`
-	Duration   int    `json:"duration"`
-	State      string `json:"state"` // passed, failed, pending
-	Speed      string `json:"speed"`
-	Pass       bool   `json:"pass"`
-	Fail       bool   `json:"fail"`
-	Pending    bool   `json:"pending"`
-	Context    string `json:"context"`
-	Code       string `json:"code"`
-	Err        Error  `json:"err"`
-	UUID       string `json:"uuid"`
-	ParentUUID string `json:"parentUUID"`
-	IsHook     bool   `json:"isHook"`
-	Skipped    bool   `json:"skipped"`
+	Title      string   `json:"title"`
+	FullTitle  string   `json:"fullTitle"`
+	TimedOut   bool     `json:"timedOut"`
+	Duration   int      `json:"duration"`
+	State      string   `json:"state"` // passed, failed, pending
+	Speed      string   `json:"speed"`
+	Pass       bool     `json:"pass"`
+	Fail       bool     `json:"fail"`
+	Pending    bool     `json:"pending"`
+	Retries    int      `json:"_retries,omitempty"`  // Number of retries
+	Attempts   []Attempt `json:"attempts,omitempty"` // Individual attempts
+	Context    string   `json:"context"`
+	Code       string   `json:"code"`
+	Err        Error    `json:"err"`
+	UUID       string   `json:"uuid"`
+	ParentUUID string   `json:"parentUUID"`
+	IsHook     bool     `json:"isHook"`
+	Skipped    bool     `json:"skipped"`
+}
+
+type Attempt struct {
+	State    string `json:"state"`
+	Duration int    `json:"duration"`
 }
 
 type Hook struct {
@@ -180,6 +187,16 @@ func (p *Parser) convertTest(test Test, file string) domain.Case {
 		ClassName: file,
 		Duration:  time.Duration(test.Duration) * time.Millisecond,
 	}
+
+	// Calculate retry count from attempts or retries field
+	if len(test.Attempts) > 0 {
+		testCase.RetryCount = len(test.Attempts) - 1
+	} else if test.Retries > 0 {
+		testCase.RetryCount = test.Retries
+	}
+
+	// Determine flaky status (passed after retries)
+	testCase.IsFlaky = testCase.RetryCount > 0 && test.State == "passed"
 
 	// Determine status
 	switch test.State {
