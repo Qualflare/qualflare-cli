@@ -213,6 +213,12 @@ func (p *Parser) convertTest(spec Spec, test Test, file string, prefix string) d
 		lastResult := test.Results[len(test.Results)-1]
 		testCase.Duration = time.Duration(lastResult.Duration) * time.Millisecond
 
+		// Calculate retry count and flaky status
+		testCase.RetryCount = len(test.Results) - 1
+		testCase.IsFlaky = testCase.RetryCount > 0 &&
+			lastResult.Status == "passed" &&
+			len(test.Results) > 1
+
 		// Determine status
 		switch lastResult.Status {
 		case "passed":
