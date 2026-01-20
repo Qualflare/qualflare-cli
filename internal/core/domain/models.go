@@ -141,8 +141,9 @@ type Launch struct {
 	Branch string `json:"branch,omitempty"`
 	Commit string `json:"commit,omitempty"`
 
-	// Environment and milestone
+	// Environment, language and milestone
 	Environment string `json:"environment,omitempty"`
+	Language    string `json:"language,omitempty"`
 	Milestone   int64  `json:"milestone,omitempty"`
 
 	// Metadata
