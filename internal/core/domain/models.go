@@ -141,8 +141,9 @@ type Launch struct {
 	Branch string `json:"branch,omitempty"`
 	Commit string `json:"commit,omitempty"`
 
-	// Environment and milestone
+	// Environment, language and milestone
 	Environment string `json:"environment,omitempty"`
+	Language    string `json:"language,omitempty"`
 	Milestone   int64  `json:"milestone,omitempty"`
 
 	// Metadata
@@ -210,6 +211,10 @@ type Case struct {
 	// Status and timing
 	Status   Status        `json:"status"`
 	Duration time.Duration `json:"duration"`
+
+	// Retry information
+	RetryCount int  `json:"retryCount"` // Number of retry attempts
+	IsFlaky    bool `json:"isFlaky"`    // True if test passed after one or more retries
 
 	// Error information
 	ErrorMessage string `json:"errorMessage,omitempty"`

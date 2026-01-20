@@ -211,6 +211,7 @@ func (s *ReportService) createReport(testSuites []domain.Suite, framework domain
 		Platform:    fmt.Sprintf("%s/%s", runtime.GOOS, runtime.GOARCH),
 		OS:          runtime.GOOS,
 		Environment: s.config.GetEnvironment(),
+		Language:    s.config.GetLanguage(),
 		Branch:      s.config.GetBranch(),
 		Commit:      s.config.GetCommit(),
 		Metadata: domain.Metadata{

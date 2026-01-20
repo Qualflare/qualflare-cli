@@ -45,6 +45,7 @@ type ConfigProvider interface {
 
 	// Project settings
 	GetEnvironment() string
+	GetLanguage() string
 
 	// Git information
 	GetBranch() string
@@ -71,6 +72,7 @@ type ConfigMutator interface {
 	SetAPIEndpoint(endpoint string)
 	SetProject(project string)
 	SetEnvironment(env string)
+	SetLanguage(language string)
 	SetBranch(branch string)
 	SetCommit(commit string)
 	SetTimeout(timeout time.Duration)

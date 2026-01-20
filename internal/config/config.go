@@ -14,6 +14,7 @@ type Config struct {
 
 	// Project settings
 	Environment string
+	Language    string
 
 	// Git information
 	Branch string
@@ -39,6 +40,7 @@ func DefaultConfig() *Config {
 		APIKey:         "",
 		APIEndpoint:    "http://127.0.0.1:8001/api/v1/collect",
 		Environment:    "development",
+		Language:       "en-US",
 		Branch:         "",
 		Commit:         "",
 		RetryMax:       3,
@@ -68,6 +70,9 @@ func (c *Config) LoadFromEnv() {
 	}
 	if v := os.Getenv("QF_ENVIRONMENT"); v != "" {
 		c.Environment = v
+	}
+	if v := os.Getenv("QF_LANGUAGE"); v != "" {
+		c.Language = v
 	}
 
 	// Git information (common CI environment variables)
@@ -128,6 +133,13 @@ func (c *Config) SetEnvironment(env string) {
 	}
 }
 
+// SetLanguage sets the language
+func (c *Config) SetLanguage(language string) {
+	if language != "" {
+		c.Language = language
+	}
+}
+
 // SetBranch sets the git branch
 func (c *Config) SetBranch(branch string) {
 	if branch != "" {
@@ -177,6 +189,11 @@ func (c *Config) GetAPIEndpoint() string {
 // GetEnvironment returns the environment
 func (c *Config) GetEnvironment() string {
 	return c.Environment
+}
+
+// GetLanguage returns the language
+func (c *Config) GetLanguage() string {
+	return c.Language
 }
 
 // GetBranch returns the git branch
