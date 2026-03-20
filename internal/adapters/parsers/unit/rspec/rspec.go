@@ -68,7 +68,7 @@ func (p *Parser) Parse(reader io.Reader) (*domain.Suite, error) {
 		Failed:     report.Summary.FailureCount,
 		Skipped:    report.Summary.PendingCount,
 		Duration:   time.Duration(report.Summary.Duration * float64(time.Second)),
-		Timestamp:  time.Now(),
+		Timestamp:  time.Now().UTC(),
 		Cases:      make([]domain.Case, 0, len(report.Examples)),
 	}
 

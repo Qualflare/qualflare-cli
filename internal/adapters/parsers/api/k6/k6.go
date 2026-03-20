@@ -76,7 +76,7 @@ func (p *Parser) Parse(reader io.Reader) (*domain.Suite, error) {
 		Name:      base.CoalesceString(report.RootGroup.Name, "k6 Load Test Results"),
 		Category:  domain.FrameworkK6.GetCategory(),
 		Duration:  time.Duration(report.State.TestRunDurationMs) * time.Millisecond,
-		Timestamp: time.Now(),
+		Timestamp: time.Now().UTC(),
 		Cases:     make([]domain.Case, 0),
 	}
 
@@ -90,13 +90,15 @@ func (p *Parser) Parse(reader io.Reader) (*domain.Suite, error) {
 	for _, c := range suite.Cases {
 		if passes, ok := c.Properties["passes"]; ok {
 			var p int
-			fmt.Sscanf(passes, "%d", &p)
-			suite.Assertions += p
+			if _, err := fmt.Sscanf(passes, "%d", &p); err == nil {
+				suite.Assertions += p
+			}
 		}
 		if fails, ok := c.Properties["fails"]; ok {
 			var f int
-			fmt.Sscanf(fails, "%d", &f)
-			suite.Assertions += f
+			if _, err := fmt.Sscanf(fails, "%d", &f); err == nil {
+				suite.Assertions += f
+			}
 		}
 	}
 
