@@ -83,7 +83,7 @@ func (p *Parser) Parse(reader io.Reader) (*domain.Suite, error) {
 		TotalTests: testSuite.Tests,
 		Failed:     testSuite.Failures + testSuite.Errors,
 		Skipped:    testSuite.Skips,
-		Timestamp:  time.Now(),
+		Timestamp:  time.Now().UTC(),
 		Cases:      make([]domain.Case, 0, len(testSuite.TestCases)),
 	}
 

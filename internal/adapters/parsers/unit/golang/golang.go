@@ -3,6 +3,7 @@ package golang
 import (
 	"bufio"
 	"encoding/json"
+	"fmt"
 	"io"
 	"strings"
 	"time"
@@ -40,7 +41,7 @@ func (p *Parser) Parse(reader io.Reader) (*domain.Suite, error) {
 	suite := &domain.Suite{
 		Name:      "Go Tests",
 		Category:  domain.FrameworkGolang.GetCategory(),
-		Timestamp: time.Now(),
+		Timestamp: time.Now().UTC(),
 		Cases:     make([]domain.Case, 0),
 	}
 
@@ -67,6 +68,14 @@ func (p *Parser) Parse(reader io.Reader) (*domain.Suite, error) {
 
 		testKey := event.Package + "/" + event.Test
 		p.processEvent(tests, testKey, event)
+	}
+
+	if err := scanner.Err(); err != nil {
+		return nil, fmt.Errorf("error reading Go test output: %w", err)
+	}
+
+	if len(tests) == 0 {
+		return nil, fmt.Errorf("no valid Go test JSON events found")
 	}
 
 	// Convert tests map to cases
@@ -109,7 +118,7 @@ func (p *Parser) Parse(reader io.Reader) (*domain.Suite, error) {
 	suite.TotalTests = len(suite.Cases)
 	suite.Duration = totalDuration
 
-	return suite, scanner.Err()
+	return suite, nil
 }
 
 // testState tracks the state of a test during parsing

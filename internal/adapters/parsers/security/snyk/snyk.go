@@ -117,7 +117,7 @@ func (p *Parser) Parse(reader io.Reader) (*domain.Suite, error) {
 	suite := &domain.Suite{
 		Name:      base.CoalesceString(report.ProjectName, "Snyk Security Scan"),
 		Category:  domain.FrameworkSnyk.GetCategory(),
-		Timestamp: time.Now(),
+		Timestamp: time.Now().UTC(),
 		Cases:     make([]domain.Case, 0),
 	}
 

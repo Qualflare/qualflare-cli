@@ -132,7 +132,7 @@ func (p *Parser) Parse(reader io.Reader) (*domain.Suite, error) {
 		Failed:     report.Stats.Failures,
 		Skipped:    report.Stats.Pending + report.Stats.SkippedRegistered,
 		Duration:   time.Duration(report.Stats.Duration) * time.Millisecond,
-		Timestamp:  time.Now(),
+		Timestamp:  time.Now().UTC(),
 		Cases:      make([]domain.Case, 0),
 	}
 

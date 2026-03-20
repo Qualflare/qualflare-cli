@@ -100,7 +100,7 @@ func (p *Parser) Parse(reader io.Reader) (*domain.Suite, error) {
 	if len(testSuites.TestSuites) == 0 {
 		return &domain.Suite{
 			Name:      "Empty Suite",
-			Timestamp: time.Now(),
+			Timestamp: time.Now().UTC(),
 		}, nil
 	}
 
@@ -114,7 +114,7 @@ func (p *Parser) mergeSuites(testSuites TestSuites) *domain.Suite {
 	suite := &domain.Suite{
 		Name:      base.CoalesceString(testSuites.Name, "JUnit Test Results"),
 		Category:  domain.FrameworkJUnit.GetCategory(),
-		Timestamp: time.Now(),
+		Timestamp: time.Now().UTC(),
 		Cases:     make([]domain.Case, 0),
 	}
 
