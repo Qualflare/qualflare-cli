@@ -2,9 +2,9 @@ package junit
 
 import (
 	"strings"
+	"testing"
 
 	"qualflare-cli/internal/core/domain"
-	"testing"
 )
 
 func TestJUnitParserDefaultRetryCount(t *testing.T) {
@@ -91,5 +91,21 @@ func TestJUnitParserFailedTestWithRetries(t *testing.T) {
 	}
 	if testCase.Status != domain.StatusFailed {
 		t.Errorf("expected StatusFailed, got %s", testCase.Status)
+	}
+}
+
+func TestJUnitParser_EmptyInput(t *testing.T) {
+	parser := New()
+	_, err := parser.Parse(strings.NewReader(""))
+	if err == nil {
+		t.Error("expected error for empty input")
+	}
+}
+
+func TestJUnitParser_MalformedXML(t *testing.T) {
+	parser := New()
+	_, err := parser.Parse(strings.NewReader("<not valid xml"))
+	if err == nil {
+		t.Error("expected error for malformed XML")
 	}
 }

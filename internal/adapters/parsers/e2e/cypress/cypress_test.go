@@ -2,8 +2,6 @@ package cypress
 
 import (
 	"strings"
-
-	"qualflare-cli/internal/core/domain"
 	"testing"
 )
 
@@ -83,5 +81,21 @@ func TestCypressParserNoRetries(t *testing.T) {
 	}
 	if testCase.IsFlaky {
 		t.Errorf("expected IsFlaky false, got true")
+	}
+}
+
+func TestCypressParser_EmptyInput(t *testing.T) {
+	parser := New()
+	_, err := parser.Parse(strings.NewReader(""))
+	if err == nil {
+		t.Error("expected error for empty input")
+	}
+}
+
+func TestCypressParser_MalformedJSON(t *testing.T) {
+	parser := New()
+	_, err := parser.Parse(strings.NewReader("{not valid json"))
+	if err == nil {
+		t.Error("expected error for malformed JSON")
 	}
 }

@@ -2,8 +2,6 @@ package playwright
 
 import (
 	"strings"
-
-	"qualflare-cli/internal/core/domain"
 	"testing"
 )
 
@@ -122,5 +120,21 @@ func TestPlaywrightParserFailedAfterRetries(t *testing.T) {
 	}
 	if testCase.IsFlaky {
 		t.Errorf("expected IsFlaky false for failed test, got true")
+	}
+}
+
+func TestPlaywrightParser_EmptyInput(t *testing.T) {
+	parser := New()
+	_, err := parser.Parse(strings.NewReader(""))
+	if err == nil {
+		t.Error("expected error for empty input")
+	}
+}
+
+func TestPlaywrightParser_MalformedJSON(t *testing.T) {
+	parser := New()
+	_, err := parser.Parse(strings.NewReader("{not valid json"))
+	if err == nil {
+		t.Error("expected error for malformed JSON")
 	}
 }
