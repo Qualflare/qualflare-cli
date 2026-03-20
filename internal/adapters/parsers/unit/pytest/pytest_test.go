@@ -7,12 +7,10 @@ import (
 
 func TestPytestParserDefaultRetryCount(t *testing.T) {
 	xmlReport := `
-    <testsuites>
-        <testsuite name="pytest" tests="1">
-            <testcase name="test_example" classname="test_module">
-            </testcase>
-        </testsuite>
-    </testsuites>
+    <testsuite name="pytest" tests="1">
+        <testcase name="test_example" classname="test_module">
+        </testcase>
+    </testsuite>
     `
 
 	parser := New()
@@ -31,5 +29,21 @@ func TestPytestParserDefaultRetryCount(t *testing.T) {
 	}
 	if testCase.IsFlaky {
 		t.Errorf("expected default IsFlaky false, got true")
+	}
+}
+
+func TestPytestParser_EmptyInput(t *testing.T) {
+	parser := New()
+	_, err := parser.Parse(strings.NewReader(""))
+	if err == nil {
+		t.Error("expected error for empty input")
+	}
+}
+
+func TestPytestParser_MalformedXML(t *testing.T) {
+	parser := New()
+	_, err := parser.Parse(strings.NewReader("<not valid xml"))
+	if err == nil {
+		t.Error("expected error for malformed XML")
 	}
 }
