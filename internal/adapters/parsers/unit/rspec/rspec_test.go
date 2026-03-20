@@ -49,3 +49,19 @@ func TestRspecParserDefaultRetryCount(t *testing.T) {
 		t.Errorf("expected default IsFlaky false, got true")
 	}
 }
+
+func TestRspecParser_EmptyInput(t *testing.T) {
+	parser := New()
+	_, err := parser.Parse(strings.NewReader(""))
+	if err == nil {
+		t.Error("expected error for empty input")
+	}
+}
+
+func TestRspecParser_MalformedJSON(t *testing.T) {
+	parser := New()
+	_, err := parser.Parse(strings.NewReader("{not valid json"))
+	if err == nil {
+		t.Error("expected error for malformed JSON")
+	}
+}

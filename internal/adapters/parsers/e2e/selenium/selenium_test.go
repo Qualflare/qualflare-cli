@@ -42,3 +42,19 @@ func TestSeleniumParserDefaultRetryCount(t *testing.T) {
 		t.Errorf("expected default IsFlaky false, got true")
 	}
 }
+
+func TestSeleniumParser_EmptyInput(t *testing.T) {
+	parser := New()
+	_, err := parser.Parse(strings.NewReader(""))
+	if err == nil {
+		t.Error("expected error for empty input")
+	}
+}
+
+func TestSeleniumParser_MalformedJSON(t *testing.T) {
+	parser := New()
+	_, err := parser.Parse(strings.NewReader("{not valid json"))
+	if err == nil {
+		t.Error("expected error for malformed JSON")
+	}
+}
