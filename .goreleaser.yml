@@ -79,7 +79,7 @@ brews:
     folder: Formula
     homepage: https://github.com/qualflare/qualflare-cli
     description: CLI tool for uploading test results to Qualflare
-    license: MIT
+    license: Apache-2.0
     test: |
       system "#{bin}/qf", "version"
     install: |
