@@ -13,6 +13,7 @@ type Config struct {
 	APIEndpoint string
 
 	// Project settings
+	Project     string
 	Environment string
 	Language    string
 
@@ -126,6 +127,13 @@ func (c *Config) SetAPIEndpoint(endpoint string) {
 	}
 }
 
+// SetProject sets the project name
+func (c *Config) SetProject(project string) {
+	if project != "" {
+		c.Project = project
+	}
+}
+
 // SetEnvironment sets the environment
 func (c *Config) SetEnvironment(env string) {
 	if env != "" {
@@ -186,6 +194,11 @@ func (c *Config) GetAPIEndpoint() string {
 	return c.APIEndpoint
 }
 
+// GetProject returns the project name
+func (c *Config) GetProject() string {
+	return c.Project
+}
+
 // GetEnvironment returns the environment
 func (c *Config) GetEnvironment() string {
 	return c.Environment
@@ -233,7 +246,18 @@ func (c *Config) IsDryRun() bool {
 
 // Validate validates the configuration
 func (c *Config) Validate() error {
-	// Project is optional - determined from API key on server side
+	if !c.DryRun && c.APIKey == "" {
+		return &ValidationError{
+			Field:   "api_key",
+			Message: "API key is required. Set it via --api-key flag or QF_API_KEY environment variable.",
+		}
+	}
+	if c.APIEndpoint == "" {
+		return &ValidationError{
+			Field:   "api_endpoint",
+			Message: "API endpoint is required.",
+		}
+	}
 	return nil
 }
 

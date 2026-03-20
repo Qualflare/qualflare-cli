@@ -102,6 +102,7 @@ The format is auto-detected if not specified.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return c.runUpload(cmd.Context(), args, uploadOptions{
 				format:      format,
+				project:     project,
 				environment: environment,
 				language:    language,
 				branch:      branch,
@@ -133,6 +134,7 @@ The format is auto-detected if not specified.`,
 
 type uploadOptions struct {
 	format      string
+	project     string
 	environment string
 	language    string
 	branch      string
@@ -146,6 +148,7 @@ type uploadOptions struct {
 
 func (c *CLI) runUpload(ctx context.Context, files []string, opts uploadOptions) error {
 	// Apply command line overrides
+	c.config.SetProject(opts.project)
 	c.config.SetEnvironment(opts.environment)
 	c.config.SetLanguage(opts.language)
 	c.config.SetBranch(opts.branch)

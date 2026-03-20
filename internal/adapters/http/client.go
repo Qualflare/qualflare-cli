@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
 	"math"
 	"math/rand"
 	"net/http"
@@ -80,7 +79,9 @@ func (c *Client) SendReport(ctx context.Context, report *domain.Launch) error {
 		}
 	}
 
-	log.Printf("Upload request body: %s", string(jsonData))
+	if c.config.IsVerbose() {
+		fmt.Printf("Upload request body size: %d bytes\n", len(jsonData))
+	}
 
 	var lastErr error
 	for attempt := 0; attempt <= c.maxRetries; attempt++ {

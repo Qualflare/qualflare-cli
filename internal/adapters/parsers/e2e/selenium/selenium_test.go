@@ -8,12 +8,17 @@ import (
 func TestSeleniumParserDefaultRetryCount(t *testing.T) {
 	jsonReport := `
     {
-        "sessions": [{
-            "id": "session-1",
-            "capabilities": {},
-            "results": [{
+        "total": 1,
+        "passed": 1,
+        "failed": 0,
+        "skipped": 0,
+        "duration": 1.5,
+        "suites": [{
+            "name": "Login Suite",
+            "tests": [{
                 "name": "test example",
-                "status": "passed"
+                "status": "passed",
+                "duration": 1.5
             }]
         }]
     }

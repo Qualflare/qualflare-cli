@@ -111,7 +111,7 @@ func (p *Parser) Parse(reader io.Reader) (*domain.Suite, error) {
 		Name:      "Playwright Test Results",
 		Category:  domain.FrameworkPlaywright.GetCategory(),
 		Duration:  time.Duration(report.Stats.Duration) * time.Millisecond,
-		Timestamp: time.Now(),
+		Timestamp: time.Now().UTC(),
 		Cases:     make([]domain.Case, 0),
 	}
 

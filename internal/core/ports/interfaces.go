@@ -44,6 +44,7 @@ type ConfigProvider interface {
 	GetAPIEndpoint() string
 
 	// Project settings
+	GetProject() string
 	GetEnvironment() string
 	GetLanguage() string
 

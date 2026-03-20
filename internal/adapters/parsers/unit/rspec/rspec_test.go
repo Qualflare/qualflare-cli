@@ -8,12 +8,26 @@ import (
 func TestRspecParserDefaultRetryCount(t *testing.T) {
 	jsonReport := `
     {
-        "messages": [
+        "version": "3.12",
+        "examples": [
             {
-                "message": "example test",
-                "passed": true
+                "id": "./spec/example_spec.rb[1:1]",
+                "description": "example test",
+                "full_description": "Example example test",
+                "status": "passed",
+                "file_path": "./spec/example_spec.rb",
+                "line_number": 5,
+                "run_time": 0.001
             }
-        ]
+        ],
+        "summary": {
+            "duration": 0.001,
+            "example_count": 1,
+            "failure_count": 0,
+            "pending_count": 0,
+            "errors_outside_of_examples_count": 0
+        },
+        "summary_line": "1 example, 0 failures"
     }
     `
 
