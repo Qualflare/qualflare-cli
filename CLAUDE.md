@@ -4,7 +4,7 @@ This file provides guidance to Claude Code when working with code in this reposi
 
 ## Overview
 
-Command-line tool for parsing and uploading test results from various testing frameworks to the Astrais test management platform. Supports 20+ test frameworks across unit, integration, E2E, API, and security testing.
+Command-line tool for parsing and uploading test results from various testing frameworks to the Qualflare test management platform. Supports 20+ test frameworks across unit, integration, E2E, API, and security testing.
 
 ## Tech Stack
 
@@ -214,6 +214,4 @@ Custom HTTP client with:
 
 ## Related Documentation
 
-- [root CLAUDE.md](../CLAUDE.md) - Project overview
-- [api-service/CLAUDE.md](../api-service/CLAUDE.md) - Backend API documentation
 - [docs/](./docs/) - Additional documentation
