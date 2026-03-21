@@ -24,6 +24,9 @@ coverage.html
 .DS_Store
 Thumbs.db
 
+# Internal
+.planning/
+
 # Environment
 .env
 .env.local
