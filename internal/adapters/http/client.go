@@ -1,33 +1,23 @@
 package http
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
-	"io"
-	"math"
-	"math/rand"
 	"net/http"
 	"net/url"
 	"qualflare-cli/internal/core/domain"
 	"qualflare-cli/internal/core/ports"
 	"qualflare-cli/internal/version"
-	"strconv"
-	"time"
+
+	"resty.dev/v3"
 )
 
 // Client handles HTTP communication with the API
 type Client struct {
-	client   *http.Client
+	resty    *resty.Client
 	config   ports.ConfigProvider
 	endpoint string
-
-	// Retry configuration
-	maxRetries int
-	baseDelay  time.Duration
-	maxDelay   time.Duration
 }
 
 // ClientOption is a function that configures the client
@@ -37,15 +27,38 @@ type ClientOption func(*Client)
 func NewHTTPClient(config ports.ConfigProvider, opts ...ClientOption) *Client {
 	maxRetries, baseDelay, maxDelay := config.GetRetryConfig()
 
+	rc := resty.New().
+		SetTimeout(config.GetTimeout()).
+		SetRetryCount(maxRetries).
+		SetRetryWaitTime(baseDelay).
+		SetRetryMaxWaitTime(maxDelay).
+		SetAllowNonIdempotentRetry(true).
+		SetHeader("User-Agent", version.UserAgent()).
+		SetHeader("Accept", "application/json").
+		AddRetryConditions(func(resp *resty.Response, err error) bool {
+			if err != nil {
+				return true
+			}
+			sc := resp.StatusCode()
+			return sc == http.StatusTooManyRequests ||
+				sc == http.StatusInternalServerError ||
+				sc == http.StatusBadGateway ||
+				sc == http.StatusServiceUnavailable ||
+				sc == http.StatusGatewayTimeout
+		})
+
+	// Add auth header middleware
+	rc.AddRequestMiddleware(func(c *resty.Client, req *resty.Request) error {
+		if apiKey := config.GetAPIKey(); apiKey != "" {
+			req.SetHeader("QF_TOKEN", apiKey)
+		}
+		return nil
+	})
+
 	c := &Client{
-		client: &http.Client{
-			Timeout: config.GetTimeout(),
-		},
-		config:     config,
-		endpoint:   config.GetAPIEndpoint(),
-		maxRetries: maxRetries,
-		baseDelay:  baseDelay,
-		maxDelay:   maxDelay,
+		resty:    rc,
+		config:   config,
+		endpoint: config.GetAPIEndpoint(),
 	}
 
 	for _, opt := range opts {
@@ -55,11 +68,9 @@ func NewHTTPClient(config ports.ConfigProvider, opts ...ClientOption) *Client {
 	return c
 }
 
-// WithHTTPClient sets a custom HTTP client
-func WithHTTPClient(client *http.Client) ClientOption {
-	return func(c *Client) {
-		c.client = client
-	}
+// Close releases resources held by the client
+func (c *Client) Close() {
+	c.resty.Close()
 }
 
 // WithEndpoint overrides the API endpoint
@@ -69,121 +80,66 @@ func WithEndpoint(endpoint string) ClientOption {
 	}
 }
 
-// SendReport sends a report to the API with retry logic
+// SendReport sends a report to the API
 func (c *Client) SendReport(ctx context.Context, report *domain.Launch) error {
-	jsonData, err := json.Marshal(report)
-	if err != nil {
-		return &APIError{
-			Op:      "marshal",
-			Message: "failed to marshal report",
-			Err:     err,
-		}
-	}
-
 	if c.config.IsVerbose() {
+		jsonData, _ := json.Marshal(report)
 		fmt.Printf("Upload request body size: %d bytes\n", len(jsonData))
 	}
 
-	_, err = c.doWithRetry(ctx, "send", func() ([]byte, error) {
-		return c.doRequestWithMethod(ctx, http.MethodPost, c.endpoint+"/api/v1/collect", jsonData)
-	})
-	return err
+	resp, err := c.resty.R().
+		SetContext(ctx).
+		SetBody(report).
+		Post(c.endpoint + "/api/v1/collect")
+	if err != nil {
+		return &APIError{Op: "send", Message: "failed to send request", Err: err}
+	}
+
+	if resp.IsSuccess() {
+		return nil
+	}
+
+	return c.buildAPIError("send", resp)
 }
 
-// doWithRetry executes an action with retry logic, exponential backoff, and Retry-After support
-func (c *Client) doWithRetry(ctx context.Context, op string, action func() ([]byte, error)) ([]byte, error) {
-	var lastErr error
-	var retryAfterDelay time.Duration
+// Get performs a GET request to the API
+func (c *Client) Get(ctx context.Context, path string, params url.Values) (json.RawMessage, error) {
+	reqURL := c.endpoint + path
 
-	for attempt := 0; attempt <= c.maxRetries; attempt++ {
-		if attempt > 0 {
-			delay := c.calculateBackoff(attempt)
-			// Retry-After takes precedence over computed backoff
-			if retryAfterDelay > 0 {
-				delay = retryAfterDelay
-				retryAfterDelay = 0
-			}
-			select {
-			case <-ctx.Done():
-				return nil, &APIError{Op: op, Message: "request cancelled", Err: ctx.Err()}
-			case <-time.After(delay):
-			}
+	if c.config.IsVerbose() {
+		display := reqURL
+		if len(params) > 0 {
+			display += "?" + params.Encode()
 		}
-
-		respBody, err := action()
-		if err == nil {
-			return respBody, nil
-		}
-
-		lastErr = err
-
-		var apiErr *APIError
-		if errors.As(err, &apiErr) {
-			if !apiErr.Retryable {
-				return nil, err
-			}
-			retryAfterDelay = apiErr.RetryAfter
-		}
+		fmt.Printf("GET %s\n", display)
 	}
 
-	return nil, &APIError{
-		Op:      op,
-		Message: fmt.Sprintf("failed after %d attempts", c.maxRetries+1),
-		Err:     lastErr,
+	req := c.resty.R().SetContext(ctx)
+	if len(params) > 0 {
+		req.SetQueryParamsFromValues(params)
 	}
+
+	resp, err := req.Get(reqURL)
+	if err != nil {
+		return nil, &APIError{Op: "get", Message: "failed to send request", Err: err}
+	}
+
+	if resp.IsSuccess() {
+		return json.RawMessage(resp.Bytes()), nil
+	}
+
+	return nil, c.buildAPIError("get", resp)
 }
 
-// doRequestWithMethod performs a single HTTP request with the given method and URL
-func (c *Client) doRequestWithMethod(ctx context.Context, method, reqURL string, body []byte) ([]byte, error) {
-	var bodyReader io.Reader
-	if body != nil {
-		bodyReader = bytes.NewReader(body)
-	}
-
-	req, err := http.NewRequestWithContext(ctx, method, reqURL, bodyReader)
-	if err != nil {
-		return nil, &APIError{
-			Op:        "create_request",
-			Message:   "failed to create request",
-			Err:       err,
-			Retryable: false,
-		}
-	}
-
-	if body != nil {
-		req.Header.Set("Content-Type", "application/json")
-	}
-	req.Header.Set("User-Agent", version.UserAgent())
-	req.Header.Set("Accept", "application/json")
-
-	if apiKey := c.config.GetAPIKey(); apiKey != "" {
-		req.Header.Set("QF_TOKEN", apiKey)
-	}
-
-	resp, err := c.client.Do(req)
-	if err != nil {
-		return nil, &APIError{
-			Op:        "send",
-			Message:   "failed to send request",
-			Err:       err,
-			Retryable: true,
-		}
-	}
-	defer resp.Body.Close()
-
-	respBody, _ := io.ReadAll(io.LimitReader(resp.Body, 1024*1024))
-
-	if resp.StatusCode >= 200 && resp.StatusCode < 300 {
-		return respBody, nil
-	}
-
+// buildAPIError creates an APIError from a non-success response
+func (c *Client) buildAPIError(op string, resp *resty.Response) *APIError {
 	apiErr := &APIError{
-		Op:         "send",
-		StatusCode: resp.StatusCode,
+		Op:         op,
+		StatusCode: resp.StatusCode(),
 	}
 
 	var errResp ErrorResponse
-	if err := json.Unmarshal(respBody, &errResp); err == nil {
+	if err := json.Unmarshal(resp.Bytes(), &errResp); err == nil {
 		apiErr.Code = errResp.Code
 		if friendlyMsg := getUserFriendlyMessage(errResp.Code); friendlyMsg != "" {
 			apiErr.Message = friendlyMsg
@@ -192,68 +148,13 @@ func (c *Client) doRequestWithMethod(ctx context.Context, method, reqURL string,
 		} else if errResp.Message != "" {
 			apiErr.Message = errResp.Message
 		} else {
-			apiErr.Message = fmt.Sprintf("API request failed with status %d", resp.StatusCode)
+			apiErr.Message = fmt.Sprintf("API request failed with status %d", resp.StatusCode())
 		}
 	} else {
-		apiErr.Message = fmt.Sprintf("API request failed with status %d", resp.StatusCode)
+		apiErr.Message = fmt.Sprintf("API request failed with status %d", resp.StatusCode())
 	}
 
-	switch resp.StatusCode {
-	case http.StatusTooManyRequests:
-		apiErr.Retryable = true
-		if retryAfter := resp.Header.Get("Retry-After"); retryAfter != "" {
-			if seconds, err := strconv.Atoi(retryAfter); err == nil {
-				apiErr.RetryAfter = time.Duration(seconds) * time.Second
-			} else if t, err := http.ParseTime(retryAfter); err == nil {
-				apiErr.RetryAfter = time.Until(t)
-			}
-		}
-	case http.StatusServiceUnavailable, http.StatusBadGateway, http.StatusGatewayTimeout:
-		apiErr.Retryable = true
-	case http.StatusInternalServerError:
-		apiErr.Retryable = true
-	default:
-		apiErr.Retryable = false
-	}
-
-	return nil, apiErr
-}
-
-// Get performs a GET request to the API with retry logic
-func (c *Client) Get(ctx context.Context, path string, params url.Values) (json.RawMessage, error) {
-	reqURL := c.endpoint + path
-	if len(params) > 0 {
-		reqURL += "?" + params.Encode()
-	}
-
-	if c.config.IsVerbose() {
-		fmt.Printf("GET %s\n", reqURL)
-	}
-
-	respBody, err := c.doWithRetry(ctx, "get", func() ([]byte, error) {
-		return c.doRequestWithMethod(ctx, http.MethodGet, reqURL, nil)
-	})
-	if err != nil {
-		return nil, err
-	}
-	return json.RawMessage(respBody), nil
-}
-
-// calculateBackoff calculates the delay for a retry attempt with jitter
-func (c *Client) calculateBackoff(attempt int) time.Duration {
-	// Exponential backoff: baseDelay * 2^attempt
-	delay := float64(c.baseDelay) * math.Pow(2, float64(attempt-1))
-
-	// Add jitter (0-25% of delay)
-	jitter := delay * 0.25 * rand.Float64()
-	delay += jitter
-
-	// Cap at maxDelay
-	if delay > float64(c.maxDelay) {
-		delay = float64(c.maxDelay)
-	}
-
-	return time.Duration(delay)
+	return apiErr
 }
 
 // APIError represents an API error
@@ -263,8 +164,6 @@ type APIError struct {
 	Code       string
 	StatusCode int
 	Err        error
-	Retryable  bool
-	RetryAfter time.Duration
 }
 
 func (e *APIError) Error() string {
@@ -279,11 +178,6 @@ func (e *APIError) Error() string {
 
 func (e *APIError) Unwrap() error {
 	return e.Err
-}
-
-// IsRetryable returns whether the error is retryable
-func (e *APIError) IsRetryable() bool {
-	return e.Retryable
 }
 
 // ErrorResponse represents an API error response

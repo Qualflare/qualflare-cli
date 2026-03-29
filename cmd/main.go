@@ -27,6 +27,7 @@ func run() error {
 
 	// Initialize HTTP client
 	httpClient := http.NewHTTPClient(cfg)
+	defer httpClient.Close()
 
 	// Initialize report service
 	reportService := services.NewReportService(parserFactory, httpClient, cfg)
