@@ -277,6 +277,7 @@ const (
 	ErrCodeEnvironmentNotFound = "ENVIRONMENT_NOT_FOUND"
 	ErrCodeMilestoneNotFound   = "MILESTONE_NOT_FOUND"
 	ErrCodeValidationFailed    = "VALIDATION_FAILED"
+	ErrCodeLanguageNotFound    = "LANGUAGE_NOT_FOUND"
 )
 
 // getUserFriendlyMessage returns a user-friendly error message for known error codes
@@ -286,6 +287,8 @@ func getUserFriendlyMessage(code string) string {
 		return "Environment not found. Please check the environment name or create it in Qualflare."
 	case ErrCodeMilestoneNotFound:
 		return "Milestone not found. Please check the milestone ID or create it in Qualflare."
+	case ErrCodeLanguageNotFound:
+		return "Language not found. Please use a valid BCP 47 language code (e.g., en-US, de-DE)."
 	default:
 		return ""
 	}

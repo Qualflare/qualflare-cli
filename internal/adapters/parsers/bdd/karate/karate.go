@@ -160,11 +160,14 @@ func (p *Parser) convertScenario(scenario Scenario, report Report) domain.Case {
 	} else if scenario.Failed {
 		testCase.Status = domain.StatusFailed
 		if len(errorMessages) > 0 {
-			testCase.ErrorMessage = errorMessages[0]
-			if len(errorMessages) > 1 {
+			if len(errorMessages) == 1 {
+				testCase.Error = errorMessages[0]
+			} else {
+				var stackTrace string
 				for i := 1; i < len(errorMessages); i++ {
-					testCase.StackTrace += errorMessages[i] + "\n"
+					stackTrace += errorMessages[i] + "\n"
 				}
+				testCase.Error = domain.FormatError(errorMessages[0], stackTrace, "")
 			}
 		}
 	} else {

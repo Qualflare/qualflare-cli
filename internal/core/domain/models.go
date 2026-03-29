@@ -1,6 +1,9 @@
 package domain
 
-import "time"
+import (
+	"strings"
+	"time"
+)
 
 // Framework represents supported test frameworks
 type Framework string
@@ -212,17 +215,15 @@ type Case struct {
 	Status   Status        `json:"status"`
 	Duration time.Duration `json:"duration"`
 
-	// Retry information
-	RetryCount int  `json:"retryCount"` // Number of retry attempts
-	IsFlaky    bool `json:"isFlaky"`    // True if test passed after one or more retries
+	// Retry information (pointers: nil = not applicable, 0/false = explicitly no retries)
+	RetryCount *int  `json:"retryCount,omitempty"` // Number of retry attempts
+	IsFlaky    *bool `json:"isFlaky,omitempty"`    // True if test passed after one or more retries
 
-	// Error information
-	ErrorMessage string `json:"errorMessage,omitempty"`
-	StackTrace   string `json:"stackTrace,omitempty"`
-	ErrorType    string `json:"errorType,omitempty"`
+	// Error information (single field matching API schema)
+	Error string `json:"error,omitempty"`
 
-	// Severity (for security findings)
-	Severity Severity `json:"severity,omitempty"`
+	// Priority for security findings (matches API schema: low, medium, high, critical)
+	Priority Severity `json:"priority,omitempty"`
 
 	// Categorization
 	Tags []string `json:"tags,omitempty"`
@@ -253,6 +254,33 @@ type Attachment struct {
 	Path     string `json:"path,omitempty"`
 	MimeType string `json:"mimeType,omitempty"`
 	Content  string `json:"content,omitempty"` // Base64 encoded
+}
+
+// IntPtr returns a pointer to an int value
+func IntPtr(v int) *int { return &v }
+
+// BoolPtr returns a pointer to a bool value
+func BoolPtr(v bool) *bool { return &v }
+
+// FormatError combines error message, stack trace, and error type into a single string
+func FormatError(message, stackTrace, errorType string) string {
+	var parts []string
+	if errorType != "" {
+		parts = append(parts, errorType+": "+message)
+	} else if message != "" {
+		parts = append(parts, message)
+	}
+	if stackTrace != "" {
+		if len(parts) == 0 {
+			parts = append(parts, stackTrace)
+		} else {
+			parts = append(parts, stackTrace)
+		}
+	}
+	if len(parts) == 0 {
+		return ""
+	}
+	return strings.Join(parts, "\n\n")
 }
 
 // SecurityFinding represents a security vulnerability finding

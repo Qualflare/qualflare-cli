@@ -214,10 +214,11 @@ func (p *Parser) convertTest(spec Spec, test Test, file string, prefix string) d
 		testCase.Duration = time.Duration(lastResult.Duration) * time.Millisecond
 
 		// Calculate retry count and flaky status
-		testCase.RetryCount = len(test.Results) - 1
-		testCase.IsFlaky = testCase.RetryCount > 0 &&
+		retryCount := len(test.Results) - 1
+		testCase.RetryCount = domain.IntPtr(retryCount)
+		testCase.IsFlaky = domain.BoolPtr(retryCount > 0 &&
 			lastResult.Status == "passed" &&
-			len(test.Results) > 1
+			len(test.Results) > 1)
 
 		// Determine status
 		switch lastResult.Status {
@@ -226,8 +227,7 @@ func (p *Parser) convertTest(spec Spec, test Test, file string, prefix string) d
 		case "failed", "timedOut":
 			testCase.Status = domain.StatusFailed
 			if lastResult.Error != nil {
-				testCase.ErrorMessage = lastResult.Error.Message
-				testCase.StackTrace = lastResult.Error.Stack
+				testCase.Error = domain.FormatError(lastResult.Error.Message, lastResult.Error.Stack, "")
 			}
 		case "skipped":
 			testCase.Status = domain.StatusSkipped

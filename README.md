@@ -1,6 +1,6 @@
 # Qualflare CLI
 
-A command-line tool for parsing test results from 20+ testing frameworks and uploading them to [Qualflare](https://qualflare.com) for centralized test management and analytics.
+A command-line tool for parsing test results from 20+ testing frameworks and sending them to [Qualflare](https://qualflare.com) for centralized test management and analytics.
 
 ## Supported Frameworks
 
@@ -45,22 +45,22 @@ The binary is output to `build/qf`.
 ## Quick Start
 
 ```bash
-# Upload test results (format auto-detected)
-qf upload results.xml --api-key YOUR_API_KEY
+# Collect test results (format auto-detected)
+qf collect results.xml --api-key YOUR_API_KEY
 
 # Specify framework explicitly
-qf upload results.json --format playwright --api-key YOUR_API_KEY
+qf collect results.json --format playwright --api-key YOUR_API_KEY
 
-# Upload multiple files
-qf upload *.xml --format junit --api-key YOUR_API_KEY
+# Collect multiple files
+qf collect *.xml --format junit --api-key YOUR_API_KEY
 
-# Dry run — parse and preview without uploading
-qf upload results.xml --dry-run
+# Dry run — parse and preview without sending
+qf collect results.xml --dry-run
 
 # Output parsed results as JSON
-qf upload results.xml --dry-run --output json
+qf collect results.xml --dry-run --output json
 
-# Validate files without uploading
+# Validate files without sending
 qf validate results.xml
 ```
 
@@ -71,8 +71,8 @@ Set your API key as an environment variable and add a step after your test runne
 ### GitHub Actions
 
 ```yaml
-- name: Upload test results
-  run: qf upload test-results/*.xml
+- name: Collect test results
+  run: qf collect test-results/*.xml
   env:
     QF_API_KEY: ${{ secrets.QF_API_KEY }}
     QF_ENVIRONMENT: ci
@@ -83,10 +83,10 @@ Set your API key as an environment variable and add a step after your test runne
 ### GitLab CI
 
 ```yaml
-upload_results:
+collect_results:
   stage: report
   script:
-    - qf upload test-results/*.xml
+    - qf collect test-results/*.xml
   variables:
     QF_API_KEY: $QF_API_KEY
     QF_ENVIRONMENT: ci
@@ -103,7 +103,7 @@ post {
             export QF_API_KEY=${QF_API_KEY}
             export QF_BRANCH=${GIT_BRANCH}
             export QF_COMMIT=${GIT_COMMIT}
-            qf upload test-results/*.xml
+            qf collect test-results/*.xml
         '''
     }
 }
@@ -115,7 +115,7 @@ post {
 docker run --rm \
   -e QF_API_KEY=your-api-key \
   -v $(pwd)/test-results:/results \
-  ghcr.io/qualflare/qf:latest upload /results/*.xml
+  ghcr.io/qualflare/qf:latest collect /results/*.xml
 ```
 
 ## Configuration
@@ -156,13 +156,13 @@ timeout: 30s
 ## Commands
 
 ```
-qf upload [files...]       Upload test results to Qualflare
-qf validate [files...]     Validate test result files without uploading
+qf collect [files...]      Collect test results for Qualflare
+qf validate [files...]     Validate test result files without sending
 qf list-formats            List all supported test frameworks
 qf version                 Print version information
 ```
 
-### Upload Flags
+### Collect Flags
 
 | Flag | Short | Description |
 |------|-------|-------------|
@@ -175,7 +175,7 @@ qf version                 Print version information
 | `--api-endpoint` | | API endpoint URL |
 | `--api-key` | | API key |
 | `--timeout` | | Request timeout |
-| `--dry-run` | | Parse without uploading |
+| `--dry-run` | | Parse without sending |
 | `--output` | `-o` | Output format for dry-run (`json`) |
 
 ## Format Detection

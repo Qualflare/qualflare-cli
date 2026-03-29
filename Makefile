@@ -26,12 +26,12 @@ EXAMPLES_DIR := examples
 .PHONY: validate-playwright validate-cypress validate-selenium validate-testcafe
 .PHONY: validate-newman validate-k6
 .PHONY: validate-trivy validate-snyk validate-zap validate-sonarqube
-.PHONY: upload-examples upload-unit upload-bdd upload-e2e upload-api upload-security
-.PHONY: upload-junit upload-pytest upload-golang upload-jest upload-mocha upload-rspec upload-phpunit
-.PHONY: upload-cucumber upload-karate
-.PHONY: upload-playwright upload-cypress upload-selenium upload-testcafe
-.PHONY: upload-newman upload-k6
-.PHONY: upload-trivy upload-snyk upload-zap upload-sonarqube
+.PHONY: collect-examples collect-unit collect-bdd collect-e2e collect-api collect-security
+.PHONY: collect-junit collect-pytest collect-golang collect-jest collect-mocha collect-rspec collect-phpunit
+.PHONY: collect-cucumber collect-karate
+.PHONY: collect-playwright collect-cypress collect-selenium collect-testcafe
+.PHONY: collect-newman collect-k6
+.PHONY: collect-trivy collect-snyk collect-zap collect-sonarqube
 
 # Default target
 all: build
@@ -184,14 +184,14 @@ help:
 	@echo "  validate-security   Validate security examples"
 	@echo "  validate-<framework> Validate specific framework (e.g., validate-junit)"
 	@echo ""
-	@echo "Example Upload (requires QF_API_KEY, QF_API_ENDPOINT):"
-	@echo "  upload-examples     Upload all example files"
-	@echo "  upload-unit         Upload unit test examples"
-	@echo "  upload-bdd          Upload BDD examples"
-	@echo "  upload-e2e          Upload E2E examples"
-	@echo "  upload-api          Upload API examples"
-	@echo "  upload-security     Upload security examples"
-	@echo "  upload-<framework>  Upload specific framework (e.g., upload-junit)"
+	@echo "Example Collect (requires QF_API_KEY, QF_API_ENDPOINT):"
+	@echo "  collect-examples     Collect all example files"
+	@echo "  collect-unit         Collect unit test examples"
+	@echo "  collect-bdd          Collect BDD examples"
+	@echo "  collect-e2e          Collect E2E examples"
+	@echo "  collect-api          Collect API examples"
+	@echo "  collect-security     Collect security examples"
+	@echo "  collect-<framework>  Collect specific framework (e.g., collect-junit)"
 
 # =============================================================================
 # Example Validation Targets
@@ -286,93 +286,93 @@ validate-sonarqube: build
 	@./$(BUILD_DIR)/$(BINARY_NAME) validate $(EXAMPLES_DIR)/security/sonarqube-example.json
 
 # =============================================================================
-# Example Upload Targets (requires QF_API_KEY, QF_API_ENDPOINT)
+# Example Collect Targets (requires QF_API_KEY, QF_API_ENDPOINT)
 # =============================================================================
 
-# Upload all examples
-upload-examples: build
-	@echo "Uploading all examples..."
-	@./$(BUILD_DIR)/$(BINARY_NAME) upload $(EXAMPLES_DIR)/unit/* $(EXAMPLES_DIR)/bdd/* $(EXAMPLES_DIR)/e2e/* $(EXAMPLES_DIR)/api/* $(EXAMPLES_DIR)/security/*
+# Collect all examples
+collect-examples: build
+	@echo "Collecting all examples..."
+	@./$(BUILD_DIR)/$(BINARY_NAME) collect $(EXAMPLES_DIR)/unit/* $(EXAMPLES_DIR)/bdd/* $(EXAMPLES_DIR)/e2e/* $(EXAMPLES_DIR)/api/* $(EXAMPLES_DIR)/security/*
 
 # Category targets
-upload-unit: build
-	@echo "Uploading unit test examples..."
-	@./$(BUILD_DIR)/$(BINARY_NAME) upload $(EXAMPLES_DIR)/unit/*
+collect-unit: build
+	@echo "Collecting unit test examples..."
+	@./$(BUILD_DIR)/$(BINARY_NAME) collect $(EXAMPLES_DIR)/unit/*
 
-upload-bdd: build
-	@echo "Uploading BDD examples..."
-	@./$(BUILD_DIR)/$(BINARY_NAME) upload $(EXAMPLES_DIR)/bdd/*
+collect-bdd: build
+	@echo "Collecting BDD examples..."
+	@./$(BUILD_DIR)/$(BINARY_NAME) collect $(EXAMPLES_DIR)/bdd/*
 
-upload-e2e: build
-	@echo "Uploading E2E examples..."
-	@./$(BUILD_DIR)/$(BINARY_NAME) upload $(EXAMPLES_DIR)/e2e/*
+collect-e2e: build
+	@echo "Collecting E2E examples..."
+	@./$(BUILD_DIR)/$(BINARY_NAME) collect $(EXAMPLES_DIR)/e2e/*
 
-upload-api: build
-	@echo "Uploading API examples..."
-	@./$(BUILD_DIR)/$(BINARY_NAME) upload $(EXAMPLES_DIR)/api/*
+collect-api: build
+	@echo "Collecting API examples..."
+	@./$(BUILD_DIR)/$(BINARY_NAME) collect $(EXAMPLES_DIR)/api/*
 
-upload-security: build
-	@echo "Uploading security examples..."
-	@./$(BUILD_DIR)/$(BINARY_NAME) upload $(EXAMPLES_DIR)/security/*
+collect-security: build
+	@echo "Collecting security examples..."
+	@./$(BUILD_DIR)/$(BINARY_NAME) collect $(EXAMPLES_DIR)/security/*
 
 # Unit test framework targets
-upload-junit: build
-	@./$(BUILD_DIR)/$(BINARY_NAME) upload $(EXAMPLES_DIR)/unit/junit-example.xml
+collect-junit: build
+	@./$(BUILD_DIR)/$(BINARY_NAME) collect $(EXAMPLES_DIR)/unit/junit-example.xml
 
-upload-pytest: build
-	@./$(BUILD_DIR)/$(BINARY_NAME) upload $(EXAMPLES_DIR)/unit/pytest-example.xml
+collect-pytest: build
+	@./$(BUILD_DIR)/$(BINARY_NAME) collect $(EXAMPLES_DIR)/unit/pytest-example.xml
 
-upload-golang: build
-	@./$(BUILD_DIR)/$(BINARY_NAME) upload $(EXAMPLES_DIR)/unit/golang-example.json
+collect-golang: build
+	@./$(BUILD_DIR)/$(BINARY_NAME) collect $(EXAMPLES_DIR)/unit/golang-example.json
 
-upload-jest: build
-	@./$(BUILD_DIR)/$(BINARY_NAME) upload $(EXAMPLES_DIR)/unit/jest-example.json
+collect-jest: build
+	@./$(BUILD_DIR)/$(BINARY_NAME) collect $(EXAMPLES_DIR)/unit/jest-example.json
 
-upload-mocha: build
-	@./$(BUILD_DIR)/$(BINARY_NAME) upload $(EXAMPLES_DIR)/unit/mocha-example.json
+collect-mocha: build
+	@./$(BUILD_DIR)/$(BINARY_NAME) collect $(EXAMPLES_DIR)/unit/mocha-example.json
 
-upload-rspec: build
-	@./$(BUILD_DIR)/$(BINARY_NAME) upload $(EXAMPLES_DIR)/unit/rspec-example.json
+collect-rspec: build
+	@./$(BUILD_DIR)/$(BINARY_NAME) collect $(EXAMPLES_DIR)/unit/rspec-example.json
 
-upload-phpunit: build
-	@./$(BUILD_DIR)/$(BINARY_NAME) upload $(EXAMPLES_DIR)/unit/phpunit-example.xml
+collect-phpunit: build
+	@./$(BUILD_DIR)/$(BINARY_NAME) collect $(EXAMPLES_DIR)/unit/phpunit-example.xml
 
 # BDD framework targets
-upload-cucumber: build
-	@./$(BUILD_DIR)/$(BINARY_NAME) upload $(EXAMPLES_DIR)/bdd/cucumber-example.json
+collect-cucumber: build
+	@./$(BUILD_DIR)/$(BINARY_NAME) collect $(EXAMPLES_DIR)/bdd/cucumber-example.json
 
-upload-karate: build
-	@./$(BUILD_DIR)/$(BINARY_NAME) upload $(EXAMPLES_DIR)/bdd/karate-example.json
+collect-karate: build
+	@./$(BUILD_DIR)/$(BINARY_NAME) collect $(EXAMPLES_DIR)/bdd/karate-example.json
 
 # E2E framework targets
-upload-playwright: build
-	@./$(BUILD_DIR)/$(BINARY_NAME) upload $(EXAMPLES_DIR)/e2e/playwright-example.json
+collect-playwright: build
+	@./$(BUILD_DIR)/$(BINARY_NAME) collect $(EXAMPLES_DIR)/e2e/playwright-example.json
 
-upload-cypress: build
-	@./$(BUILD_DIR)/$(BINARY_NAME) upload $(EXAMPLES_DIR)/e2e/cypress-example.json
+collect-cypress: build
+	@./$(BUILD_DIR)/$(BINARY_NAME) collect $(EXAMPLES_DIR)/e2e/cypress-example.json
 
-upload-selenium: build
-	@./$(BUILD_DIR)/$(BINARY_NAME) upload $(EXAMPLES_DIR)/e2e/selenium-example.json
+collect-selenium: build
+	@./$(BUILD_DIR)/$(BINARY_NAME) collect $(EXAMPLES_DIR)/e2e/selenium-example.json
 
-upload-testcafe: build
-	@./$(BUILD_DIR)/$(BINARY_NAME) upload $(EXAMPLES_DIR)/e2e/testcafe-example.json
+collect-testcafe: build
+	@./$(BUILD_DIR)/$(BINARY_NAME) collect $(EXAMPLES_DIR)/e2e/testcafe-example.json
 
 # API framework targets
-upload-newman: build
-	@./$(BUILD_DIR)/$(BINARY_NAME) upload $(EXAMPLES_DIR)/api/newman-example.json
+collect-newman: build
+	@./$(BUILD_DIR)/$(BINARY_NAME) collect $(EXAMPLES_DIR)/api/newman-example.json
 
-upload-k6: build
-	@./$(BUILD_DIR)/$(BINARY_NAME) upload $(EXAMPLES_DIR)/api/k6-example.json
+collect-k6: build
+	@./$(BUILD_DIR)/$(BINARY_NAME) collect $(EXAMPLES_DIR)/api/k6-example.json
 
 # Security framework targets
-upload-trivy: build
-	@./$(BUILD_DIR)/$(BINARY_NAME) upload $(EXAMPLES_DIR)/security/trivy-example.json
+collect-trivy: build
+	@./$(BUILD_DIR)/$(BINARY_NAME) collect $(EXAMPLES_DIR)/security/trivy-example.json
 
-upload-snyk: build
-	@./$(BUILD_DIR)/$(BINARY_NAME) upload $(EXAMPLES_DIR)/security/snyk-example.json
+collect-snyk: build
+	@./$(BUILD_DIR)/$(BINARY_NAME) collect $(EXAMPLES_DIR)/security/snyk-example.json
 
-upload-zap: build
-	@./$(BUILD_DIR)/$(BINARY_NAME) upload $(EXAMPLES_DIR)/security/zap-example.json
+collect-zap: build
+	@./$(BUILD_DIR)/$(BINARY_NAME) collect $(EXAMPLES_DIR)/security/zap-example.json
 
-upload-sonarqube: build
-	@./$(BUILD_DIR)/$(BINARY_NAME) upload $(EXAMPLES_DIR)/security/sonarqube-example.json
+collect-sonarqube: build
+	@./$(BUILD_DIR)/$(BINARY_NAME) collect $(EXAMPLES_DIR)/security/sonarqube-example.json

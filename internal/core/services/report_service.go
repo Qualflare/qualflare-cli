@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"qualflare-cli/internal/config"
 	"qualflare-cli/internal/core/domain"
 	"qualflare-cli/internal/core/ports"
 	"qualflare-cli/internal/version"
@@ -178,6 +179,15 @@ func (s *ReportService) ValidateFiles(ctx context.Context, files []string, frame
 
 // detectFramework detects the framework for a file
 func (s *ReportService) detectFramework(filePath string) (domain.Framework, error) {
+	// Check file size before reading
+	info, err := os.Stat(filePath)
+	if err != nil {
+		return s.parserFactory.DetectFramework(filePath)
+	}
+	if info.Size() > config.MaxFileSize {
+		return "", fmt.Errorf("file %s is too large (%d bytes, max %d bytes)", filePath, info.Size(), config.MaxFileSize)
+	}
+
 	// First try content-based detection
 	content, err := os.ReadFile(filePath)
 	if err != nil {
@@ -208,8 +218,8 @@ func (s *ReportService) parseFile(filePath string, parser ports.Parser) (*domain
 func (s *ReportService) createReport(testSuites []domain.Suite, framework domain.Framework) *domain.Launch {
 	return &domain.Launch{
 		Framework:   string(framework),
-		Platform:    fmt.Sprintf("%s/%s", runtime.GOOS, runtime.GOARCH),
-		OS:          runtime.GOOS,
+		Platform:    "api",
+		OS:          fmt.Sprintf("%s/%s", runtime.GOOS, runtime.GOARCH),
 		Environment: s.config.GetEnvironment(),
 		Language:    s.config.GetLanguage(),
 		Branch:      s.config.GetBranch(),

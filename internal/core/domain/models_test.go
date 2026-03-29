@@ -6,12 +6,12 @@ func TestCaseWithRetryCount(t *testing.T) {
 	testCase := Case{
 		ID:         "test-1",
 		Name:       "Test With Retry",
-		RetryCount: 3, // Test was retried 3 times before passing
+		RetryCount: IntPtr(3), // Test was retried 3 times before passing
 		Status:     StatusPassed,
 	}
 
-	if testCase.RetryCount != 3 {
-		t.Errorf("expected RetryCount 3, got %d", testCase.RetryCount)
+	if testCase.RetryCount == nil || *testCase.RetryCount != 3 {
+		t.Errorf("expected RetryCount 3, got %v", testCase.RetryCount)
 	}
 }
 
@@ -22,8 +22,8 @@ func TestCaseDefaultRetryCount(t *testing.T) {
 		Status: StatusPassed,
 	}
 
-	if testCase.RetryCount != 0 {
-		t.Errorf("expected default RetryCount 0, got %d", testCase.RetryCount)
+	if testCase.RetryCount != nil {
+		t.Errorf("expected default RetryCount nil, got %d", *testCase.RetryCount)
 	}
 }
 
@@ -31,12 +31,12 @@ func TestCaseWithIsFlaky(t *testing.T) {
 	testCase := Case{
 		ID:         "test-3",
 		Name:       "Flaky Test",
-		RetryCount: 2,
-		IsFlaky:    true,
+		RetryCount: IntPtr(2),
+		IsFlaky:    BoolPtr(true),
 		Status:     StatusPassed,
 	}
 
-	if !testCase.IsFlaky {
+	if testCase.IsFlaky == nil || !*testCase.IsFlaky {
 		t.Errorf("expected IsFlaky true, got false")
 	}
 }
@@ -48,7 +48,7 @@ func TestCaseDefaultIsFlaky(t *testing.T) {
 		Status: StatusPassed,
 	}
 
-	if testCase.IsFlaky {
-		t.Errorf("expected default IsFlaky false, got true")
+	if testCase.IsFlaky != nil && *testCase.IsFlaky {
+		t.Errorf("expected default IsFlaky nil/false, got true")
 	}
 }

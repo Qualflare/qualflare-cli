@@ -126,7 +126,7 @@ func (p *Parser) Parse(reader io.Reader) (*domain.Suite, error) {
 			case "MEDIUM":
 				suite.Failed++
 			default:
-				suite.Passed++
+				suite.Failed++
 			}
 		}
 
@@ -166,28 +166,25 @@ func (p *Parser) convertVulnerability(vuln Vulnerability, target string) domain.
 	switch vuln.Severity {
 	case "CRITICAL":
 		testCase.Status = domain.StatusFailed
-		testCase.Severity = domain.SeverityCritical
+		testCase.Priority = domain.SeverityCritical
 	case "HIGH":
 		testCase.Status = domain.StatusFailed
-		testCase.Severity = domain.SeverityHigh
+		testCase.Priority = domain.SeverityHigh
 	case "MEDIUM":
 		testCase.Status = domain.StatusFailed
-		testCase.Severity = domain.SeverityMedium
+		testCase.Priority = domain.SeverityMedium
 	case "LOW":
-		testCase.Status = domain.StatusPassed // Info level, not a failure
-		testCase.Severity = domain.SeverityLow
+		testCase.Status = domain.StatusFailed
+		testCase.Priority = domain.SeverityLow
 	case "UNKNOWN":
 		testCase.Status = domain.StatusPassed
-		testCase.Severity = domain.SeverityUnknown
+		testCase.Priority = domain.SeverityUnknown
 	default:
 		testCase.Status = domain.StatusPassed
-		testCase.Severity = domain.SeverityUnknown
+		testCase.Priority = domain.SeverityUnknown
 	}
 
-	testCase.ErrorMessage = vuln.Title
-	if vuln.Description != "" {
-		testCase.StackTrace = vuln.Description
-	}
+	testCase.Error = domain.FormatError(vuln.Title, vuln.Description, "")
 
 	// Add tags based on severity
 	testCase.Tags = []string{
@@ -227,8 +224,7 @@ func (p *Parser) convertMisconfig(misconf Misconfig, target string) domain.Case 
 
 	if misconf.Status == "FAIL" {
 		testCase.Status = domain.StatusFailed
-		testCase.ErrorMessage = misconf.Message
-		testCase.StackTrace = misconf.Resolution
+		testCase.Error = domain.FormatError(misconf.Message, misconf.Resolution, "")
 	} else {
 		testCase.Status = domain.StatusPassed
 	}
@@ -236,15 +232,15 @@ func (p *Parser) convertMisconfig(misconf Misconfig, target string) domain.Case 
 	// Map severity
 	switch misconf.Severity {
 	case "CRITICAL":
-		testCase.Severity = domain.SeverityCritical
+		testCase.Priority = domain.SeverityCritical
 	case "HIGH":
-		testCase.Severity = domain.SeverityHigh
+		testCase.Priority = domain.SeverityHigh
 	case "MEDIUM":
-		testCase.Severity = domain.SeverityMedium
+		testCase.Priority = domain.SeverityMedium
 	case "LOW":
-		testCase.Severity = domain.SeverityLow
+		testCase.Priority = domain.SeverityLow
 	default:
-		testCase.Severity = domain.SeverityUnknown
+		testCase.Priority = domain.SeverityUnknown
 	}
 
 	testCase.Tags = []string{

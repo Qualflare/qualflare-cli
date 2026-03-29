@@ -99,7 +99,7 @@ func (p *Parser) Parse(reader io.Reader) (*domain.Suite, error) {
 			case 2: // Medium
 				suite.Failed++
 			case 1: // Low
-				suite.Passed++ // Treat low risk as passed for counting
+				suite.Failed++
 			default: // Informational
 				suite.Passed++
 			}
@@ -131,20 +131,19 @@ func (p *Parser) convertAlert(alert Alert, site Site) domain.Case {
 	switch riskCode {
 	case 3: // High
 		testCase.Status = domain.StatusFailed
-		testCase.Severity = domain.SeverityHigh
+		testCase.Priority = domain.SeverityHigh
 	case 2: // Medium
 		testCase.Status = domain.StatusFailed
-		testCase.Severity = domain.SeverityMedium
+		testCase.Priority = domain.SeverityMedium
 	case 1: // Low
-		testCase.Status = domain.StatusPassed
-		testCase.Severity = domain.SeverityLow
+		testCase.Status = domain.StatusFailed
+		testCase.Priority = domain.SeverityLow
 	default: // Informational
 		testCase.Status = domain.StatusPassed
-		testCase.Severity = domain.SeverityInfo
+		testCase.Priority = domain.SeverityInfo
 	}
 
-	testCase.ErrorMessage = alert.Desc
-	testCase.StackTrace = alert.Solution
+	testCase.Error = domain.FormatError(alert.Desc, alert.Solution, "")
 
 	// Add tags
 	testCase.Tags = []string{

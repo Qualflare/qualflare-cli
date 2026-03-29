@@ -35,8 +35,8 @@ func NewCLI(reportService ports.ReportService, cfg *config.Config, parserFactory
 func (c *CLI) CreateRootCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "qf",
-		Short: "Qualflare CLI - Upload test results to Qualflare",
-		Long: `qf is a CLI tool that parses various test result formats and uploads them to Qualflare.
+		Short: "Qualflare CLI - Collect test results for Qualflare",
+		Long: `qf is a CLI tool that parses various test result formats and sends them to Qualflare.
 
 Supported frameworks:
   Unit Testing:    junit, python, golang, jest, mocha, rspec, phpunit
@@ -53,7 +53,7 @@ Supported frameworks:
 	cmd.PersistentFlags().BoolVarP(&c.config.Quiet, "quiet", "q", false, "Suppress non-error output")
 
 	// Add subcommands
-	cmd.AddCommand(c.createUploadCommand())
+	cmd.AddCommand(c.createCollectCommand())
 	cmd.AddCommand(c.createValidateCommand())
 	cmd.AddCommand(c.createVersionCommand())
 	cmd.AddCommand(c.createListFormatsCommand())
@@ -61,8 +61,8 @@ Supported frameworks:
 	return cmd
 }
 
-// createUploadCommand creates the upload subcommand
-func (c *CLI) createUploadCommand() *cobra.Command {
+// createCollectCommand creates the collect subcommand
+func (c *CLI) createCollectCommand() *cobra.Command {
 	var (
 		format      string
 		project     string
@@ -78,29 +78,29 @@ func (c *CLI) createUploadCommand() *cobra.Command {
 	)
 
 	cmd := &cobra.Command{
-		Use:   "upload [files...]",
-		Short: "Upload test results to Qualflare",
-		Long: `Parse test result files and upload them to the Qualflare API.
+		Use:   "collect [files...]",
+		Short: "Collect test results for Qualflare",
+		Long: `Parse test result files and send them to the Qualflare API.
 
 Files can be specified as arguments or using glob patterns.
 The format is auto-detected if not specified.`,
-		Example: `  # Upload JUnit XML files
-  qf upload results.xml --project my-app --format junit
+		Example: `  # Collect JUnit XML files
+  qf collect results.xml --project my-app --format junit
 
   # Auto-detect format
-  qf upload playwright-results.json --project my-app
+  qf collect playwright-results.json --project my-app
 
-  # Upload multiple files
-  qf upload *.xml --project my-app --format junit
+  # Collect multiple files
+  qf collect *.xml --project my-app --format junit
 
   # Dry run (parse and show what would be sent)
-  qf upload results.xml --project my-app --dry-run
+  qf collect results.xml --project my-app --dry-run
 
   # Output parsed results as JSON
-  qf upload results.xml --project my-app --dry-run --output json`,
+  qf collect results.xml --project my-app --dry-run --output json`,
 		Args: cobra.MinimumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return c.runUpload(cmd.Context(), args, uploadOptions{
+			return c.runCollect(cmd.Context(), args, collectOptions{
 				format:      format,
 				project:     project,
 				environment: environment,
@@ -126,13 +126,13 @@ The format is auto-detected if not specified.`,
 	cmd.Flags().StringVar(&apiEndpoint, "api-endpoint", "", "API endpoint URL")
 	cmd.Flags().StringVar(&apiKey, "api-key", "", "API key for authentication")
 	cmd.Flags().DurationVar(&timeout, "timeout", 30*time.Second, "Request timeout")
-	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "Parse files without uploading")
+	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "Parse files without sending")
 	cmd.Flags().StringVarP(&output, "output", "o", "", "Output format for dry-run (json)")
 
 	return cmd
 }
 
-type uploadOptions struct {
+type collectOptions struct {
 	format      string
 	project     string
 	environment string
@@ -146,7 +146,7 @@ type uploadOptions struct {
 	output      string
 }
 
-func (c *CLI) runUpload(ctx context.Context, files []string, opts uploadOptions) error {
+func (c *CLI) runCollect(ctx context.Context, files []string, opts collectOptions) error {
 	// Apply command line overrides
 	c.config.SetProject(opts.project)
 	c.config.SetEnvironment(opts.environment)
@@ -212,7 +212,7 @@ func (c *CLI) runUpload(ctx context.Context, files []string, opts uploadOptions)
 		if opts.dryRun {
 			c.printSuccess("Test results parsed successfully (dry run)")
 		} else {
-			c.printSuccess("Test results uploaded successfully")
+			c.printSuccess("Test results collected successfully")
 		}
 	}
 
@@ -225,8 +225,8 @@ func (c *CLI) createValidateCommand() *cobra.Command {
 
 	cmd := &cobra.Command{
 		Use:   "validate [files...]",
-		Short: "Validate test result files without uploading",
-		Long:  `Validate that test result files can be parsed correctly without uploading them.`,
+		Short: "Validate test result files without sending",
+		Long:  `Validate that test result files can be parsed correctly without sending them.`,
 		Example: `  # Validate a single file
   qf validate results.xml
 

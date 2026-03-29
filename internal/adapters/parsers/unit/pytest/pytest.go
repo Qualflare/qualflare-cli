@@ -138,21 +138,26 @@ func (p *Parser) convertTestCase(tc TestCase) domain.Case {
 	}
 
 	// Determine status
+	var errMsg, stackTrace, errType string
 	if tc.Failure != nil {
 		testCase.Status = domain.StatusFailed
-		testCase.ErrorMessage = tc.Failure.Message
-		testCase.StackTrace = tc.Failure.Text
-		testCase.ErrorType = tc.Failure.Type
+		errMsg = tc.Failure.Message
+		stackTrace = tc.Failure.Text
+		errType = tc.Failure.Type
 	} else if tc.Error != nil {
 		testCase.Status = domain.StatusError
-		testCase.ErrorMessage = tc.Error.Message
-		testCase.StackTrace = tc.Error.Text
-		testCase.ErrorType = tc.Error.Type
+		errMsg = tc.Error.Message
+		stackTrace = tc.Error.Text
+		errType = tc.Error.Type
 	} else if tc.Skipped != nil {
 		testCase.Status = domain.StatusSkipped
-		testCase.ErrorMessage = tc.Skipped.Message
+		errMsg = tc.Skipped.Message
 	} else {
 		testCase.Status = domain.StatusPassed
+	}
+
+	if errMsg != "" || stackTrace != "" || errType != "" {
+		testCase.Error = domain.FormatError(errMsg, stackTrace, errType)
 	}
 
 	// Add system output

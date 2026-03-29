@@ -165,34 +165,39 @@ func (p *Parser) convertTestCase(tc TestCase, suiteName string) domain.Case {
 	}
 
 	// Parse retry count from properties if present
+	var retryCount int
 	for _, prop := range tc.Properties {
 		if prop.Name == "retries" || prop.Name == "retryCount" {
 			// Parse integer from string value
-			var retryCount int
 			if _, err := fmt.Sscanf(prop.Value, "%d", &retryCount); err == nil {
-				testCase.RetryCount = retryCount
+				testCase.RetryCount = domain.IntPtr(retryCount)
 			}
 		}
 	}
 
 	// Determine status
+	var errMsg, stackTrace, errType string
 	if tc.Failure != nil {
 		testCase.Status = domain.StatusFailed
-		testCase.ErrorMessage = tc.Failure.Message
-		testCase.StackTrace = tc.Failure.Text
-		testCase.ErrorType = tc.Failure.Type
+		errMsg = tc.Failure.Message
+		stackTrace = tc.Failure.Text
+		errType = tc.Failure.Type
 	} else if tc.Error != nil {
 		testCase.Status = domain.StatusError
-		testCase.ErrorMessage = tc.Error.Message
-		testCase.StackTrace = tc.Error.Text
-		testCase.ErrorType = tc.Error.Type
+		errMsg = tc.Error.Message
+		stackTrace = tc.Error.Text
+		errType = tc.Error.Type
 	} else if tc.Skipped != nil {
 		testCase.Status = domain.StatusSkipped
-		testCase.ErrorMessage = tc.Skipped.Message
+		errMsg = tc.Skipped.Message
 	} else {
 		testCase.Status = domain.StatusPassed
 		// Flaky if passed after retries
-		testCase.IsFlaky = testCase.RetryCount > 0
+		testCase.IsFlaky = domain.BoolPtr(retryCount > 0)
+	}
+
+	if errMsg != "" || stackTrace != "" || errType != "" {
+		testCase.Error = domain.FormatError(errMsg, stackTrace, errType)
 	}
 
 	// Add system output as properties if present

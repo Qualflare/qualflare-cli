@@ -113,10 +113,12 @@ func (p *Parser) convertAssertion(assertion Assertion, fileName string) domain.C
 	case "failed":
 		testCase.Status = domain.StatusFailed
 		if len(assertion.FailureMessages) > 0 {
-			testCase.ErrorMessage = assertion.FailureMessages[0]
+			errMsg := assertion.FailureMessages[0]
+			stackTrace := ""
 			if len(assertion.FailureMessages) > 1 {
-				testCase.StackTrace = assertion.FailureMessages[1]
+				stackTrace = assertion.FailureMessages[1]
 			}
+			testCase.Error = domain.FormatError(errMsg, stackTrace, "")
 		}
 	case "pending", "todo", "skipped":
 		testCase.Status = domain.StatusSkipped

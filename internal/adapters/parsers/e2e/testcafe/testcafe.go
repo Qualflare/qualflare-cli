@@ -136,9 +136,7 @@ func (p *Parser) convertTest(test Test, fixture Fixture) domain.Case {
 		testCase.Status = domain.StatusFailed
 		// Collect error messages
 		if len(test.Errs) > 0 {
-			testCase.ErrorMessage = test.Errs[0].ErrMsg
-			testCase.StackTrace = test.Errs[0].Stack
-			testCase.ErrorType = test.Errs[0].Code
+			testCase.Error = domain.FormatError(test.Errs[0].ErrMsg, test.Errs[0].Stack, test.Errs[0].Code)
 		}
 	} else {
 		testCase.Status = domain.StatusPassed
