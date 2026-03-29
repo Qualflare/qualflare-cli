@@ -10,6 +10,7 @@ import (
 	"math"
 	"math/rand"
 	"net/http"
+	"net/url"
 	"qualflare-cli/internal/core/domain"
 	"qualflare-cli/internal/core/ports"
 	"qualflare-cli/internal/version"
@@ -83,61 +84,65 @@ func (c *Client) SendReport(ctx context.Context, report *domain.Launch) error {
 		fmt.Printf("Upload request body size: %d bytes\n", len(jsonData))
 	}
 
+	_, err = c.doWithRetry(ctx, "send", func() ([]byte, error) {
+		return c.doRequestWithMethod(ctx, http.MethodPost, c.endpoint+"/api/v1/collect", jsonData)
+	})
+	return err
+}
+
+// doWithRetry executes an action with retry logic, exponential backoff, and Retry-After support
+func (c *Client) doWithRetry(ctx context.Context, op string, action func() ([]byte, error)) ([]byte, error) {
 	var lastErr error
+	var retryAfterDelay time.Duration
+
 	for attempt := 0; attempt <= c.maxRetries; attempt++ {
 		if attempt > 0 {
 			delay := c.calculateBackoff(attempt)
+			// Retry-After takes precedence over computed backoff
+			if retryAfterDelay > 0 {
+				delay = retryAfterDelay
+				retryAfterDelay = 0
+			}
 			select {
 			case <-ctx.Done():
-				return &APIError{
-					Op:      "send",
-					Message: "request cancelled",
-					Err:     ctx.Err(),
-				}
+				return nil, &APIError{Op: op, Message: "request cancelled", Err: ctx.Err()}
 			case <-time.After(delay):
 			}
 		}
 
-		err = c.doRequest(ctx, jsonData)
+		respBody, err := action()
 		if err == nil {
-			return nil
+			return respBody, nil
 		}
 
 		lastErr = err
 
-		// Check if we should retry
 		var apiErr *APIError
 		if errors.As(err, &apiErr) {
 			if !apiErr.Retryable {
-				return err
+				return nil, err
 			}
-			// If we have a Retry-After header, use that delay
-			if apiErr.RetryAfter > 0 {
-				select {
-				case <-ctx.Done():
-					return &APIError{
-						Op:      "send",
-						Message: "request cancelled",
-						Err:     ctx.Err(),
-					}
-				case <-time.After(apiErr.RetryAfter):
-				}
-			}
+			retryAfterDelay = apiErr.RetryAfter
 		}
 	}
 
-	return &APIError{
-		Op:      "send",
+	return nil, &APIError{
+		Op:      op,
 		Message: fmt.Sprintf("failed after %d attempts", c.maxRetries+1),
 		Err:     lastErr,
 	}
 }
 
-// doRequest performs a single HTTP request
-func (c *Client) doRequest(ctx context.Context, body []byte) error {
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.endpoint, bytes.NewReader(body))
+// doRequestWithMethod performs a single HTTP request with the given method and URL
+func (c *Client) doRequestWithMethod(ctx context.Context, method, reqURL string, body []byte) ([]byte, error) {
+	var bodyReader io.Reader
+	if body != nil {
+		bodyReader = bytes.NewReader(body)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, method, reqURL, bodyReader)
 	if err != nil {
-		return &APIError{
+		return nil, &APIError{
 			Op:        "create_request",
 			Message:   "failed to create request",
 			Err:       err,
@@ -145,7 +150,9 @@ func (c *Client) doRequest(ctx context.Context, body []byte) error {
 		}
 	}
 
-	req.Header.Set("Content-Type", "application/json")
+	if body != nil {
+		req.Header.Set("Content-Type", "application/json")
+	}
 	req.Header.Set("User-Agent", version.UserAgent())
 	req.Header.Set("Accept", "application/json")
 
@@ -155,20 +162,19 @@ func (c *Client) doRequest(ctx context.Context, body []byte) error {
 
 	resp, err := c.client.Do(req)
 	if err != nil {
-		return &APIError{
+		return nil, &APIError{
 			Op:        "send",
 			Message:   "failed to send request",
 			Err:       err,
-			Retryable: true, // Network errors are retryable
+			Retryable: true,
 		}
 	}
 	defer resp.Body.Close()
 
-	// Read response body for error messages
-	respBody, _ := io.ReadAll(io.LimitReader(resp.Body, 1024*1024)) // Limit to 1MB
+	respBody, _ := io.ReadAll(io.LimitReader(resp.Body, 1024*1024))
 
 	if resp.StatusCode >= 200 && resp.StatusCode < 300 {
-		return nil
+		return respBody, nil
 	}
 
 	apiErr := &APIError{
@@ -176,12 +182,9 @@ func (c *Client) doRequest(ctx context.Context, body []byte) error {
 		StatusCode: resp.StatusCode,
 	}
 
-	// Parse error response
 	var errResp ErrorResponse
 	if err := json.Unmarshal(respBody, &errResp); err == nil {
 		apiErr.Code = errResp.Code
-
-		// Use user-friendly message for known error codes
 		if friendlyMsg := getUserFriendlyMessage(errResp.Code); friendlyMsg != "" {
 			apiErr.Message = friendlyMsg
 		} else if errResp.Error != "" {
@@ -195,11 +198,9 @@ func (c *Client) doRequest(ctx context.Context, body []byte) error {
 		apiErr.Message = fmt.Sprintf("API request failed with status %d", resp.StatusCode)
 	}
 
-	// Determine if retryable
 	switch resp.StatusCode {
 	case http.StatusTooManyRequests:
 		apiErr.Retryable = true
-		// Check for Retry-After header
 		if retryAfter := resp.Header.Get("Retry-After"); retryAfter != "" {
 			if seconds, err := strconv.Atoi(retryAfter); err == nil {
 				apiErr.RetryAfter = time.Duration(seconds) * time.Second
@@ -215,7 +216,27 @@ func (c *Client) doRequest(ctx context.Context, body []byte) error {
 		apiErr.Retryable = false
 	}
 
-	return apiErr
+	return nil, apiErr
+}
+
+// Get performs a GET request to the API with retry logic
+func (c *Client) Get(ctx context.Context, path string, params url.Values) (json.RawMessage, error) {
+	reqURL := c.endpoint + path
+	if len(params) > 0 {
+		reqURL += "?" + params.Encode()
+	}
+
+	if c.config.IsVerbose() {
+		fmt.Printf("GET %s\n", reqURL)
+	}
+
+	respBody, err := c.doWithRetry(ctx, "get", func() ([]byte, error) {
+		return c.doRequestWithMethod(ctx, http.MethodGet, reqURL, nil)
+	})
+	if err != nil {
+		return nil, err
+	}
+	return json.RawMessage(respBody), nil
 }
 
 // calculateBackoff calculates the delay for a retry attempt with jitter
@@ -289,6 +310,8 @@ func getUserFriendlyMessage(code string) string {
 		return "Milestone not found. Please check the milestone ID or create it in Qualflare."
 	case ErrCodeLanguageNotFound:
 		return "Language not found. Please use a valid BCP 47 language code (e.g., en-US, de-DE)."
+	case ErrCodeValidationFailed:
+		return "Validation failed. Please check your request data."
 	default:
 		return ""
 	}
