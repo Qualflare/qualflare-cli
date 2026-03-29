@@ -2,7 +2,9 @@ package ports
 
 import (
 	"context"
+	"encoding/json"
 	"io"
+	"net/url"
 	"qualflare-cli/internal/core/domain"
 	"time"
 )
@@ -35,6 +37,12 @@ type ParserFactory interface {
 type ReportSender interface {
 	// SendReport sends a report to the API
 	SendReport(ctx context.Context, report *domain.Launch) error
+}
+
+// APIClient defines the interface for API communication (read + write)
+type APIClient interface {
+	ReportSender
+	Get(ctx context.Context, path string, params url.Values) (json.RawMessage, error)
 }
 
 // ConfigProvider defines the interface for configuration
