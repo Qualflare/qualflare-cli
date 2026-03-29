@@ -47,7 +47,7 @@ type Config struct {
 func DefaultConfig() *Config {
 	return &Config{
 		APIKey:         "",
-		APIEndpoint:    "https://api.qualflare.com/api/v1/collect",
+		APIEndpoint:    "https://api.qualflare.com",
 		Environment:    "development",
 		Language:       "en-US",
 		Branch:         "",

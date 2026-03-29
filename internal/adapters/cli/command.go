@@ -20,14 +20,16 @@ type CLI struct {
 	reportService ports.ReportService
 	config        *config.Config
 	parserFactory ports.ParserFactory
+	apiClient     ports.APIClient
 }
 
 // NewCLI creates a new CLI instance
-func NewCLI(reportService ports.ReportService, cfg *config.Config, parserFactory ports.ParserFactory) *CLI {
+func NewCLI(reportService ports.ReportService, cfg *config.Config, parserFactory ports.ParserFactory, apiClient ports.APIClient) *CLI {
 	return &CLI{
 		reportService: reportService,
 		config:        cfg,
 		parserFactory: parserFactory,
+		apiClient:     apiClient,
 	}
 }
 
@@ -36,7 +38,21 @@ func (c *CLI) CreateRootCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "qf",
 		Short: "Qualflare CLI - Collect test results for Qualflare",
-		Long: `qf is a CLI tool that parses various test result formats and sends them to Qualflare.
+		Long: `qf is a CLI tool for Qualflare — parse test results and manage test data.
+
+Collect & Parse:
+  collect          Collect test results and send to Qualflare
+  validate         Validate test result files
+  list-formats     List supported test frameworks
+
+Test Management:
+  suites / suite         List and view test suites
+  cases / case           List and view test cases and steps
+  plans / plan           List and view test plans
+  launches / launch      List and view test launches
+  defects / defect       List and view defects
+  clusters / cluster     List and view failure clusters
+  milestones / milestone List and view milestones
 
 Supported frameworks:
   Unit Testing:    junit, python, golang, jest, mocha, rspec, phpunit
@@ -49,6 +65,8 @@ Supported frameworks:
 	}
 
 	// Global flags
+	cmd.PersistentFlags().StringVar(&c.config.APIKey, "api-key", "", "API key for authentication (or set QF_API_KEY)")
+	cmd.PersistentFlags().StringVar(&c.config.APIEndpoint, "api-endpoint", "", "API endpoint URL (or set QF_API_ENDPOINT)")
 	cmd.PersistentFlags().BoolVarP(&c.config.Verbose, "verbose", "v", false, "Enable verbose output")
 	cmd.PersistentFlags().BoolVarP(&c.config.Quiet, "quiet", "q", false, "Suppress non-error output")
 
@@ -57,6 +75,20 @@ Supported frameworks:
 	cmd.AddCommand(c.createValidateCommand())
 	cmd.AddCommand(c.createVersionCommand())
 	cmd.AddCommand(c.createListFormatsCommand())
+	cmd.AddCommand(c.createSuitesCommand())
+	cmd.AddCommand(c.createSuiteCommand())
+	cmd.AddCommand(c.createCasesCommand())
+	cmd.AddCommand(c.createCaseCommand())
+	cmd.AddCommand(c.createPlansCommand())
+	cmd.AddCommand(c.createPlanCommand())
+	cmd.AddCommand(c.createLaunchesCommand())
+	cmd.AddCommand(c.createLaunchCommand())
+	cmd.AddCommand(c.createDefectsCommand())
+	cmd.AddCommand(c.createDefectCommand())
+	cmd.AddCommand(c.createClustersCommand())
+	cmd.AddCommand(c.createClusterCommand())
+	cmd.AddCommand(c.createMilestonesCommand())
+	cmd.AddCommand(c.createMilestoneCommand())
 
 	return cmd
 }
@@ -70,8 +102,6 @@ func (c *CLI) createCollectCommand() *cobra.Command {
 		language    string
 		branch      string
 		commit      string
-		apiEndpoint string
-		apiKey      string
 		timeout     time.Duration
 		dryRun      bool
 		output      string
@@ -107,8 +137,6 @@ The format is auto-detected if not specified.`,
 				language:    language,
 				branch:      branch,
 				commit:      commit,
-				apiEndpoint: apiEndpoint,
-				apiKey:      apiKey,
 				timeout:     timeout,
 				dryRun:      dryRun,
 				output:      output,
@@ -123,8 +151,6 @@ The format is auto-detected if not specified.`,
 	cmd.Flags().StringVar(&language, "lang", "en-US", "Language/culture (BCP 47 format, e.g., en-US, de-DE)")
 	cmd.Flags().StringVar(&branch, "branch", "", "Git branch name")
 	cmd.Flags().StringVar(&commit, "commit", "", "Git commit hash")
-	cmd.Flags().StringVar(&apiEndpoint, "api-endpoint", "", "API endpoint URL")
-	cmd.Flags().StringVar(&apiKey, "api-key", "", "API key for authentication")
 	cmd.Flags().DurationVar(&timeout, "timeout", 30*time.Second, "Request timeout")
 	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "Parse files without sending")
 	cmd.Flags().StringVarP(&output, "output", "o", "", "Output format for dry-run (json)")
@@ -139,8 +165,6 @@ type collectOptions struct {
 	language    string
 	branch      string
 	commit      string
-	apiEndpoint string
-	apiKey      string
 	timeout     time.Duration
 	dryRun      bool
 	output      string
@@ -153,8 +177,6 @@ func (c *CLI) runCollect(ctx context.Context, files []string, opts collectOption
 	c.config.SetLanguage(opts.language)
 	c.config.SetBranch(opts.branch)
 	c.config.SetCommit(opts.commit)
-	c.config.SetAPIEndpoint(opts.apiEndpoint)
-	c.config.SetAPIKey(opts.apiKey)
 	c.config.SetTimeout(opts.timeout)
 	c.config.SetDryRun(opts.dryRun)
 
@@ -384,8 +406,3 @@ func (c *CLI) printError(format string, args ...interface{}) {
 	fmt.Fprintf(os.Stderr, "ERR "+format+"\n", args...)
 }
 
-func (c *CLI) printVerbose(format string, args ...interface{}) {
-	if c.config.IsVerbose() {
-		fmt.Printf(format+"\n", args...)
-	}
-}

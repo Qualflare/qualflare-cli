@@ -1,6 +1,6 @@
 # Qualflare CLI
 
-A command-line tool for parsing test results from 20+ testing frameworks and sending them to [Qualflare](https://qualflare.com) for centralized test management and analytics.
+A command-line tool for [Qualflare](https://qualflare.com) — parse test results from 20+ testing frameworks, manage test data, and interact with your Qualflare projects from the terminal or CI/CD pipelines. Designed for both humans and AI agents.
 
 ## Supported Frameworks
 
@@ -62,6 +62,12 @@ qf collect results.xml --dry-run --output json
 
 # Validate files without sending
 qf validate results.xml
+
+# Browse your test data
+qf suites list --api-key YOUR_API_KEY
+qf launches list --milestone 3
+qf defects list --severity critical,high
+qf case get 42
 ```
 
 ## CI/CD Integration
@@ -155,12 +161,52 @@ timeout: 30s
 
 ## Commands
 
+### Collect & Parse
+
 ```
-qf collect [files...]      Collect test results for Qualflare
+qf collect [files...]      Collect test results and send to Qualflare
 qf validate [files...]     Validate test result files without sending
 qf list-formats            List all supported test frameworks
 qf version                 Print version information
 ```
+
+### Test Management
+
+All read commands output JSON to stdout, making them pipeable to `jq` and usable by AI agents.
+
+```
+qf suites list             List test suites
+qf suite get <seq>         Get suite details
+
+qf cases list --suite <n>  List cases in a suite
+qf case get <seq>          Get case details
+qf case steps <seq>        Get steps for a case
+
+qf plans list              List test plans
+qf plan get <seq>          Get plan details
+qf plan cases <seq>        Get cases in a plan
+
+qf launches list           List test launches
+qf launch get <seq>        Get launch details
+
+qf defects list            List defects
+qf defect get <seq>        Get defect details
+
+qf clusters list           List failure clusters
+qf cluster get <id>        Get cluster details
+
+qf milestones list         List milestones
+qf milestone get <seq>     Get milestone details
+```
+
+### Global Flags
+
+| Flag | Short | Description |
+|------|-------|-------------|
+| `--api-key` | | API key for authentication (or set `QF_API_KEY`) |
+| `--api-endpoint` | | API endpoint URL (or set `QF_API_ENDPOINT`) |
+| `--verbose` | `-v` | Enable verbose output |
+| `--quiet` | `-q` | Suppress non-error output |
 
 ### Collect Flags
 
@@ -172,11 +218,23 @@ qf version                 Print version information
 | `--lang` | | Language/culture (BCP 47) |
 | `--branch` | | Git branch name |
 | `--commit` | | Git commit hash |
-| `--api-endpoint` | | API endpoint URL |
-| `--api-key` | | API key |
 | `--timeout` | | Request timeout |
 | `--dry-run` | | Parse without sending |
 | `--output` | `-o` | Output format for dry-run (`json`) |
+
+### Common List Flags
+
+| Flag | Description |
+|------|-------------|
+| `--page` | Page number |
+| `--sort-by` | Sort by field |
+| `--sort-desc` | Sort in descending order |
+| `--query` | Search query (suites, plans, milestones) |
+| `--severity` | Filter by severity (defects, clusters) |
+| `--status` | Filter by status (defects) |
+| `--suite` | Suite sequence number (cases list, required) |
+| `--milestone` | Filter by milestone (launches) |
+| `--environment` | Filter by environment (launches) |
 
 ## Format Detection
 
@@ -231,14 +289,17 @@ qualflare-cli/
 ├── internal/
 │   ├── adapters/
 │   │   ├── cli/                # Cobra command definitions
+│   │   │   ├── command.go      # Root command, collect, validate
+│   │   │   ├── output.go       # Shared JSON output helpers
+│   │   │   ├── suites.go       # Suites commands
+│   │   │   ├── cases.go        # Cases commands
+│   │   │   ├── plans.go        # Test plans commands
+│   │   │   ├── launches.go     # Launches commands
+│   │   │   ├── defects.go      # Defects commands
+│   │   │   ├── clusters.go     # Failure clusters commands
+│   │   │   └── milestones.go   # Milestones commands
 │   │   ├── http/               # HTTP client with retry logic
-│   │   └── parsers/            # Test framework parsers
-│   │       ├── unit/           # JUnit, pytest, Go, Jest, Mocha, RSpec, PHPUnit
-│   │       ├── bdd/            # Cucumber, Karate
-│   │       ├── e2e/            # Playwright, Cypress, Selenium, TestCafe
-│   │       ├── api/            # Newman, k6
-│   │       ├── security/       # ZAP, Trivy, Snyk, SonarQube
-│   │       └── factory/        # Parser selection and framework detection
+│   │   └── parsers/            # Test framework parsers (18 frameworks)
 │   ├── config/                 # Configuration management
 │   ├── core/
 │   │   ├── domain/             # Domain models (Launch, Suite, Case)

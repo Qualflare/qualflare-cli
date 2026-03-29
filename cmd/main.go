@@ -32,7 +32,7 @@ func run() error {
 	reportService := services.NewReportService(parserFactory, httpClient, cfg)
 
 	// Initialize CLI
-	cliApp := cli.NewCLI(reportService, cfg, parserFactory)
+	cliApp := cli.NewCLI(reportService, cfg, parserFactory, httpClient)
 
 	// Create and execute root command
 	cmd := cliApp.CreateRootCommand()

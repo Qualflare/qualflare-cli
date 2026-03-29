@@ -192,8 +192,10 @@ func (p *Parser) convertTestCase(tc TestCase, suiteName string) domain.Case {
 		errMsg = tc.Skipped.Message
 	} else {
 		testCase.Status = domain.StatusPassed
-		// Flaky if passed after retries
-		testCase.IsFlaky = domain.BoolPtr(retryCount > 0)
+		// Flaky if passed after retries (only set when retry info is available)
+		if testCase.RetryCount != nil {
+			testCase.IsFlaky = domain.BoolPtr(retryCount > 0)
+		}
 	}
 
 	if errMsg != "" || stackTrace != "" || errType != "" {
