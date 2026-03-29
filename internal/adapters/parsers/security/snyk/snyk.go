@@ -186,12 +186,8 @@ func (p *Parser) convertVulnerability(vuln Vulnerability) domain.Case {
 		"severity:" + vuln.Severity,
 		vuln.Language,
 	}
-	for _, cve := range vuln.Identifiers.CVE {
-		testCase.Tags = append(testCase.Tags, cve)
-	}
-	for _, cwe := range vuln.Identifiers.CWE {
-		testCase.Tags = append(testCase.Tags, cwe)
-	}
+	testCase.Tags = append(testCase.Tags, vuln.Identifiers.CVE...)
+	testCase.Tags = append(testCase.Tags, vuln.Identifiers.CWE...)
 
 	// Add properties
 	testCase.Properties = map[string]string{
