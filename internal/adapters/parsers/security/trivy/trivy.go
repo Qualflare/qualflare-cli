@@ -191,9 +191,7 @@ func (p *Parser) convertVulnerability(vuln Vulnerability, target string) domain.
 		"vulnerability",
 		"severity:" + vuln.Severity,
 	}
-	for _, cwe := range vuln.CweIDs {
-		testCase.Tags = append(testCase.Tags, cwe)
-	}
+	testCase.Tags = append(testCase.Tags, vuln.CweIDs...)
 
 	// Add properties
 	testCase.Properties = map[string]string{
