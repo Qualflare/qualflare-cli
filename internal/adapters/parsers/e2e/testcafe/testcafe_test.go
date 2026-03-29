@@ -75,11 +75,11 @@ func TestTestCafeParser_ParseFixtureWithTests(t *testing.T) {
 			if c.Status != domain.StatusFailed {
 				t.Errorf("expected failed status, got %s", c.Status)
 			}
-			if c.ErrorMessage == "" {
+			if c.Error == "" {
 				t.Error("expected error message for failed test")
 			}
-			if c.ErrorType != "E24" {
-				t.Errorf("expected error type E24, got %s", c.ErrorType)
+			if !strings.Contains(c.Error, "E24") {
+				t.Errorf("expected error to contain E24, got %s", c.Error)
 			}
 		}
 	}

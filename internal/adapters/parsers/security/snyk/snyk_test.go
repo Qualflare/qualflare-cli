@@ -56,28 +56,28 @@ func TestSnykParser_ParseVulnerabilities(t *testing.T) {
 	if suite.TotalTests != 2 {
 		t.Errorf("expected 2 total tests, got %d", suite.TotalTests)
 	}
-	if suite.Failed != 1 {
-		t.Errorf("expected 1 failed (critical), got %d", suite.Failed)
+	if suite.Failed != 2 {
+		t.Errorf("expected 2 failed (critical + low), got %d", suite.Failed)
 	}
-	if suite.Passed != 1 {
-		t.Errorf("expected 1 passed (low), got %d", suite.Passed)
+	if suite.Passed != 0 {
+		t.Errorf("expected 0 passed, got %d", suite.Passed)
 	}
 
 	for _, c := range suite.Cases {
 		if c.ID == "SNYK-JS-LODASH-1234" {
-			if c.Severity != domain.SeverityCritical {
-				t.Errorf("expected critical severity, got %s", c.Severity)
+			if c.Priority != domain.SeverityCritical {
+				t.Errorf("expected critical severity, got %s", c.Priority)
 			}
 			if c.Status != domain.StatusFailed {
 				t.Errorf("expected failed status for critical vuln, got %s", c.Status)
 			}
 		}
 		if c.ID == "SNYK-JS-MINIMIST-5678" {
-			if c.Severity != domain.SeverityLow {
-				t.Errorf("expected low severity, got %s", c.Severity)
+			if c.Priority != domain.SeverityLow {
+				t.Errorf("expected low severity, got %s", c.Priority)
 			}
-			if c.Status != domain.StatusPassed {
-				t.Errorf("expected passed status for low vuln, got %s", c.Status)
+			if c.Status != domain.StatusFailed {
+				t.Errorf("expected failed status for low vuln, got %s", c.Status)
 			}
 		}
 	}

@@ -133,7 +133,7 @@ func (p *Parser) Parse(reader io.Reader) (*domain.Suite, error) {
 		case "medium":
 			suite.Failed++
 		default:
-			suite.Passed++
+			suite.Failed++
 		}
 	}
 
@@ -163,23 +163,22 @@ func (p *Parser) convertVulnerability(vuln Vulnerability) domain.Case {
 	switch vuln.Severity {
 	case "critical":
 		testCase.Status = domain.StatusFailed
-		testCase.Severity = domain.SeverityCritical
+		testCase.Priority = domain.SeverityCritical
 	case "high":
 		testCase.Status = domain.StatusFailed
-		testCase.Severity = domain.SeverityHigh
+		testCase.Priority = domain.SeverityHigh
 	case "medium":
 		testCase.Status = domain.StatusFailed
-		testCase.Severity = domain.SeverityMedium
+		testCase.Priority = domain.SeverityMedium
 	case "low":
-		testCase.Status = domain.StatusPassed // Info level
-		testCase.Severity = domain.SeverityLow
+		testCase.Status = domain.StatusFailed
+		testCase.Priority = domain.SeverityLow
 	default:
 		testCase.Status = domain.StatusPassed
-		testCase.Severity = domain.SeverityUnknown
+		testCase.Priority = domain.SeverityUnknown
 	}
 
-	testCase.ErrorMessage = vuln.Title
-	testCase.StackTrace = vuln.Description
+	testCase.Error = domain.FormatError(vuln.Title, vuln.Description, "")
 
 	// Add tags
 	testCase.Tags = []string{

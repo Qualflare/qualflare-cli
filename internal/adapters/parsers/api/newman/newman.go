@@ -184,12 +184,13 @@ func (p *Parser) convertExecution(exec Execution, failureMap map[string][]Failur
 	}
 
 	// Check for failures in the failure map
+	var stackTrace string
 	if failures, ok := failureMap[exec.Item.ID]; ok {
 		allPassed = false
 		for _, f := range failures {
 			errorMsgs = append(errorMsgs, f.Error.Message)
-			if testCase.StackTrace == "" {
-				testCase.StackTrace = f.Error.Stack
+			if stackTrace == "" {
+				stackTrace = f.Error.Stack
 			}
 		}
 	}
@@ -197,7 +198,7 @@ func (p *Parser) convertExecution(exec Execution, failureMap map[string][]Failur
 	if !allPassed {
 		testCase.Status = domain.StatusFailed
 		if len(errorMsgs) > 0 {
-			testCase.ErrorMessage = errorMsgs[0]
+			testCase.Error = domain.FormatError(errorMsgs[0], stackTrace, "")
 		}
 	} else if anySkipped && len(exec.Assertions) == 0 {
 		testCase.Status = domain.StatusSkipped

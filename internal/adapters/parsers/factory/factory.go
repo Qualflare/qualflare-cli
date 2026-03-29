@@ -163,8 +163,7 @@ func (f *ParserFactory) DetectFramework(filename string) (domain.Framework, erro
 	case ext == ".xml":
 		return domain.FrameworkJUnit, nil
 	case ext == ".json":
-		// Could be many things, default to Cucumber for now
-		return domain.FrameworkCucumber, nil
+		return "", fmt.Errorf("unable to detect framework for JSON file: %s. Please specify the framework with --format", filename)
 	}
 
 	return "", fmt.Errorf("unable to detect framework for file: %s", filename)

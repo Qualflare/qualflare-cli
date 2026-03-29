@@ -62,28 +62,28 @@ func TestZAPParser_ParseAlerts(t *testing.T) {
 	if suite.TotalTests != 2 {
 		t.Errorf("expected 2 total tests, got %d", suite.TotalTests)
 	}
-	if suite.Failed != 1 {
-		t.Errorf("expected 1 failed (high risk), got %d", suite.Failed)
+	if suite.Failed != 2 {
+		t.Errorf("expected 2 failed (high + low risk), got %d", suite.Failed)
 	}
-	if suite.Passed != 1 {
-		t.Errorf("expected 1 passed (low risk), got %d", suite.Passed)
+	if suite.Passed != 0 {
+		t.Errorf("expected 0 passed, got %d", suite.Passed)
 	}
 
 	for _, c := range suite.Cases {
 		if c.ID == "10016" {
-			if c.Severity != domain.SeverityHigh {
-				t.Errorf("expected high severity for riskcode 3, got %s", c.Severity)
+			if c.Priority != domain.SeverityHigh {
+				t.Errorf("expected high severity for riskcode 3, got %s", c.Priority)
 			}
 			if c.Status != domain.StatusFailed {
 				t.Errorf("expected failed status for high risk, got %s", c.Status)
 			}
 		}
 		if c.ID == "10036" {
-			if c.Severity != domain.SeverityLow {
-				t.Errorf("expected low severity for riskcode 1, got %s", c.Severity)
+			if c.Priority != domain.SeverityLow {
+				t.Errorf("expected low severity for riskcode 1, got %s", c.Priority)
 			}
-			if c.Status != domain.StatusPassed {
-				t.Errorf("expected passed status for low risk, got %s", c.Status)
+			if c.Status != domain.StatusFailed {
+				t.Errorf("expected failed status for low risk, got %s", c.Status)
 			}
 		}
 	}

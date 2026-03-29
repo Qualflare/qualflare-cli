@@ -2,6 +2,7 @@ package selenium
 
 import (
 	"encoding/json"
+	"fmt"
 	"io"
 	"time"
 
@@ -147,18 +148,14 @@ func (p *Parser) convertTest(test Test, suiteName string) domain.Case {
 	case "failed", "fail", "FAILED", "failure":
 		testCase.Status = domain.StatusFailed
 		if test.Error != nil {
-			testCase.ErrorMessage = test.Error.Message
-			testCase.StackTrace = test.Error.StackTrace
-			testCase.ErrorType = test.Error.Type
+			testCase.Error = domain.FormatError(test.Error.Message, test.Error.StackTrace, test.Error.Type)
 		}
 	case "skipped", "skip", "SKIPPED", "pending":
 		testCase.Status = domain.StatusSkipped
 	case "error", "ERROR":
 		testCase.Status = domain.StatusError
 		if test.Error != nil {
-			testCase.ErrorMessage = test.Error.Message
-			testCase.StackTrace = test.Error.StackTrace
-			testCase.ErrorType = test.Error.Type
+			testCase.Error = domain.FormatError(test.Error.Message, test.Error.StackTrace, test.Error.Type)
 		}
 	default:
 		testCase.Status = domain.StatusPassed
@@ -177,7 +174,7 @@ func (p *Parser) convertTest(test Test, suiteName string) domain.Case {
 		testCase.Attachments = make([]domain.Attachment, 0, len(test.Screenshots))
 		for i, ss := range test.Screenshots {
 			testCase.Attachments = append(testCase.Attachments, domain.Attachment{
-				Name:     "screenshot-" + string(rune('1'+i)),
+				Name:     fmt.Sprintf("screenshot-%d", i+1),
 				Path:     ss,
 				MimeType: "image/png",
 			})

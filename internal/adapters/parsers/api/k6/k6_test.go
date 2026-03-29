@@ -65,7 +65,7 @@ func TestK6Parser_ParseChecks(t *testing.T) {
 			if c.Status != domain.StatusFailed {
 				t.Errorf("expected body contains data to be failed, got %s", c.Status)
 			}
-			if c.ErrorMessage == "" {
+			if c.Error == "" {
 				t.Error("expected error message for all-fail check")
 			}
 		}

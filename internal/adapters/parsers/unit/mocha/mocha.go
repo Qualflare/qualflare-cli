@@ -115,8 +115,13 @@ func (p *Parser) convertTest(test Test, status domain.Status) domain.Case {
 
 	// Add error details for failed tests
 	if status == domain.StatusFailed && test.Err.Message != "" {
-		testCase.ErrorMessage = test.Err.Message
-		testCase.StackTrace = test.Err.Stack
+		testCase.Error = domain.FormatError(test.Err.Message, test.Err.Stack, "")
+	}
+
+	// Add retry information
+	if test.CurrentRetry > 0 {
+		testCase.RetryCount = domain.IntPtr(test.CurrentRetry)
+		testCase.IsFlaky = domain.BoolPtr(test.CurrentRetry > 0 && status == domain.StatusPassed)
 	}
 
 	// Add file as property
