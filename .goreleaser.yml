@@ -78,7 +78,7 @@ brews:
       token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
     folder: Formula
     homepage: https://github.com/qualflare/qualflare-cli
-    description: CLI tool for uploading test results to Qualflare
+    description: CLI tool for collecting test results for Qualflare
     license: Apache-2.0
     test: |
       system "#{bin}/qf", "version"
@@ -124,7 +124,7 @@ release:
 
     ## Quick Start
     ```bash
-    qf upload results.xml --project my-app --api-key YOUR_API_KEY
+    qf collect results.xml --project my-app --api-key YOUR_API_KEY
     ```
 
     See `qf --help` for more options.

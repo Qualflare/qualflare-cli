@@ -139,7 +139,9 @@ func (p *Parser) Parse(reader io.Reader) (*domain.Suite, error) {
 			suite.Failed++
 		case "MAJOR":
 			suite.Failed++
-		case "MINOR", "INFO":
+		case "MINOR":
+			suite.Failed++
+		case "INFO":
 			suite.Passed++
 		default:
 			suite.Passed++
@@ -181,32 +183,32 @@ func (p *Parser) convertIssue(issue Issue, components map[string]Component, rule
 	switch issue.Severity {
 	case "BLOCKER":
 		testCase.Status = domain.StatusFailed
-		testCase.Severity = domain.SeverityCritical
+		testCase.Priority = domain.SeverityCritical
 	case "CRITICAL":
 		testCase.Status = domain.StatusFailed
-		testCase.Severity = domain.SeverityCritical
+		testCase.Priority = domain.SeverityCritical
 	case "MAJOR":
 		testCase.Status = domain.StatusFailed
-		testCase.Severity = domain.SeverityMedium
+		testCase.Priority = domain.SeverityMedium
 	case "MINOR":
-		testCase.Status = domain.StatusPassed
-		testCase.Severity = domain.SeverityLow
+		testCase.Status = domain.StatusFailed
+		testCase.Priority = domain.SeverityLow
 	case "INFO":
 		testCase.Status = domain.StatusPassed
-		testCase.Severity = domain.SeverityInfo
+		testCase.Priority = domain.SeverityInfo
 	default:
 		testCase.Status = domain.StatusPassed
-		testCase.Severity = domain.SeverityUnknown
+		testCase.Priority = domain.SeverityUnknown
 	}
 
-	testCase.ErrorMessage = issue.Message
-
-	// Add line info to stack trace
+	// Build error with line info as stack trace
+	stackTrace := ""
 	if issue.TextRange != nil {
-		testCase.StackTrace = fmt.Sprintf("Line %d-%d", issue.TextRange.StartLine, issue.TextRange.EndLine)
+		stackTrace = fmt.Sprintf("Line %d-%d", issue.TextRange.StartLine, issue.TextRange.EndLine)
 	} else if issue.Line > 0 {
-		testCase.StackTrace = fmt.Sprintf("Line %d", issue.Line)
+		stackTrace = fmt.Sprintf("Line %d", issue.Line)
 	}
+	testCase.Error = domain.FormatError(issue.Message, stackTrace, "")
 
 	// Add tags
 	testCase.Tags = append([]string{

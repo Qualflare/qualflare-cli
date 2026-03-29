@@ -4,7 +4,7 @@ This file provides guidance to Claude Code when working with code in this reposi
 
 ## Overview
 
-Command-line tool for parsing and uploading test results from various testing frameworks to the Qualflare test management platform. Supports 20+ test frameworks across unit, integration, E2E, API, and security testing.
+Command-line tool for parsing and collecting test results from various testing frameworks to the Qualflare test management platform. Supports 20+ test frameworks across unit, integration, E2E, API, and security testing.
 
 ## Tech Stack
 
@@ -99,12 +99,12 @@ qualflare-cli/
 
 ## Usage
 
-### Upload Test Results
+### Collect Test Results
 ```bash
-qf upload [files...]
+qf collect [files...]
 ```
 
-### Validate Without Uploading
+### Validate Without Sending
 ```bash
 qf validate [files...]
 ```
@@ -209,7 +209,7 @@ Metadata about the test framework that produced the results.
 Custom HTTP client with:
 - Automatic retry with exponential backoff
 - JWT authentication
-- Progress tracking for large uploads
+- Progress tracking for large submissions
 - Timeout handling
 
 ## Related Documentation

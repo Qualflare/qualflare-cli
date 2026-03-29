@@ -210,10 +210,7 @@ func (p *Parser) convertScenario(feature Feature, scenario Scenario) domain.Case
 	testCase.Duration = scenarioDuration
 
 	if len(errorMessages) > 0 {
-		testCase.ErrorMessage = strings.Join(errorMessages, "; ")
-	}
-	if len(stackTraces) > 0 {
-		testCase.StackTrace = strings.Join(stackTraces, "\n")
+		testCase.Error = domain.FormatError(strings.Join(errorMessages, "; "), strings.Join(stackTraces, "\n"), "")
 	}
 
 	// Add properties

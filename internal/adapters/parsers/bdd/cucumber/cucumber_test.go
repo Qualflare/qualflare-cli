@@ -111,7 +111,7 @@ func TestCucumberParser_ParseFeatureWithScenarios(t *testing.T) {
 			if c.Status != domain.StatusFailed {
 				t.Errorf("expected Invalid Login to be failed, got %s", c.Status)
 			}
-			if c.ErrorMessage == "" {
+			if c.Error == "" {
 				t.Error("expected error message for failed scenario")
 			}
 		}

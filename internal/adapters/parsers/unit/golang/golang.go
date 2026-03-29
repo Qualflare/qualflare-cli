@@ -93,13 +93,15 @@ func (p *Parser) Parse(reader io.Reader) (*domain.Suite, error) {
 		}
 
 		if state.failed {
-			testCase.ErrorMessage = strings.TrimSpace(state.output.String())
+			errMsg := strings.TrimSpace(state.output.String())
+			stackTrace := ""
 			// Try to extract stack trace
 			output := state.output.String()
 			if idx := strings.Index(output, "\n"); idx > 0 {
-				testCase.ErrorMessage = strings.TrimSpace(output[:idx])
-				testCase.StackTrace = strings.TrimSpace(output[idx+1:])
+				errMsg = strings.TrimSpace(output[:idx])
+				stackTrace = strings.TrimSpace(output[idx+1:])
 			}
+			testCase.Error = domain.FormatError(errMsg, stackTrace, "")
 		}
 
 		suite.Cases = append(suite.Cases, testCase)

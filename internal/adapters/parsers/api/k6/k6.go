@@ -157,10 +157,10 @@ func (p *Parser) convertCheck(check Check, groupPath string) domain.Case {
 		testCase.Status = domain.StatusPassed
 	} else if check.Passes == 0 {
 		testCase.Status = domain.StatusFailed
-		testCase.ErrorMessage = fmt.Sprintf("All %d checks failed", check.Fails)
+		testCase.Error = fmt.Sprintf("All %d checks failed", check.Fails)
 	} else {
 		testCase.Status = domain.StatusFailed
-		testCase.ErrorMessage = fmt.Sprintf("%.1f%% pass rate (%d passed, %d failed)", passRate, check.Passes, check.Fails)
+		testCase.Error = fmt.Sprintf("%.1f%% pass rate (%d passed, %d failed)", passRate, check.Passes, check.Fails)
 	}
 
 	testCase.Properties = map[string]string{
@@ -193,7 +193,7 @@ func (p *Parser) processThresholds(metrics map[string]Metric, suite *domain.Suit
 				suite.Passed++
 			} else {
 				testCase.Status = domain.StatusFailed
-				testCase.ErrorMessage = fmt.Sprintf("Threshold '%s' failed for metric '%s'", thresholdName, metricName)
+				testCase.Error = fmt.Sprintf("Threshold '%s' failed for metric '%s'", thresholdName, metricName)
 				suite.Failed++
 			}
 

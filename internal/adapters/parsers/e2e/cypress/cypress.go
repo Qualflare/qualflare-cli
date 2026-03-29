@@ -189,14 +189,16 @@ func (p *Parser) convertTest(test Test, file string) domain.Case {
 	}
 
 	// Calculate retry count from attempts or retries field
+	var retryCount int
 	if len(test.Attempts) > 0 {
-		testCase.RetryCount = len(test.Attempts) - 1
+		retryCount = len(test.Attempts) - 1
 	} else if test.Retries > 0 {
-		testCase.RetryCount = test.Retries
+		retryCount = test.Retries
 	}
+	testCase.RetryCount = domain.IntPtr(retryCount)
 
 	// Determine flaky status (passed after retries)
-	testCase.IsFlaky = testCase.RetryCount > 0 && test.State == "passed"
+	testCase.IsFlaky = domain.BoolPtr(retryCount > 0 && test.State == "passed")
 
 	// Determine status
 	switch test.State {
@@ -205,8 +207,7 @@ func (p *Parser) convertTest(test Test, file string) domain.Case {
 	case "failed":
 		testCase.Status = domain.StatusFailed
 		if test.Err.Message != "" {
-			testCase.ErrorMessage = test.Err.Message
-			testCase.StackTrace = test.Err.Estack
+			testCase.Error = domain.FormatError(test.Err.Message, test.Err.Estack, "")
 		}
 	case "pending":
 		testCase.Status = domain.StatusPending
@@ -225,8 +226,8 @@ func (p *Parser) convertTest(test Test, file string) domain.Case {
 	// Handle timed out tests
 	if test.TimedOut {
 		testCase.Status = domain.StatusFailed
-		if testCase.ErrorMessage == "" {
-			testCase.ErrorMessage = "Test timed out"
+		if testCase.Error == "" {
+			testCase.Error = "Test timed out"
 		}
 	}
 

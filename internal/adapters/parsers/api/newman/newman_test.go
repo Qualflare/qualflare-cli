@@ -73,7 +73,7 @@ func TestNewmanParser_ParseExecutionWithAssertions(t *testing.T) {
 	if c.Status != domain.StatusFailed {
 		t.Errorf("expected failed status, got %s", c.Status)
 	}
-	if c.ErrorMessage == "" {
+	if c.Error == "" {
 		t.Error("expected error message for failed assertion")
 	}
 }

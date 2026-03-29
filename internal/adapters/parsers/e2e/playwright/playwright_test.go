@@ -41,10 +41,10 @@ func TestPlaywrightParserExtractsRetryCount(t *testing.T) {
 	}
 
 	testCase := suite.Cases[0]
-	if testCase.RetryCount != 2 {
-		t.Errorf("expected RetryCount 2, got %d", testCase.RetryCount)
+	if testCase.RetryCount == nil || *testCase.RetryCount != 2 {
+		t.Errorf("expected RetryCount 2, got %v", testCase.RetryCount)
 	}
-	if !testCase.IsFlaky {
+	if testCase.IsFlaky == nil || !*testCase.IsFlaky {
 		t.Errorf("expected IsFlaky true, got false")
 	}
 }
@@ -77,11 +77,11 @@ func TestPlaywrightParserNoRetries(t *testing.T) {
 	}
 
 	testCase := suite.Cases[0]
-	if testCase.RetryCount != 0 {
-		t.Errorf("expected RetryCount 0, got %d", testCase.RetryCount)
+	if testCase.RetryCount != nil && *testCase.RetryCount != 0 {
+		t.Errorf("expected RetryCount nil or 0, got %d", *testCase.RetryCount)
 	}
-	if testCase.IsFlaky {
-		t.Errorf("expected IsFlaky false, got true")
+	if testCase.IsFlaky != nil && *testCase.IsFlaky {
+		t.Errorf("expected IsFlaky nil or false, got true")
 	}
 }
 
@@ -115,11 +115,11 @@ func TestPlaywrightParserFailedAfterRetries(t *testing.T) {
 	}
 
 	testCase := suite.Cases[0]
-	if testCase.RetryCount != 1 {
-		t.Errorf("expected RetryCount 1, got %d", testCase.RetryCount)
+	if testCase.RetryCount == nil || *testCase.RetryCount != 1 {
+		t.Errorf("expected RetryCount 1, got %v", testCase.RetryCount)
 	}
-	if testCase.IsFlaky {
-		t.Errorf("expected IsFlaky false for failed test, got true")
+	if testCase.IsFlaky != nil && *testCase.IsFlaky {
+		t.Errorf("expected IsFlaky nil or false for failed test, got true")
 	}
 }
 

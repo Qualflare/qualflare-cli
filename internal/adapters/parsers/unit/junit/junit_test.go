@@ -24,11 +24,11 @@ func TestJUnitParserDefaultRetryCount(t *testing.T) {
 	}
 
 	testCase := suite.Cases[0]
-	if testCase.RetryCount != 0 {
-		t.Errorf("expected default RetryCount 0, got %d", testCase.RetryCount)
+	if testCase.RetryCount != nil && *testCase.RetryCount != 0 {
+		t.Errorf("expected default RetryCount nil or 0, got %d", *testCase.RetryCount)
 	}
-	if testCase.IsFlaky {
-		t.Errorf("expected default IsFlaky false, got true")
+	if testCase.IsFlaky != nil && *testCase.IsFlaky {
+		t.Errorf("expected default IsFlaky nil or false, got true")
 	}
 }
 
@@ -53,10 +53,10 @@ func TestJUnitParserExtractsRetryFromProperties(t *testing.T) {
 	}
 
 	testCase := suite.Cases[0]
-	if testCase.RetryCount != 3 {
-		t.Errorf("expected RetryCount 3 from property, got %d", testCase.RetryCount)
+	if testCase.RetryCount == nil || *testCase.RetryCount != 3 {
+		t.Errorf("expected RetryCount 3 from property, got %v", testCase.RetryCount)
 	}
-	if !testCase.IsFlaky {
+	if testCase.IsFlaky == nil || !*testCase.IsFlaky {
 		t.Errorf("expected IsFlaky true when retries > 0 and passed, got false")
 	}
 }
@@ -83,11 +83,11 @@ func TestJUnitParserFailedTestWithRetries(t *testing.T) {
 	}
 
 	testCase := suite.Cases[0]
-	if testCase.RetryCount != 2 {
-		t.Errorf("expected RetryCount 2 from property, got %d", testCase.RetryCount)
+	if testCase.RetryCount == nil || *testCase.RetryCount != 2 {
+		t.Errorf("expected RetryCount 2 from property, got %v", testCase.RetryCount)
 	}
-	if testCase.IsFlaky {
-		t.Errorf("expected IsFlaky false for failed test, got true")
+	if testCase.IsFlaky != nil && *testCase.IsFlaky {
+		t.Errorf("expected IsFlaky nil or false for failed test, got true")
 	}
 	if testCase.Status != domain.StatusFailed {
 		t.Errorf("expected StatusFailed, got %s", testCase.Status)

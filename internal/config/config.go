@@ -1,9 +1,17 @@
 package config
 
 import (
+	"fmt"
+	"net/url"
 	"os"
 	"strconv"
 	"time"
+)
+
+const (
+	maxRetryCount  = 10
+	maxFileSize    = 100 * 1024 * 1024 // 100MB
+	MaxFileSize    = maxFileSize
 )
 
 // Config holds the application configuration
@@ -257,6 +265,24 @@ func (c *Config) Validate() error {
 			Field:   "api_endpoint",
 			Message: "API endpoint is required.",
 		}
+	}
+	if _, err := url.ParseRequestURI(c.APIEndpoint); err != nil {
+		return &ValidationError{
+			Field:   "api_endpoint",
+			Message: fmt.Sprintf("API endpoint is not a valid URL: %s", c.APIEndpoint),
+		}
+	}
+	if c.RetryMax > maxRetryCount {
+		c.RetryMax = maxRetryCount
+	}
+	if c.Timeout <= 0 {
+		c.Timeout = 30 * time.Second
+	}
+	if c.RetryBaseDelay <= 0 {
+		c.RetryBaseDelay = 1 * time.Second
+	}
+	if c.RetryMaxDelay <= 0 {
+		c.RetryMaxDelay = 30 * time.Second
 	}
 	return nil
 }

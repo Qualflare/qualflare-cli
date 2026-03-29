@@ -98,18 +98,18 @@ func (p *Parser) convertExample(example Example) domain.Case {
 	case "failed":
 		testCase.Status = domain.StatusFailed
 		if example.Exception != nil {
-			testCase.ErrorMessage = example.Exception.Message
-			testCase.ErrorType = example.Exception.Class
+			stackTrace := ""
 			if len(example.Exception.Backtrace) > 0 {
-				testCase.StackTrace = example.Exception.Backtrace[0]
+				stackTrace = example.Exception.Backtrace[0]
 				for i := 1; i < len(example.Exception.Backtrace) && i < 10; i++ {
-					testCase.StackTrace += "\n" + example.Exception.Backtrace[i]
+					stackTrace += "\n" + example.Exception.Backtrace[i]
 				}
 			}
+			testCase.Error = domain.FormatError(example.Exception.Message, stackTrace, example.Exception.Class)
 		}
 	case "pending":
 		testCase.Status = domain.StatusPending
-		testCase.ErrorMessage = example.PendingMessage
+		testCase.Error = domain.FormatError(example.PendingMessage, "", "")
 	default:
 		testCase.Status = domain.StatusSkipped
 	}
