@@ -20,12 +20,6 @@ A command-line tool for [Qualflare](https://qualflare.com) — parse test result
 brew install qualflare/tap/qf
 ```
 
-### Docker
-
-```bash
-docker pull ghcr.io/qualflare/qf:latest
-```
-
 ### Binary Download
 
 Download the latest release for your platform from the [Releases](https://github.com/Qualflare/qualflare-cli/releases) page.
@@ -262,53 +256,6 @@ make test           # Run tests with coverage
 make test-short     # Run short tests only
 make lint           # Run golangci-lint
 make install        # Install to $GOPATH/bin
-```
-
-### Adding a New Parser
-
-1. Create a package under `internal/adapters/parsers/<category>/`
-2. Implement the `Parser` interface:
-
-```go
-type Parser interface {
-    Parse(reader io.Reader) (*domain.Suite, error)
-    GetFramework() domain.Framework
-    SupportedFileExtensions() []string
-}
-```
-
-3. Register the framework constant in `internal/core/domain/models.go`
-4. Register the parser in `internal/adapters/parsers/factory/factory.go`
-5. Add detection rules in the factory's `DetectFramework` and `detectJSONFramework` methods
-
-### Project Structure
-
-```
-qualflare-cli/
-├── cmd/                        # CLI entry point
-├── internal/
-│   ├── adapters/
-│   │   ├── cli/                # Cobra command definitions
-│   │   │   ├── command.go      # Root command, collect, validate
-│   │   │   ├── output.go       # Shared JSON output helpers
-│   │   │   ├── suites.go       # Suites commands
-│   │   │   ├── cases.go        # Cases commands
-│   │   │   ├── plans.go        # Test plans commands
-│   │   │   ├── launches.go     # Launches commands
-│   │   │   ├── defects.go      # Defects commands
-│   │   │   ├── clusters.go     # Failure clusters commands
-│   │   │   └── milestones.go   # Milestones commands
-│   │   ├── http/               # HTTP client with retry logic
-│   │   └── parsers/            # Test framework parsers (18 frameworks)
-│   ├── config/                 # Configuration management
-│   ├── core/
-│   │   ├── domain/             # Domain models (Launch, Suite, Case)
-│   │   ├── ports/              # Interface definitions
-│   │   └── services/           # Report processing service
-│   └── version/                # Version info
-├── .goreleaser.yml             # Release automation
-├── Makefile
-└── go.mod
 ```
 
 ## Documentation
