@@ -126,15 +126,7 @@ func (p *Parser) Parse(reader io.Reader) (*domain.Suite, error) {
 		testCase := p.convertVulnerability(vuln)
 		suite.Cases = append(suite.Cases, testCase)
 
-		// Count by severity
-		switch vuln.Severity {
-		case "critical", "high":
-			suite.Failed++
-		case "medium":
-			suite.Failed++
-		default:
-			suite.Failed++
-		}
+		suite.Failed++
 	}
 
 	suite.TotalTests = len(suite.Cases)

@@ -117,44 +117,56 @@ func (p *Parser) Parse(reader io.Reader) (*domain.Suite, error) {
 	return suite, nil
 }
 
-// convertScenario converts a Cucumber scenario to domain.Case
-func (p *Parser) convertScenario(feature Feature, scenario Scenario) domain.Case {
-	testCase := domain.Case{
-		ID:   feature.ID + "_" + scenario.ID,
-		Name: feature.Name + " - " + scenario.Name,
-	}
-
-	// Collect tags
-	tags := make([]string, 0)
-	for _, tag := range feature.Tags {
+// collectTags merges feature-level and scenario-level tags, stripping the "@" prefix.
+func collectTags(featureTags, scenarioTags []Tag) []string {
+	tags := make([]string, 0, len(featureTags)+len(scenarioTags))
+	for _, tag := range featureTags {
 		tags = append(tags, strings.TrimPrefix(tag.Name, "@"))
 	}
-	for _, tag := range scenario.Tags {
+	for _, tag := range scenarioTags {
 		tags = append(tags, strings.TrimPrefix(tag.Name, "@"))
 	}
-	testCase.Tags = tags
+	return tags
+}
 
-	// Process steps to build Steps slice and determine status
-	testCase.Steps = make([]domain.Step, 0, len(scenario.Steps))
-	var scenarioDuration time.Duration
+// processHooks collects error messages from failed hooks.
+func processHooks(hooks []Hook) []string {
+	var errors []string
+	for _, hook := range hooks {
+		if hook.Result.Status == "failed" && hook.Result.ErrorMessage != "" {
+			errors = append(errors, hook.Result.ErrorMessage)
+		}
+	}
+	return errors
+}
+
+// mapStepStatus maps a Cucumber step status string to a domain.Status.
+func mapStepStatus(status string) domain.Status {
+	switch status {
+	case "passed":
+		return domain.StatusPassed
+	case "failed":
+		return domain.StatusFailed
+	case "pending", "undefined":
+		return domain.StatusPending
+	case "skipped":
+		return domain.StatusSkipped
+	default:
+		return domain.StatusSkipped
+	}
+}
+
+// processSteps converts Cucumber steps to domain steps and aggregates duration, status, errors, and stack traces.
+func processSteps(steps []Step) ([]domain.Step, time.Duration, domain.Status, []string, []string) {
+	domainSteps := make([]domain.Step, 0, len(steps))
+	var totalDuration time.Duration
 	scenarioStatus := domain.StatusPassed
 	var errorMessages []string
 	var stackTraces []string
 
-	// Process before hooks
-	for _, hook := range scenario.Before {
-		if hook.Result.Status == "failed" {
-			scenarioStatus = domain.StatusFailed
-			if hook.Result.ErrorMessage != "" {
-				errorMessages = append(errorMessages, hook.Result.ErrorMessage)
-			}
-		}
-	}
-
-	// Process steps
-	for _, step := range scenario.Steps {
+	for _, step := range steps {
 		stepDuration := base.ParseDurationNs(step.Result.Duration)
-		scenarioDuration += stepDuration
+		totalDuration += stepDuration
 
 		domainStep := domain.Step{
 			Name:     step.Keyword + step.Name,
@@ -163,51 +175,58 @@ func (p *Parser) convertScenario(feature Feature, scenario Scenario) domain.Case
 			Location: step.Match.Location,
 		}
 
-		switch step.Result.Status {
-		case "passed":
-			domainStep.Status = domain.StatusPassed
-		case "failed":
-			domainStep.Status = domain.StatusFailed
+		domainStep.Status = mapStepStatus(step.Result.Status)
+
+		switch domainStep.Status {
+		case domain.StatusFailed:
 			domainStep.Error = step.Result.ErrorMessage
 			scenarioStatus = domain.StatusFailed
 			if step.Result.ErrorMessage != "" {
 				errorMessages = append(errorMessages, step.Result.ErrorMessage)
 				stackTraces = append(stackTraces, step.Match.Location)
 			}
-		case "pending":
-			domainStep.Status = domain.StatusPending
+		case domain.StatusPending:
 			if scenarioStatus == domain.StatusPassed {
 				scenarioStatus = domain.StatusPending
 			}
-		case "undefined":
-			domainStep.Status = domain.StatusPending
-			if scenarioStatus == domain.StatusPassed {
-				scenarioStatus = domain.StatusPending
-			}
-		case "skipped":
-			domainStep.Status = domain.StatusSkipped
+		case domain.StatusSkipped:
 			if scenarioStatus == domain.StatusPassed {
 				scenarioStatus = domain.StatusSkipped
 			}
-		default:
-			domainStep.Status = domain.StatusSkipped
 		}
 
-		testCase.Steps = append(testCase.Steps, domainStep)
+		domainSteps = append(domainSteps, domainStep)
 	}
 
-	// Process after hooks
-	for _, hook := range scenario.After {
-		if hook.Result.Status == "failed" {
-			scenarioStatus = domain.StatusFailed
-			if hook.Result.ErrorMessage != "" {
-				errorMessages = append(errorMessages, hook.Result.ErrorMessage)
-			}
-		}
+	return domainSteps, totalDuration, scenarioStatus, errorMessages, stackTraces
+}
+
+// convertScenario converts a Cucumber scenario to domain.Case
+func (p *Parser) convertScenario(feature Feature, scenario Scenario) domain.Case {
+	testCase := domain.Case{
+		ID:   feature.ID + "_" + scenario.ID,
+		Name: feature.Name + " - " + scenario.Name,
+		Tags: collectTags(feature.Tags, scenario.Tags),
+	}
+
+	// Process steps
+	steps, duration, scenarioStatus, errorMessages, stackTraces := processSteps(scenario.Steps)
+	testCase.Steps = steps
+	testCase.Duration = duration
+
+	// Process before hooks — failed hooks override status
+	for _, errMsg := range processHooks(scenario.Before) {
+		scenarioStatus = domain.StatusFailed
+		errorMessages = append(errorMessages, errMsg)
+	}
+
+	// Process after hooks — failed hooks override status
+	for _, errMsg := range processHooks(scenario.After) {
+		scenarioStatus = domain.StatusFailed
+		errorMessages = append(errorMessages, errMsg)
 	}
 
 	testCase.Status = scenarioStatus
-	testCase.Duration = scenarioDuration
 
 	if len(errorMessages) > 0 {
 		testCase.Error = domain.FormatError(strings.Join(errorMessages, "; "), strings.Join(stackTraces, "\n"), "")
