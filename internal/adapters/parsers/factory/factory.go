@@ -213,115 +213,53 @@ func (f *ParserFactory) detectJSONFramework(content []byte) (domain.Framework, e
 	return "", fmt.Errorf("unable to detect framework from JSON content")
 }
 
+func hasKey(obj map[string]interface{}, key string) bool {
+	_, ok := obj[key]
+	return ok
+}
+
+func hasKeys(obj map[string]interface{}, keys ...string) bool {
+	for _, k := range keys {
+		if _, ok := obj[k]; !ok {
+			return false
+		}
+	}
+	return true
+}
+
+type jsonDetector struct {
+	detect    func(obj map[string]interface{}, isArray bool) bool
+	framework domain.Framework
+}
+
+var jsonDetectors = []jsonDetector{
+	{func(obj map[string]interface{}, _ bool) bool { return hasKey(obj, "testResults") }, domain.FrameworkJest},
+	{func(obj map[string]interface{}, _ bool) bool { return hasKey(obj, "numTotalTests") }, domain.FrameworkJest},
+	{func(obj map[string]interface{}, _ bool) bool { return hasKeys(obj, "config", "suites") }, domain.FrameworkPlaywright},
+	{func(obj map[string]interface{}, _ bool) bool { return hasKeys(obj, "stats", "results") }, domain.FrameworkCypress},
+	{func(obj map[string]interface{}, _ bool) bool { return hasKey(obj, "collection") }, domain.FrameworkNewman},
+	{func(obj map[string]interface{}, _ bool) bool { return hasKeys(obj, "run", "collection") }, domain.FrameworkNewman},
+	{func(obj map[string]interface{}, _ bool) bool { return hasKeys(obj, "metrics", "root_group") }, domain.FrameworkK6},
+	{func(obj map[string]interface{}, _ bool) bool { return hasKeys(obj, "Results", "SchemaVersion") }, domain.FrameworkTrivy},
+	{func(obj map[string]interface{}, _ bool) bool { return hasKey(obj, "Vulnerabilities") }, domain.FrameworkTrivy},
+	{func(obj map[string]interface{}, _ bool) bool { return hasKeys(obj, "vulnerabilities", "projectName") }, domain.FrameworkSnyk},
+	{func(obj map[string]interface{}, _ bool) bool { return hasKeys(obj, "site", "@version") }, domain.FrameworkZAP},
+	{func(obj map[string]interface{}, _ bool) bool { return hasKeys(obj, "issues", "paging") }, domain.FrameworkSonarQube},
+	{func(obj map[string]interface{}, _ bool) bool { return hasKeys(obj, "Action", "Package") }, domain.FrameworkGolang},
+	{func(obj map[string]interface{}, _ bool) bool { return hasKey(obj, "examples") }, domain.FrameworkRSpec},
+	{func(obj map[string]interface{}, isArray bool) bool { return isArray && hasKeys(obj, "elements", "keyword") }, domain.FrameworkCucumber},
+	{func(obj map[string]interface{}, isArray bool) bool { return isArray && hasKey(obj, "scenarioResults") }, domain.FrameworkKarate},
+	{func(obj map[string]interface{}, _ bool) bool { return hasKey(obj, "fixtures") }, domain.FrameworkTestCafe},
+	{func(obj map[string]interface{}, _ bool) bool { return hasKeys(obj, "stats", "tests") }, domain.FrameworkMocha},
+}
+
 // detectJSONObjectFramework detects framework from a JSON object's keys
 func (f *ParserFactory) detectJSONObjectFramework(obj map[string]interface{}, isArray bool) (domain.Framework, error) {
-	// Jest/Vitest
-	if _, ok := obj["testResults"]; ok {
-		return domain.FrameworkJest, nil
-	}
-	if _, ok := obj["numTotalTests"]; ok {
-		return domain.FrameworkJest, nil
-	}
-
-	// Playwright
-	if _, ok := obj["config"]; ok {
-		if _, ok := obj["suites"]; ok {
-			return domain.FrameworkPlaywright, nil
+	for _, d := range jsonDetectors {
+		if d.detect(obj, isArray) {
+			return d.framework, nil
 		}
 	}
-
-	// Cypress/Mochawesome
-	if _, ok := obj["stats"]; ok {
-		if _, ok := obj["results"]; ok {
-			return domain.FrameworkCypress, nil
-		}
-	}
-
-	// Newman/Postman
-	if _, ok := obj["collection"]; ok {
-		return domain.FrameworkNewman, nil
-	}
-	if _, ok := obj["run"]; ok {
-		if _, ok := obj["collection"]; ok {
-			return domain.FrameworkNewman, nil
-		}
-	}
-
-	// k6
-	if _, ok := obj["metrics"]; ok {
-		if _, ok := obj["root_group"]; ok {
-			return domain.FrameworkK6, nil
-		}
-	}
-
-	// Trivy
-	if _, ok := obj["Results"]; ok {
-		if _, ok := obj["SchemaVersion"]; ok {
-			return domain.FrameworkTrivy, nil
-		}
-	}
-	if _, ok := obj["Vulnerabilities"]; ok {
-		return domain.FrameworkTrivy, nil
-	}
-
-	// Snyk
-	if _, ok := obj["vulnerabilities"]; ok {
-		if _, ok := obj["projectName"]; ok {
-			return domain.FrameworkSnyk, nil
-		}
-	}
-
-	// ZAP
-	if _, ok := obj["site"]; ok {
-		if _, ok := obj["@version"]; ok {
-			return domain.FrameworkZAP, nil
-		}
-	}
-
-	// SonarQube
-	if _, ok := obj["issues"]; ok {
-		if _, ok := obj["paging"]; ok {
-			return domain.FrameworkSonarQube, nil
-		}
-	}
-
-	// Go test (JSON lines format has Action field)
-	if _, ok := obj["Action"]; ok {
-		if _, ok := obj["Package"]; ok {
-			return domain.FrameworkGolang, nil
-		}
-	}
-
-	// RSpec
-	if _, ok := obj["examples"]; ok {
-		return domain.FrameworkRSpec, nil
-	}
-
-	// Cucumber (array of features)
-	if isArray {
-		if _, ok := obj["elements"]; ok {
-			if _, ok := obj["keyword"]; ok {
-				return domain.FrameworkCucumber, nil
-			}
-		}
-		// Karate (similar to Cucumber but has scenarioResults)
-		if _, ok := obj["scenarioResults"]; ok {
-			return domain.FrameworkKarate, nil
-		}
-	}
-
-	// TestCafe
-	if _, ok := obj["fixtures"]; ok {
-		return domain.FrameworkTestCafe, nil
-	}
-
-	// Mocha
-	if _, ok := obj["stats"]; ok {
-		if _, ok := obj["tests"]; ok {
-			return domain.FrameworkMocha, nil
-		}
-	}
-
 	return "", fmt.Errorf("unable to detect framework from JSON object")
 }
 
