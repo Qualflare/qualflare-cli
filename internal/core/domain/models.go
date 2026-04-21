@@ -271,11 +271,7 @@ func FormatError(message, stackTrace, errorType string) string {
 		parts = append(parts, message)
 	}
 	if stackTrace != "" {
-		if len(parts) == 0 {
-			parts = append(parts, stackTrace)
-		} else {
-			parts = append(parts, stackTrace)
-		}
+		parts = append(parts, stackTrace)
 	}
 	if len(parts) == 0 {
 		return ""

@@ -79,6 +79,23 @@ func (p *Parser) Parse(reader io.Reader) (*domain.Suite, error) {
 	}
 
 	// Convert tests map to cases
+	cases, passed, failed, skipped := buildCasesFromTests(tests)
+	suite.Cases = cases
+	suite.Passed = passed
+	suite.Failed = failed
+	suite.Skipped = skipped
+
+	suite.TotalTests = len(suite.Cases)
+	suite.Duration = totalDuration
+
+	return suite, nil
+}
+
+// buildCasesFromTests converts the tests map into domain cases and returns counters.
+func buildCasesFromTests(tests map[string]*testState) ([]domain.Case, int, int, int) {
+	cases := make([]domain.Case, 0, len(tests))
+	var passed, failed, skipped int
+
 	for _, state := range tests {
 		if state.status == "" {
 			continue // Skip tests that never completed
@@ -104,23 +121,19 @@ func (p *Parser) Parse(reader io.Reader) (*domain.Suite, error) {
 			testCase.Error = domain.FormatError(errMsg, stackTrace, "")
 		}
 
-		suite.Cases = append(suite.Cases, testCase)
+		cases = append(cases, testCase)
 
-		// Update counters
 		switch testCase.Status {
 		case domain.StatusPassed:
-			suite.Passed++
+			passed++
 		case domain.StatusFailed:
-			suite.Failed++
+			failed++
 		case domain.StatusSkipped:
-			suite.Skipped++
+			skipped++
 		}
 	}
 
-	suite.TotalTests = len(suite.Cases)
-	suite.Duration = totalDuration
-
-	return suite, nil
+	return cases, passed, failed, skipped
 }
 
 // testState tracks the state of a test during parsing

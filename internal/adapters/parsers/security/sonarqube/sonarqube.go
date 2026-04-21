@@ -181,10 +181,7 @@ func (p *Parser) convertIssue(issue Issue, components map[string]Component, rule
 
 	// Map severity to status and domain.Severity
 	switch issue.Severity {
-	case "BLOCKER":
-		testCase.Status = domain.StatusFailed
-		testCase.Priority = domain.SeverityCritical
-	case "CRITICAL":
+	case "BLOCKER", "CRITICAL":
 		testCase.Status = domain.StatusFailed
 		testCase.Priority = domain.SeverityCritical
 	case "MAJOR":

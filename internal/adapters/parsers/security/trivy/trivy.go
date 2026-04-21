@@ -119,15 +119,7 @@ func (p *Parser) Parse(reader io.Reader) (*domain.Suite, error) {
 			testCase := p.convertVulnerability(vuln, result.Target)
 			suite.Cases = append(suite.Cases, testCase)
 
-			// Count by severity
-			switch vuln.Severity {
-			case "CRITICAL", "HIGH":
-				suite.Failed++
-			case "MEDIUM":
-				suite.Failed++
-			default:
-				suite.Failed++
-			}
+			suite.Failed++
 		}
 
 		// Process misconfigurations
@@ -176,9 +168,6 @@ func (p *Parser) convertVulnerability(vuln Vulnerability, target string) domain.
 	case "LOW":
 		testCase.Status = domain.StatusFailed
 		testCase.Priority = domain.SeverityLow
-	case "UNKNOWN":
-		testCase.Status = domain.StatusPassed
-		testCase.Priority = domain.SeverityUnknown
 	default:
 		testCase.Status = domain.StatusPassed
 		testCase.Priority = domain.SeverityUnknown
