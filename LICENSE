@@ -1,140 +1,178 @@
-QUALFLARE CLI LICENCE
+                                 Apache License
+                           Version 2.0, January 2004
+                        http://www.apache.org/licenses/
 
-Last updated: 13 April 2026
+   TERMS AND CONDITIONS FOR USE, REPRODUCTION, AND DISTRIBUTION
 
-This Licence governs your use of the qualflare-cli binary (the "Software")
-distributed by Qualflare OÜ, a private limited company registered under the
-laws of the Republic of Estonia, with registered office at Sepapaja tn 6,
-15551 Tallinn, Estonia, and Estonian Commercial Register code 17481021
-("Qualflare," "we," "us," "our").
+   1. Definitions.
 
-This is a short-form licence. Your use of the Software is also governed by
-the full Qualflare Terms of Service at https://qualflare.com/terms, which
-contain the definitive terms — including consumer protections, the liability
-cap, indemnification, dispute resolution, and acceptable-use rules. In the
-event of any conflict between this file and the Terms of Service, the Terms
-of Service prevail, except that clause 2 below is inviolable under EU law in
-any event.
+      "License" shall mean the terms and conditions for use, reproduction,
+      and distribution as defined by Sections 1 through 9 of this document.
 
--------------------------------------------------------------------------------
+      "Licensor" shall mean the copyright owner or entity authorized by
+      the copyright owner that is granting the License.
 
-1. LICENCE GRANT
+      "Legal Entity" shall mean the union of the acting entity and all
+      other entities that control, are controlled by, or are under common
+      control with that entity. For the purposes of this definition,
+      "control" means (i) the power, direct or indirect, to cause the
+      direction or management of such entity, whether by contract or
+      otherwise, or (ii) ownership of fifty percent (50%) or more of the
+      outstanding shares, or (iii) beneficial ownership of such entity.
 
-   Subject to your compliance with this Licence and your active Qualflare
-   subscription, Qualflare grants you a worldwide, non-exclusive,
-   non-transferable, non-sublicensable, revocable licence to download,
-   install, execute, and use the Software for your internal business purposes
-   during the term of your Qualflare subscription. You may make a reasonable
-   number of back-up copies.
+      "You" (or "Your") shall mean an individual or Legal Entity
+      exercising permissions granted by this License.
 
-2. EU SOFTWARE DIRECTIVE 2009/24/EC CARVE-OUTS
+      "Source" form shall mean the preferred form for making modifications,
+      including but not limited to software source code, documentation
+      source, and configuration files.
 
-   Notwithstanding any other provision of this Licence, if you are subject to
-   the laws of a European Economic Area member state, the following rights
-   are preserved and cannot be contracted away (Article 8 of the Directive):
+      "Object" form shall mean any form resulting from mechanical
+      transformation or translation of a Source form, including but
+      not limited to compiled object code, generated documentation,
+      and conversions to other media types.
 
-   (a) Article 5(2) — your right to make a back-up copy of the Software
-       insofar as it is necessary for your use;
+      "Work" shall mean the work of authorship made available under
+      the License, as indicated by a copyright notice that is included in
+      or attached to the work (an example is provided in the Appendix below).
 
-   (b) Article 5(3) — your right to observe, study, and test the functioning
-       of the Software in the course of its normal operation;
+      "Derivative Works" shall mean any work, whether in Source or Object
+      form, that is based on (or derived from) the Work and for which the
+      editorial revisions, annotations, elaborations, or other modifications
+      represent, as a whole, an original work of authorship. For the purposes
+      of this License, Derivative Works shall not include works that remain
+      separable from, or merely link (or bind by name) to the interfaces of,
+      the Work and Derivative Works thereof.
 
-   (c) Article 6 — your right to decompile the Software where decompilation
-       is indispensable to obtain the information necessary to achieve the
-       interoperability of an independently created program with the
-       Software, subject to the limits in Article 6.
+      "Contribution" shall mean, as submitted to the Licensor for inclusion
+      in the Work by the copyright owner or by an individual or Legal Entity
+      authorized to submit on behalf of the copyright owner. For the purposes
+      of this definition, "contribution" means any original work of authorship,
+      including any modifications or additions to an existing work, submitted
+      intentionally to the Licensor for inclusion in the Work.
 
-   Any clause in this Licence that appears to restrict these rights is, to
-   that extent, void.
+      "Contributor" shall mean Licensor and any Legal Entity on behalf of
+      whom a Contribution has been received by the Licensor and included
+      within the Work.
 
-3. RESTRICTIONS
+   2. Grant of Copyright License. Subject to the terms and conditions of
+      this License, each Contributor hereby grants to You a perpetual,
+      worldwide, non-exclusive, no-charge, royalty-free, irrevocable
+      copyright license to reproduce, prepare Derivative Works of,
+      publicly display, publicly perform, sublicense, and distribute the
+      Work and such Derivative Works in Source or Object form.
 
-   Except as permitted by clause 1 or by applicable law (including clause 2),
-   you must not:
+   3. Grant of Patent License. Subject to the terms and conditions of
+      this License, each Contributor hereby grants to You a perpetual,
+      worldwide, non-exclusive, no-charge, royalty-free, irrevocable
+      (except as stated in this section) patent license to make, have made,
+      use, offer to sell, sell, import, and otherwise transfer the Work,
+      where such license applies only to those patent claims licensable
+      by such Contributor that are necessarily infringed by their
+      Contribution(s) alone or by the combination of their Contributions
+      with the Work to which such Contributions were submitted. If You
+      institute patent litigation against any entity (including a
+      cross-claim or counterclaim in a lawsuit) alleging that the Work
+      or a Contribution incorporated within the Work constitutes direct
+      or contributory patent infringement, then any patent licenses
+      granted to You under this License for that Work shall terminate
+      as of the date such litigation is filed.
 
-   (a) sell, rent, lend, lease, redistribute, sublicense, or make the
-       Software available to a third party as a standalone offering;
+   4. Redistribution. You may reproduce and distribute copies of the
+      Work or Derivative Works thereof in any medium, with or without
+      modifications, and in Source or Object form, provided that You
+      meet the following conditions:
 
-   (b) remove, obscure, or alter any copyright, trademark, or proprietary
-       notice embedded in or shipped with the Software;
+      (a) You must give any other recipients of the Work or Derivative
+          Works a copy of this License; and
 
-   (c) use the Software to build, train, or benchmark a service that
-       competes with Qualflare;
+      (b) You must cause any modified files to carry prominent notices
+          stating that You changed the files; and
 
-   (d) deploy the Software in a safety-critical environment, including
-       medical devices, nuclear facilities, mass-transit control, or
-       life-support systems;
+      (c) You must retain, in the Source form of any Derivative Works
+          that You distribute, all copyright, patent, trademark, and
+          attribution notices from the Source form of the Work,
+          excluding those notices that do not pertain to any part of
+          the Derivative Works; and
 
-   (e) use the Software in violation of sanctions, export-control, or
-       anti-corruption law — see section 18 of the Terms of Service.
+      (d) If the Work includes a "NOTICE" text file as part of its
+          distribution, You must include a readable copy of the
+          attribution notices contained within such NOTICE file, in
+          at least one of the following places: within a NOTICE text
+          file distributed as part of the Derivative Works; within
+          the Source form or documentation, if provided along with the
+          Derivative Works; or, within a display generated by the
+          Derivative Works, if and wherever such third-party notices
+          normally appear. The contents of the NOTICE file are for
+          informational purposes only and do not modify the License.
+          You may add Your own attribution notices within Derivative
+          Works that You distribute, alongside or as an addendum to
+          the NOTICE text from the Work, provided that such additional
+          attribution notices cannot be construed as modifying the License.
 
-4. OPEN-SOURCE COMPONENTS
+      You may add Your own license statement for Your modifications and
+      may provide additional grant of rights to use, copy, modify, merge,
+      publish, distribute, sublicense, and/or sell copies of the
+      Work, and to permit persons to whom the Work is furnished to do so.
 
-   The Software includes open-source software licensed under various
-   licences (MIT, BSD, Apache 2.0, and others). The notices and licence
-   texts for those components are in the THIRD_PARTY_LICENSES.txt file
-   distributed with each release of the Software. You agree to comply with
-   each of those licences with respect to the relevant components. Where an
-   upstream open-source licence is incompatible with your intended use, your
-   remedy is to stop using the Software; we cannot relicense third-party
-   code.
+   5. Submission of Contributions. Unless You explicitly state otherwise,
+      any Contribution intentionally submitted for inclusion in the Work
+      by You to the Licensor shall be under the terms and conditions of
+      this License, without any additional terms or conditions.
+      Notwithstanding the above, nothing herein shall supersede or modify
+      the terms of any separate license agreement you may have executed
+      with Licensor regarding such Contributions.
 
-5. DATA AND PRIVACY
+   6. Trademarks. This License does not grant permission to use the trade
+      names, trademarks, service marks, or product names of the Licensor,
+      except as required for reasonable and customary use in describing the
+      origin of the Work and reproducing the content of the NOTICE file.
 
-   The Software transmits authentication tokens, test data, and telemetry
-   to Qualflare's hosted services. How we collect, use, and protect that
-   data is governed by our Privacy Notice at https://qualflare.com/privacy.
+   7. Disclaimer of Warranty. Unless required by applicable law or
+      agreed to in writing, Licensor provides the Work (and each
+      Contributor provides its Contributions) on an "AS IS" BASIS,
+      WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
+      implied, including, without limitation, any warranties or conditions
+      of TITLE, NON-INFRINGEMENT, MERCHANTABILITY, or FITNESS FOR A
+      PARTICULAR PURPOSE. You are solely responsible for determining the
+      appropriateness of using or reproducing the Work and assume any
+      risks associated with Your exercise of permissions under this License.
 
-6. NO WARRANTY (BUSINESS USERS)
+   8. Limitation of Liability. In no event and under no legal theory,
+      whether in tort (including negligence), contract, or otherwise,
+      unless required by applicable law (such as deliberate and grossly
+      negligent acts) or agreed to in writing, shall any Contributor be
+      liable to You for damages, including any direct, indirect, special,
+      incidental, or exemplary damages of any character arising as a
+      result of this License or out of the use or inability to use the
+      Work (including but not limited to damages for loss of goodwill,
+      work stoppage, computer failure or malfunction, or all other
+      commercial damages or losses), even if such Contributor has been
+      advised of the possibility of such damages.
 
-   If you are not a consumer, the Software is provided "as is" and "as
-   available" to the fullest extent permitted by law. We disclaim all
-   express and implied warranties, including the implied warranties of
-   merchantability, fitness for a particular purpose, non-infringement, and
-   uninterrupted or error-free operation.
+   9. Accepting Warranty or Additional Liability. While redistributing
+      the Work or Derivative Works thereof, You may choose to offer,
+      and charge a fee for, acceptance of support, warranty, indemnity,
+      or other liability obligations and/or rights consistent with this
+      License. However, in accepting such obligations, You may offer such
+      conditions only on Your own behalf and on Your sole responsibility,
+      not on behalf of any other Contributor, and only if You agree to
+      indemnify, defend, and hold each Contributor harmless for any
+      liability incurred by, or claims asserted against, such Contributor
+      by reason of your accepting any such warranty or additional liability.
 
-   This disclaimer does not apply to consumers resident in the EU, EEA,
-   United Kingdom, or Switzerland, whose statutory rights under EU consumer
-   law — including the Digital Content Directive 2019/770 conformity
-   warranty and remedies hierarchy — are preserved in full. See section 15
-   of the Qualflare Terms of Service.
+   END OF TERMS AND CONDITIONS
 
-7. LIABILITY
+   Copyright 2026 Qualflare OÜ
 
-   Our aggregate liability to you in connection with the Software is limited
-   in accordance with section 13 of the Qualflare Terms of Service. Nothing
-   in this Licence limits or excludes liability that cannot be limited or
-   excluded under applicable law — including liability for death, personal
-   injury, fraud, intent, gross negligence, or any other liability protected
-   by mandatory consumer-protection law.
+   Licensed under the Apache License, Version 2.0 (the "License");
+   you may not use this file except in compliance with the License.
+   You may obtain a copy of the License at
 
-8. TERMINATION
+       http://www.apache.org/licenses/LICENSE-2.0
 
-   This Licence terminates automatically when your Qualflare subscription
-   ends. It also terminates if you materially breach any term of this
-   Licence and fail to cure the breach within a reasonable period after we
-   notify you. On termination, you must stop using the Software. Clauses 2,
-   3, 4, 5, 6, 7, 9, and 10 survive termination.
-
-9. GOVERNING LAW AND DISPUTES
-
-   This Licence is governed by the laws of the Republic of Estonia,
-   excluding its conflict-of-laws rules and the United Nations Convention on
-   Contracts for the International Sale of Goods. Disputes are subject to
-   the non-exclusive jurisdiction of the Harju County Court (Harju
-   Maakohus) in Tallinn, Estonia. If you are a consumer, your mandatory-law
-   protections in your country of habitual residence are preserved — see
-   section 15 of the Qualflare Terms of Service.
-
-10. CONTACT
-
-    Qualflare OÜ
-    Sepapaja tn 6
-    15551 Tallinn
-    Estonia
-    Estonian Commercial Register code 17481021
-    legal@qualflare.com
-
--------------------------------------------------------------------------------
-
-Copyright (c) 2026 Qualflare OÜ. All rights reserved.
+   Unless required by applicable law or agreed to in writing, software
+   distributed under the License is distributed on an "AS IS" BASIS,
+   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+   See the License for the specific language governing permissions and
+   limitations under the License.
