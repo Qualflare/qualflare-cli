@@ -76,7 +76,7 @@ brews:
       owner: qualflare
       name: homebrew-tap
       token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
-    folder: Formula
+    directory: Formula
     homepage: https://github.com/qualflare/qualflare-cli
     description: CLI tool for collecting test results for Qualflare
     license: Apache-2.0
