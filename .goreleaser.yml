@@ -84,7 +84,7 @@ brews:
       system "#{bin}/qf", "version"
     install: |
       bin.install "qf"
-    skip_upload: auto
+    skip_upload: "{{ if .Env.HOMEBREW_TAP_TOKEN }}false{{ else }}true{{ end }}"
 
 dockers:
   - image_templates:
