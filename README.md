@@ -1,6 +1,6 @@
 # Qualflare CLI
 
-A command-line tool for [Qualflare](https://qualflare.com) — parse test results from 20+ testing frameworks, manage test data, and interact with your Qualflare projects from the terminal or CI/CD pipelines. Designed for both humans and AI agents.
+A command-line tool for [Qualflare](https://qualflare.com) — parse test results from 19 testing frameworks, manage test data, and interact with your Qualflare projects from the terminal or CI/CD pipelines. Designed for both humans and AI agents.
 
 ## Supported Frameworks
 
@@ -17,7 +17,7 @@ A command-line tool for [Qualflare](https://qualflare.com) — parse test result
 ### Homebrew (macOS / Linux)
 
 ```bash
-brew install qualflare/tap/qf
+brew install Qualflare/tap/qf
 ```
 
 ### Binary Download
@@ -115,7 +115,7 @@ post {
 docker run --rm \
   -e QF_API_KEY=your-api-key \
   -v $(pwd)/test-results:/results \
-  ghcr.io/qualflare/qf:latest collect /results/*.xml
+  ghcr.io/Qualflare/qf:latest collect /results/*.xml
 ```
 
 ## Configuration
