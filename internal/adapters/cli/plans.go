@@ -20,10 +20,10 @@ func (c *CLI) createPlansCommand() *cobra.Command {
 		Short: "List test plans",
 		Long:  "List test plans in the project.",
 		Example: `  # List all test plans
-  qf plans list
+  qf <id> plans list
 
   # Search test plans
-  qf plans list --query "regression"`,
+  qf <id> plans list --query "regression"`,
 	}
 
 	listCmd := &cobra.Command{
@@ -55,10 +55,10 @@ func (c *CLI) createPlanCommand() *cobra.Command {
 		Short: "Get test plan details or cases",
 		Long:  "Get details or cases for a specific test plan.",
 		Example: `  # Get plan details
-  qf plan get 5
+  qf <id> plan get 5
 
   # Get plan cases
-  qf plan cases 5`,
+  qf <id> plan cases 5`,
 	}
 
 	getCmd := &cobra.Command{

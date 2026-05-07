@@ -20,13 +20,13 @@ func (c *CLI) createSuitesCommand() *cobra.Command {
 		Short: "List test suites",
 		Long:  "List test suites in the project.",
 		Example: `  # List all suites
-  qf suites list
+  qf <id> suites list
 
   # List suites with search
-  qf suites list --query "login"
+  qf <id> suites list --query "login"
 
   # List suites sorted by name
-  qf suites list --sort-by name`,
+  qf <id> suites list --sort-by name`,
 	}
 
 	listCmd := &cobra.Command{
@@ -58,7 +58,7 @@ func (c *CLI) createSuiteCommand() *cobra.Command {
 		Short: "Get test suite details",
 		Long:  "Get details for a specific test suite.",
 		Example: `  # Get suite by sequence number
-  qf suite get 42`,
+  qf <id> suite get 42`,
 	}
 
 	getCmd := &cobra.Command{

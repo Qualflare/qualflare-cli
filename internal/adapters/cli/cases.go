@@ -23,10 +23,10 @@ func (c *CLI) createCasesCommand() *cobra.Command {
 		Short: "List test cases",
 		Long:  "List test cases in a suite.",
 		Example: `  # List cases in suite 5
-  qf cases list --suite 5
+  qf <id> cases list --suite 5
 
   # Filter by state
-  qf cases list --suite 5 --state passed,failed`,
+  qf <id> cases list --suite 5 --state passed,failed`,
 	}
 
 	listCmd := &cobra.Command{
@@ -66,10 +66,10 @@ func (c *CLI) createCaseCommand() *cobra.Command {
 		Short: "Get test case details or steps",
 		Long:  "Get details or steps for a specific test case.",
 		Example: `  # Get case details
-  qf case get 123
+  qf <id> case get 123
 
   # Get case steps
-  qf case steps 123`,
+  qf <id> case steps 123`,
 	}
 
 	getCmd := &cobra.Command{

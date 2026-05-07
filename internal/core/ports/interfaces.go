@@ -52,7 +52,6 @@ type ConfigProvider interface {
 	GetAPIEndpoint() string
 
 	// Project settings
-	GetProject() string
 	GetEnvironment() string
 	GetLanguage() string
 
@@ -79,7 +78,6 @@ type ConfigProvider interface {
 type ConfigMutator interface {
 	SetAPIKey(key string)
 	SetAPIEndpoint(endpoint string)
-	SetProject(project string)
 	SetEnvironment(env string)
 	SetLanguage(language string)
 	SetBranch(branch string)

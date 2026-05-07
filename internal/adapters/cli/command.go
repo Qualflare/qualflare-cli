@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"qualflare-cli/internal/auth"
 	"qualflare-cli/internal/config"
 	"qualflare-cli/internal/core/domain"
 	"qualflare-cli/internal/core/ports"
@@ -21,15 +22,17 @@ type CLI struct {
 	config        *config.Config
 	parserFactory ports.ParserFactory
 	apiClient     ports.APIClient
+	store         *auth.Store
 }
 
 // NewCLI creates a new CLI instance
-func NewCLI(reportService ports.ReportService, cfg *config.Config, parserFactory ports.ParserFactory, apiClient ports.APIClient) *CLI {
+func NewCLI(reportService ports.ReportService, cfg *config.Config, parserFactory ports.ParserFactory, apiClient ports.APIClient, store *auth.Store) *CLI {
 	return &CLI{
 		reportService: reportService,
 		config:        cfg,
 		parserFactory: parserFactory,
 		apiClient:     apiClient,
+		store:         store,
 	}
 }
 
@@ -40,12 +43,14 @@ func (c *CLI) CreateRootCommand() *cobra.Command {
 		Short: "Qualflare CLI - Collect test results for Qualflare",
 		Long: `qf is a CLI tool for Qualflare — parse test results and manage test data.
 
-Collect & Parse:
+Authentication:
+  login            Save credentials for a project (qf login <id> <token>)
+  logout           Remove saved credentials
+  projects         List locally saved project identifiers
+
+Project-scoped commands (run as `+"`qf <identifier> <command>`"+`):
   collect          Collect test results and send to Qualflare
   validate         Validate test result files
-  list-formats     List supported test frameworks
-
-Test Management:
   suites / suite         List and view test suites
   cases / case           List and view test cases and steps
   plans / plan           List and view test plans
@@ -53,6 +58,10 @@ Test Management:
   defects / defect       List and view defects
   clusters / cluster     List and view failure clusters
   milestones / milestone List and view milestones
+
+Other:
+  list-formats     List supported test frameworks
+  version          Print version information
 
 Supported frameworks:
   Unit Testing:    junit, python, golang, jest, mocha, rspec, phpunit
@@ -62,42 +71,84 @@ Supported frameworks:
   Security:        zap, trivy, snyk, sonarqube`,
 		SilenceUsage:  true,
 		SilenceErrors: true,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if len(args) == 0 && len(c.store.List()) == 0 {
+				fmt.Println("No projects configured. Run 'qf login <identifier> <token>' to get started.")
+				return nil
+			}
+			return cmd.Help()
+		},
 	}
 
 	// Global flags
-	cmd.PersistentFlags().StringVar(&c.config.APIKey, "api-key", "", "API key for authentication (or set QF_API_KEY)")
 	cmd.PersistentFlags().StringVar(&c.config.APIEndpoint, "api-endpoint", "", "API endpoint URL (or set QF_API_ENDPOINT)")
 	cmd.PersistentFlags().BoolVarP(&c.config.Verbose, "verbose", "v", false, "Enable verbose output")
 	cmd.PersistentFlags().BoolVarP(&c.config.Quiet, "quiet", "q", false, "Suppress non-error output")
 
-	// Add subcommands
-	cmd.AddCommand(c.createCollectCommand())
-	cmd.AddCommand(c.createValidateCommand())
+	// Flat (auth-less) subcommands
+	cmd.AddCommand(c.createLoginCommand())
+	cmd.AddCommand(c.createLogoutCommand())
+	cmd.AddCommand(c.createProjectsCommand())
 	cmd.AddCommand(c.createVersionCommand())
 	cmd.AddCommand(c.createListFormatsCommand())
-	cmd.AddCommand(c.createSuitesCommand())
-	cmd.AddCommand(c.createSuiteCommand())
-	cmd.AddCommand(c.createCasesCommand())
-	cmd.AddCommand(c.createCaseCommand())
-	cmd.AddCommand(c.createPlansCommand())
-	cmd.AddCommand(c.createPlanCommand())
-	cmd.AddCommand(c.createLaunchesCommand())
-	cmd.AddCommand(c.createLaunchCommand())
-	cmd.AddCommand(c.createDefectsCommand())
-	cmd.AddCommand(c.createDefectCommand())
-	cmd.AddCommand(c.createClustersCommand())
-	cmd.AddCommand(c.createClusterCommand())
-	cmd.AddCommand(c.createMilestonesCommand())
-	cmd.AddCommand(c.createMilestoneCommand())
+
+	// One identifier-scoped subtree per saved project
+	for _, id := range c.store.List() {
+		token, _ := c.store.Get(id)
+		cmd.AddCommand(c.createIdentifierCommand(id, token))
+	}
 
 	return cmd
+}
+
+// createIdentifierCommand builds a parent subcommand for one saved identifier
+// and attaches a fresh authed subtree under it. PersistentPreRunE injects the
+// token into config so the http client middleware picks it up at request time.
+func (c *CLI) createIdentifierCommand(identifier, token string) *cobra.Command {
+	parent := &cobra.Command{
+		Use:           identifier,
+		Short:         "Commands scoped to project " + identifier,
+		SilenceUsage:  true,
+		SilenceErrors: true,
+		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+			c.config.SetAPIKey(token)
+			return nil
+		},
+	}
+	for _, sub := range c.buildAuthedSubtree() {
+		parent.AddCommand(sub)
+	}
+	return parent
+}
+
+// buildAuthedSubtree returns a fresh slice of authed subcommands. Each call
+// produces new *cobra.Command instances; do NOT share these pointers across
+// parents because cobra mutates the parent reference on AddCommand.
+func (c *CLI) buildAuthedSubtree() []*cobra.Command {
+	return []*cobra.Command{
+		c.createCollectCommand(),
+		c.createValidateCommand(),
+		c.createSuitesCommand(),
+		c.createSuiteCommand(),
+		c.createCasesCommand(),
+		c.createCaseCommand(),
+		c.createPlansCommand(),
+		c.createPlanCommand(),
+		c.createLaunchesCommand(),
+		c.createLaunchCommand(),
+		c.createDefectsCommand(),
+		c.createDefectCommand(),
+		c.createClustersCommand(),
+		c.createClusterCommand(),
+		c.createMilestonesCommand(),
+		c.createMilestoneCommand(),
+	}
 }
 
 // createCollectCommand creates the collect subcommand
 func (c *CLI) createCollectCommand() *cobra.Command {
 	var (
 		format      string
-		project     string
 		environment string
 		language    string
 		branch      string
@@ -114,25 +165,24 @@ func (c *CLI) createCollectCommand() *cobra.Command {
 
 Files can be specified as arguments or using glob patterns.
 The format is auto-detected if not specified.`,
-		Example: `  # Collect JUnit XML files
-  qf collect results.xml --project my-app --format junit
+		Example: `  # Collect JUnit XML files for project 'my-app'
+  qf my-app collect results.xml --format junit
 
   # Auto-detect format
-  qf collect playwright-results.json --project my-app
+  qf my-app collect playwright-results.json
 
   # Collect multiple files
-  qf collect *.xml --project my-app --format junit
+  qf my-app collect *.xml --format junit
 
   # Dry run (parse and show what would be sent)
-  qf collect results.xml --project my-app --dry-run
+  qf my-app collect results.xml --dry-run
 
   # Output parsed results as JSON
-  qf collect results.xml --project my-app --dry-run --output json`,
+  qf my-app collect results.xml --dry-run --output json`,
 		Args: cobra.MinimumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return c.runCollect(cmd.Context(), args, collectOptions{
 				format:      format,
-				project:     project,
 				environment: environment,
 				language:    language,
 				branch:      branch,
@@ -146,7 +196,6 @@ The format is auto-detected if not specified.`,
 
 	// Flags
 	cmd.Flags().StringVarP(&format, "format", "f", "", "Test framework format (auto-detected if not specified)")
-	cmd.Flags().StringVarP(&project, "project", "p", "", "Project name (optional, defaults to API key project)")
 	cmd.Flags().StringVarP(&environment, "environment", "e", "", "Environment name")
 	cmd.Flags().StringVar(&language, "lang", "en-US", "Language/culture (BCP 47 format, e.g., en-US, de-DE)")
 	cmd.Flags().StringVar(&branch, "branch", "", "Git branch name")
@@ -160,7 +209,6 @@ The format is auto-detected if not specified.`,
 
 type collectOptions struct {
 	format      string
-	project     string
 	environment string
 	language    string
 	branch      string
@@ -172,7 +220,6 @@ type collectOptions struct {
 
 func (c *CLI) runCollect(ctx context.Context, files []string, opts collectOptions) error {
 	// Apply command line overrides
-	c.config.SetProject(opts.project)
 	c.config.SetEnvironment(opts.environment)
 	c.config.SetLanguage(opts.language)
 	c.config.SetBranch(opts.branch)
@@ -250,13 +297,13 @@ func (c *CLI) createValidateCommand() *cobra.Command {
 		Short: "Validate test result files without sending",
 		Long:  `Validate that test result files can be parsed correctly without sending them.`,
 		Example: `  # Validate a single file
-  qf validate results.xml
+  qf <id> validate results.xml
 
   # Validate with specific format
-  qf validate results.json --format playwright
+  qf <id> validate results.json --format playwright
 
   # Validate multiple files
-  qf validate *.xml`,
+  qf <id> validate *.xml`,
 		Args: cobra.MinimumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return c.runValidate(cmd.Context(), args, format)

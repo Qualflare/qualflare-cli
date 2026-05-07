@@ -21,13 +21,13 @@ func (c *CLI) createDefectsCommand() *cobra.Command {
 		Short: "List defects",
 		Long:  "List defects detected in the project.",
 		Example: `  # List all defects
-  qf defects list
+  qf <id> defects list
 
   # Filter by severity
-  qf defects list --severity critical,high
+  qf <id> defects list --severity critical,high
 
   # Filter by status
-  qf defects list --status active`,
+  qf <id> defects list --status active`,
 	}
 
 	listCmd := &cobra.Command{
@@ -59,7 +59,7 @@ func (c *CLI) createDefectCommand() *cobra.Command {
 		Short: "Get defect details",
 		Long:  "Get details for a specific defect.",
 		Example: `  # Get defect by sequence number
-  qf defect get 7`,
+  qf <id> defect get 7`,
 	}
 
 	getCmd := &cobra.Command{

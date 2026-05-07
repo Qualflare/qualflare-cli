@@ -17,7 +17,7 @@ func (c *CLI) fetchAndPrint(path string, params url.Values) error {
 	defer cancel()
 
 	if c.config.GetAPIKey() == "" {
-		return fmt.Errorf("API key is required. Set it via --api-key flag or QF_API_KEY environment variable")
+		return fmt.Errorf("no token loaded; run 'qf login <identifier> <token>' first")
 	}
 
 	data, err := c.apiClient.Get(ctx, path, params)
