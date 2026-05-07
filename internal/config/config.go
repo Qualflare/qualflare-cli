@@ -21,7 +21,6 @@ type Config struct {
 	APIEndpoint string
 
 	// Project settings
-	Project     string
 	Environment string
 	Language    string
 
@@ -69,11 +68,10 @@ func NewConfig() *Config {
 	return cfg
 }
 
-// LoadFromEnv loads configuration from environment variables
+// LoadFromEnv loads configuration from environment variables.
+// Note: QF_API_KEY is intentionally NOT read here — tokens come from the
+// auth store via `qf login <identifier> <token>`.
 func (c *Config) LoadFromEnv() {
-	if v := os.Getenv("QF_API_KEY"); v != "" {
-		c.APIKey = v
-	}
 	if v := os.Getenv("QF_API_ENDPOINT"); v != "" {
 		c.APIEndpoint = v
 	}
@@ -132,13 +130,6 @@ func (c *Config) SetAPIKey(key string) {
 func (c *Config) SetAPIEndpoint(endpoint string) {
 	if endpoint != "" {
 		c.APIEndpoint = endpoint
-	}
-}
-
-// SetProject sets the project name
-func (c *Config) SetProject(project string) {
-	if project != "" {
-		c.Project = project
 	}
 }
 
@@ -202,11 +193,6 @@ func (c *Config) GetAPIEndpoint() string {
 	return c.APIEndpoint
 }
 
-// GetProject returns the project name
-func (c *Config) GetProject() string {
-	return c.Project
-}
-
 // GetEnvironment returns the environment
 func (c *Config) GetEnvironment() string {
 	return c.Environment
@@ -257,7 +243,7 @@ func (c *Config) Validate() error {
 	if !c.DryRun && c.APIKey == "" {
 		return &ValidationError{
 			Field:   "api_key",
-			Message: "API key is required. Set it via --api-key flag or QF_API_KEY environment variable.",
+			Message: "no token loaded; run 'qf login <identifier> <token>' first",
 		}
 	}
 	if c.APIEndpoint == "" {

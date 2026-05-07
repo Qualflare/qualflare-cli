@@ -22,13 +22,13 @@ func (c *CLI) createLaunchesCommand() *cobra.Command {
 		Short: "List test launches",
 		Long:  "List test execution launches in the project.",
 		Example: `  # List all launches
-  qf launches list
+  qf <id> launches list
 
   # Filter by milestone
-  qf launches list --milestone 3
+  qf <id> launches list --milestone 3
 
   # Filter by environment
-  qf launches list --environment prod`,
+  qf <id> launches list --environment prod`,
 	}
 
 	listCmd := &cobra.Command{
@@ -64,7 +64,7 @@ func (c *CLI) createLaunchCommand() *cobra.Command {
 		Short: "Get launch details",
 		Long:  "Get details for a specific test launch.",
 		Example: `  # Get launch by sequence number
-  qf launch get 10`,
+  qf <id> launch get 10`,
 	}
 
 	getCmd := &cobra.Command{

@@ -20,10 +20,10 @@ func (c *CLI) createClustersCommand() *cobra.Command {
 		Short: "List failure clusters",
 		Long:  "List failure clusters detected in the project.",
 		Example: `  # List all failure clusters
-  qf clusters list
+  qf <id> clusters list
 
   # Filter by severity
-  qf clusters list --severity critical`,
+  qf <id> clusters list --severity critical`,
 	}
 
 	listCmd := &cobra.Command{
@@ -53,7 +53,7 @@ func (c *CLI) createClusterCommand() *cobra.Command {
 		Short: "Get cluster details",
 		Long:  "Get details for a specific failure cluster.",
 		Example: `  # Get cluster by ID
-  qf cluster get 15`,
+  qf <id> cluster get 15`,
 	}
 
 	getCmd := &cobra.Command{
