@@ -20,10 +20,10 @@ func (c *CLI) createMilestonesCommand() *cobra.Command {
 		Short: "List milestones",
 		Long:  "List milestones/releases in the project.",
 		Example: `  # List all milestones
-  qf milestones list
+  qf <id> milestones list
 
   # Search milestones
-  qf milestones list --query "v2.0"`,
+  qf <id> milestones list --query "v2.0"`,
 	}
 
 	listCmd := &cobra.Command{
@@ -55,7 +55,7 @@ func (c *CLI) createMilestoneCommand() *cobra.Command {
 		Short: "Get milestone details",
 		Long:  "Get details for a specific milestone.",
 		Example: `  # Get milestone by sequence number
-  qf milestone get 3`,
+  qf <id> milestone get 3`,
 	}
 
 	getCmd := &cobra.Command{

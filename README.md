@@ -38,43 +38,54 @@ The binary is output to `build/qf`.
 
 ## Quick Start
 
+The CLI manages credentials per-project through local **identifiers** (aliases). Log in once with `qf login`, then run every command under that identifier.
+
 ```bash
+# Save credentials under a local alias
+qf login myapp YOUR_API_KEY
+
 # Collect test results (format auto-detected)
-qf collect results.xml --api-key YOUR_API_KEY
+qf myapp collect results.xml
 
 # Specify framework explicitly
-qf collect results.json --format playwright --api-key YOUR_API_KEY
+qf myapp collect results.json --format playwright
 
 # Collect multiple files
-qf collect *.xml --format junit --api-key YOUR_API_KEY
+qf myapp collect *.xml --format junit
 
 # Dry run — parse and preview without sending
-qf collect results.xml --dry-run
+qf myapp collect results.xml --dry-run
 
 # Output parsed results as JSON
-qf collect results.xml --dry-run --output json
+qf myapp collect results.xml --dry-run --output json
 
-# Validate files without sending
-qf validate results.xml
+# Validate files without sending (no auth required)
+qf myapp validate results.xml
 
 # Browse your test data
-qf suites list --api-key YOUR_API_KEY
-qf launches list --milestone 3
-qf defects list --severity critical,high
-qf case get 42
+qf myapp suites list
+qf myapp launches list --milestone 3
+qf myapp defects list --severity critical,high
+qf myapp case get 42
+
+# Manage saved identifiers
+qf projects             # list saved identifiers
+qf logout myapp         # remove credentials
 ```
 
 ## CI/CD Integration
 
-Set your API key as an environment variable and add a step after your test runner:
+In CI, run `qf login` first (with `--force` to skip the overwrite prompt) and then use that identifier for every subsequent command. Pick a stable identifier like `ci` or your project slug.
 
 ### GitHub Actions
 
 ```yaml
 - name: Collect test results
-  run: qf collect test-results/*.xml
+  run: |
+    qf login ci "$QF_TOKEN" --force
+    qf ci collect test-results/*.xml
   env:
-    QF_API_KEY: ${{ secrets.QF_API_KEY }}
+    QF_TOKEN: ${{ secrets.QF_TOKEN }}
     QF_ENVIRONMENT: ci
     QF_BRANCH: ${{ github.ref_name }}
     QF_COMMIT: ${{ github.sha }}
@@ -86,9 +97,10 @@ Set your API key as an environment variable and add a step after your test runne
 collect_results:
   stage: report
   script:
-    - qf collect test-results/*.xml
+    - qf login ci "$QF_TOKEN" --force
+    - qf ci collect test-results/*.xml
   variables:
-    QF_API_KEY: $QF_API_KEY
+    QF_TOKEN: $QF_TOKEN
     QF_ENVIRONMENT: ci
     QF_BRANCH: $CI_COMMIT_REF_NAME
     QF_COMMIT: $CI_COMMIT_SHA
@@ -100,10 +112,10 @@ collect_results:
 post {
     always {
         sh '''
-            export QF_API_KEY=${QF_API_KEY}
             export QF_BRANCH=${GIT_BRANCH}
             export QF_COMMIT=${GIT_COMMIT}
-            qf collect test-results/*.xml
+            qf login ci "${QF_TOKEN}" --force
+            qf ci collect test-results/*.xml
         '''
     }
 }
@@ -113,20 +125,39 @@ post {
 
 ```bash
 docker run --rm \
-  -e QF_API_KEY=your-api-key \
   -v $(pwd)/test-results:/results \
-  ghcr.io/Qualflare/qf:latest collect /results/*.xml
+  -e QF_TOKEN="$QF_TOKEN" \
+  ghcr.io/Qualflare/qf:latest \
+  /bin/sh -c 'qf login ci "$QF_TOKEN" --force && qf ci collect /results/*.xml'
 ```
 
 ## Configuration
 
-Configuration is resolved in order: CLI flags > environment variables > config file > defaults.
+### Authentication
+
+Tokens are stored locally per identifier in:
+
+| Platform | Path |
+|----------|------|
+| Linux | `$XDG_CONFIG_HOME/qualflare/config.toml` (defaults to `~/.config/qualflare/config.toml`) |
+| macOS | `~/Library/Application Support/qualflare/config.toml` |
+| Windows | `%AppData%\qualflare\config.toml` |
+
+The file is created with `0600` permissions and the directory with `0700`. Tokens are stored in plain text — protect the file as you would an SSH key.
+
+```bash
+qf login myapp qf_xxx           # save credentials
+qf login myapp qf_yyy --force   # overwrite without prompting
+qf logout myapp                 # remove
+qf projects                     # list saved identifiers
+```
+
+Identifiers must match `^[a-z0-9][a-z0-9_-]{0,62}$` and cannot collide with reserved command names (`login`, `logout`, `projects`, `version`, `list-formats`, `help`, `completion`).
 
 ### Environment Variables
 
 | Variable | Description | Default |
 |----------|-------------|---------|
-| `QF_API_KEY` | API authentication key | — |
 | `QF_API_ENDPOINT` | API endpoint URL | `https://api.qualflare.com` |
 | `QF_ENVIRONMENT` | Environment name | `development` |
 | `QF_LANGUAGE` | Language/culture (BCP 47) | `en-US` |
@@ -139,65 +170,56 @@ Configuration is resolved in order: CLI flags > environment variables > config f
 
 Git branch and commit are auto-detected from common CI environment variables (`GITHUB_REF_NAME`, `CI_COMMIT_REF_NAME`, `BITBUCKET_BRANCH`, etc.).
 
-### Config File
-
-Create a `qualflare.yaml` or `.qualflarerc` in your project root:
-
-```yaml
-api_key: your-api-key
-api_endpoint: https://api.qualflare.com
-environment: production
-language: en-US
-branch: main
-retry_max: 3
-timeout: 30s
-```
+> **Migrating from earlier versions:** `QF_API_KEY` and `--api-key` are no longer read. Run `qf login <identifier> $QF_API_KEY` once, then prefix every command with `<identifier>`.
 
 ## Commands
 
-### Collect & Parse
+### Auth & meta (no identifier)
 
 ```
-qf collect [files...]      Collect test results and send to Qualflare
-qf validate [files...]     Validate test result files without sending
+qf login <id> <token>      Save credentials (use --force to overwrite)
+qf logout <id>             Remove saved credentials
+qf projects                List saved identifiers
 qf list-formats            List all supported test frameworks
 qf version                 Print version information
 ```
 
-### Test Management
+### Project-scoped (run as `qf <identifier> <command>`)
 
 All read commands output JSON to stdout, making them pipeable to `jq` and usable by AI agents.
 
 ```
-qf suites list             List test suites
-qf suite get <seq>         Get suite details
+qf <id> collect [files...]         Collect test results and send to Qualflare
+qf <id> validate [files...]        Validate test result files without sending
 
-qf cases list --suite <n>  List cases in a suite
-qf case get <seq>          Get case details
-qf case steps <seq>        Get steps for a case
+qf <id> suites list                List test suites
+qf <id> suite get <seq>            Get suite details
 
-qf plans list              List test plans
-qf plan get <seq>          Get plan details
-qf plan cases <seq>        Get cases in a plan
+qf <id> cases list --suite <n>     List cases in a suite
+qf <id> case get <seq>             Get case details
+qf <id> case steps <seq>           Get steps for a case
 
-qf launches list           List test launches
-qf launch get <seq>        Get launch details
+qf <id> plans list                 List test plans
+qf <id> plan get <seq>             Get plan details
+qf <id> plan cases <seq>           Get cases in a plan
 
-qf defects list            List defects
-qf defect get <seq>        Get defect details
+qf <id> launches list              List test launches
+qf <id> launch get <seq>           Get launch details
 
-qf clusters list           List failure clusters
-qf cluster get <id>        Get cluster details
+qf <id> defects list               List defects
+qf <id> defect get <seq>           Get defect details
 
-qf milestones list         List milestones
-qf milestone get <seq>     Get milestone details
+qf <id> clusters list              List failure clusters
+qf <id> cluster get <id>           Get cluster details
+
+qf <id> milestones list            List milestones
+qf <id> milestone get <seq>        Get milestone details
 ```
 
 ### Global Flags
 
 | Flag | Short | Description |
 |------|-------|-------------|
-| `--api-key` | | API key for authentication (or set `QF_API_KEY`) |
 | `--api-endpoint` | | API endpoint URL (or set `QF_API_ENDPOINT`) |
 | `--verbose` | `-v` | Enable verbose output |
 | `--quiet` | `-q` | Suppress non-error output |
@@ -207,7 +229,6 @@ qf milestone get <seq>     Get milestone details
 | Flag | Short | Description |
 |------|-------|-------------|
 | `--format` | `-f` | Test framework format (auto-detected if omitted) |
-| `--project` | `-p` | Project name |
 | `--environment` | `-e` | Environment name |
 | `--lang` | | Language/culture (BCP 47) |
 | `--branch` | | Git branch name |
