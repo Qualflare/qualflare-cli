@@ -1,3 +1,4 @@
+// Package factory registers all supported parsers and detects test frameworks from file content.
 package factory
 
 import (

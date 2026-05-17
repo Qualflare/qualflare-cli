@@ -1,3 +1,4 @@
+// Package http provides a resty-based HTTP client for the Qualflare API.
 package http
 
 import (
@@ -9,9 +10,12 @@ import (
 	"qualflare-cli/internal/core/domain"
 	"qualflare-cli/internal/core/ports"
 	"qualflare-cli/internal/version"
+	"strings"
 
 	"resty.dev/v3"
 )
+
+const apiBasePath = "/api/v1"
 
 // Client handles HTTP communication with the API
 type Client struct {
@@ -32,7 +36,9 @@ func NewHTTPClient(config ports.ConfigProvider, opts ...ClientOption) *Client {
 		SetRetryCount(maxRetries).
 		SetRetryWaitTime(baseDelay).
 		SetRetryMaxWaitTime(maxDelay).
-		SetAllowNonIdempotentRetry(true).
+		// Do not follow redirects: the auth middleware re-runs on every hop, so
+		// a redirect to a different host would forward QF_TOKEN to that host.
+		SetRedirectPolicy(resty.NoRedirectPolicy()).
 		SetHeader("User-Agent", version.UserAgent()).
 		SetHeader("Accept", "application/json").
 		AddRetryConditions(func(resp *resty.Response, err error) bool {
@@ -58,7 +64,7 @@ func NewHTTPClient(config ports.ConfigProvider, opts ...ClientOption) *Client {
 	c := &Client{
 		resty:    rc,
 		config:   config,
-		endpoint: config.GetAPIEndpoint(),
+		endpoint: strings.TrimRight(config.GetAPIEndpoint(), "/"),
 	}
 
 	for _, opt := range opts {
@@ -76,21 +82,20 @@ func (c *Client) Close() {
 // WithEndpoint overrides the API endpoint
 func WithEndpoint(endpoint string) ClientOption {
 	return func(c *Client) {
-		c.endpoint = endpoint
+		c.endpoint = strings.TrimRight(endpoint, "/")
 	}
 }
 
 // SendReport sends a report to the API
 func (c *Client) SendReport(ctx context.Context, report *domain.Launch) error {
+	url := c.endpoint + apiBasePath + "/collect"
 	if c.config.IsVerbose() {
-		jsonData, _ := json.Marshal(report)
-		fmt.Printf("Upload request body size: %d bytes\n", len(jsonData))
+		fmt.Printf("POST %s\n", url)
 	}
-
 	resp, err := c.resty.R().
 		SetContext(ctx).
 		SetBody(report).
-		Post(c.endpoint + "/api/v1/collect")
+		Post(url)
 	if err != nil {
 		return &APIError{Op: "send", Message: "failed to send request", Err: err}
 	}
@@ -102,7 +107,7 @@ func (c *Client) SendReport(ctx context.Context, report *domain.Launch) error {
 	return c.buildAPIError("send", resp)
 }
 
-// Get performs a GET request to the API
+// Get performs a GET request to the API. path must include the full API path (e.g. /api/v1/suites).
 func (c *Client) Get(ctx context.Context, path string, params url.Values) (json.RawMessage, error) {
 	reqURL := c.endpoint + path
 

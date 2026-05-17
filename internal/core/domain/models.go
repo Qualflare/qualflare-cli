@@ -1,3 +1,4 @@
+// Package domain defines the core data models shared across all adapters.
 package domain
 
 import (

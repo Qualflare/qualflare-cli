@@ -1,3 +1,4 @@
+// Package services implements the core business logic for parsing and sending test reports.
 package services
 
 import (

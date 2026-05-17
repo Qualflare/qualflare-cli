@@ -1,3 +1,4 @@
+// Package ports declares the interfaces that connect the domain to its adapters.
 package ports
 
 import (
