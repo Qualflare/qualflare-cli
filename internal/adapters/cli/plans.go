@@ -36,7 +36,7 @@ func (c *CLI) createPlansCommand() *cobra.Command {
 			if query != "" {
 				params.Set("q", query)
 			}
-			return c.fetchAndPrint("/api/v1/test-plans", params)
+			return c.fetchAndPrint(apiV1+"/test-plans", params)
 		},
 	}
 
@@ -66,7 +66,7 @@ func (c *CLI) createPlanCommand() *cobra.Command {
 		Short: "Get a test plan by sequence number",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return c.fetchAndPrint(fmt.Sprintf("/api/v1/test-plan/%s", args[0]), nil)
+			return c.fetchAndPrint(fmt.Sprintf(apiV1+"/test-plan/%s", args[0]), nil)
 		},
 	}
 
@@ -75,7 +75,7 @@ func (c *CLI) createPlanCommand() *cobra.Command {
 		Short: "Get cases in a test plan",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return c.fetchAndPrint(fmt.Sprintf("/api/v1/test-plan/%s/cases", args[0]), nil)
+			return c.fetchAndPrint(fmt.Sprintf(apiV1+"/test-plan/%s/cases", args[0]), nil)
 		},
 	}
 

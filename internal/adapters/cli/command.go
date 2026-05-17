@@ -1,3 +1,4 @@
+// Package cli wires together the Cobra command tree and delegates to core services.
 package cli
 
 import (
@@ -15,6 +16,14 @@ import (
 
 	"github.com/spf13/cobra"
 )
+
+const apiV1 = "/api/v1"
+
+func warnLegacyAPIKey() {
+	if os.Getenv("QF_API_KEY") != "" {
+		fmt.Fprintln(os.Stderr, "Note: QF_API_KEY is no longer read. Run 'qf login <identifier> $QF_API_KEY' to migrate.")
+	}
+}
 
 // CLI handles command-line interface operations
 type CLI struct {
@@ -219,6 +228,7 @@ type collectOptions struct {
 }
 
 func (c *CLI) runCollect(ctx context.Context, files []string, opts collectOptions) error {
+	warnLegacyAPIKey()
 	// Apply command line overrides
 	c.config.SetEnvironment(opts.environment)
 	c.config.SetLanguage(opts.language)

@@ -1,3 +1,4 @@
+// Package auth manages per-project credential storage backed by a TOML file.
 package auth
 
 import (

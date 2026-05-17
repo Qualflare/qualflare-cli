@@ -39,7 +39,7 @@ func (c *CLI) createDefectsCommand() *cobra.Command {
 			addSorting(params, sortBy, sortDesc)
 			addSliceParam(params, "severity[]", severity)
 			addSliceParam(params, "status[]", status)
-			return c.fetchAndPrint("/api/v1/defects", params)
+			return c.fetchAndPrint(apiV1+"/defects", params)
 		},
 	}
 
@@ -67,7 +67,7 @@ func (c *CLI) createDefectCommand() *cobra.Command {
 		Short: "Get a defect by sequence number",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return c.fetchAndPrint(fmt.Sprintf("/api/v1/defect/%s", args[0]), nil)
+			return c.fetchAndPrint(fmt.Sprintf(apiV1+"/defect/%s", args[0]), nil)
 		},
 	}
 

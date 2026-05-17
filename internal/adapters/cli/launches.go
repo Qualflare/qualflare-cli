@@ -44,7 +44,7 @@ func (c *CLI) createLaunchesCommand() *cobra.Command {
 			if environment != "" {
 				params.Add("environments[]", environment)
 			}
-			return c.fetchAndPrint("/api/v1/launches", params)
+			return c.fetchAndPrint(apiV1+"/launches", params)
 		},
 	}
 
@@ -72,7 +72,7 @@ func (c *CLI) createLaunchCommand() *cobra.Command {
 		Short: "Get a launch by sequence number",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return c.fetchAndPrint(fmt.Sprintf("/api/v1/launch/%s", args[0]), nil)
+			return c.fetchAndPrint(fmt.Sprintf(apiV1+"/launch/%s", args[0]), nil)
 		},
 	}
 

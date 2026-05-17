@@ -10,7 +10,7 @@ import (
 // that would collide with the command at the root. Existing configs with
 // such identifiers continue to load (Validate runs at login time only) but
 // new logins are rejected.
-var ReservedNames = map[string]struct{}{
+var reservedNames = map[string]struct{}{
 	"login":        {},
 	"logout":       {},
 	"projects":     {},
@@ -30,7 +30,7 @@ func Validate(id string) error {
 	if id == "" {
 		return fmt.Errorf("identifier cannot be empty")
 	}
-	if _, ok := ReservedNames[id]; ok {
+	if _, ok := reservedNames[id]; ok {
 		return fmt.Errorf("identifier %q is reserved", id)
 	}
 	if !identifierPattern.MatchString(id) {

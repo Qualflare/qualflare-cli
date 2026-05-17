@@ -46,7 +46,7 @@ func TestValidate_Reject(t *testing.T) {
 }
 
 func TestValidate_Reserved(t *testing.T) {
-	for name := range ReservedNames {
+	for name := range reservedNames {
 		t.Run(name, func(t *testing.T) {
 			err := Validate(name)
 			if err == nil {
