@@ -14,11 +14,7 @@ import (
 )
 
 func main() {
-	exitCode := run()
-	if os.Getenv("QF_API_KEY") != "" {
-		fmt.Fprintln(os.Stderr, "Note: QF_API_KEY is no longer read. Run 'qf login <identifier> $QF_API_KEY' to migrate.")
-	}
-	os.Exit(exitCode)
+	os.Exit(run())
 }
 
 func run() int {

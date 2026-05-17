@@ -36,7 +36,7 @@ func (c *CLI) createMilestonesCommand() *cobra.Command {
 			if query != "" {
 				params.Set("q", query)
 			}
-			return c.fetchAndPrint("/api/v1/milestones", params)
+			return c.fetchAndPrint(apiV1+"/milestones", params)
 		},
 	}
 
@@ -63,7 +63,7 @@ func (c *CLI) createMilestoneCommand() *cobra.Command {
 		Short: "Get a milestone by sequence number",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return c.fetchAndPrint(fmt.Sprintf("/api/v1/milestone/%s", args[0]), nil)
+			return c.fetchAndPrint(fmt.Sprintf(apiV1+"/milestone/%s", args[0]), nil)
 		},
 	}
 

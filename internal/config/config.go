@@ -1,3 +1,4 @@
+// Package config holds runtime configuration and loads it from env vars.
 package config
 
 import (
@@ -9,9 +10,8 @@ import (
 )
 
 const (
-	maxRetryCount  = 10
-	maxFileSize    = 100 * 1024 * 1024 // 100MB
-	MaxFileSize    = maxFileSize
+	maxRetryCount = 10
+	MaxFileSize   = 100 * 1024 * 1024 // 100 MB
 )
 
 // Config holds the application configuration
