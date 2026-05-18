@@ -26,7 +26,7 @@ func (c *CLI) createCasesCommand() *cobra.Command {
   qf <id> cases list --suite 5
 
   # Filter by state
-  qf <id> cases list --suite 5 --state passed,failed`,
+  qf <id> cases list --suite 5 --state active,review`,
 	}
 
 	listCmd := &cobra.Command{
@@ -42,8 +42,8 @@ func (c *CLI) createCasesCommand() *cobra.Command {
 			if query != "" {
 				params.Set("q", query)
 			}
-			addSliceParam(params, "state[]", states)
-			addSliceParam(params, "priority[]", priority)
+			addSliceParam(params, "state", states)
+			addSliceParam(params, "priority", priority)
 			return c.fetchAndPrint(fmt.Sprintf(apiV1+"/suite/%d/cases", suiteSeq), params)
 		},
 	}
@@ -51,7 +51,7 @@ func (c *CLI) createCasesCommand() *cobra.Command {
 	listCmd.Flags().IntVar(&suiteSeq, "suite", 0, "Suite sequence number (required)")
 	listCmd.Flags().IntVar(&page, "page", 0, "Page number")
 	listCmd.Flags().StringVar(&query, "query", "", "Search query")
-	listCmd.Flags().StringSliceVar(&states, "state", nil, "Filter by state (passed,failed,skipped,...)")
+	listCmd.Flags().StringSliceVar(&states, "state", nil, "Filter by state (active,review,outdated,draft)")
 	listCmd.Flags().StringSliceVar(&priority, "priority", nil, "Filter by priority (low,medium,high,critical)")
 	listCmd.Flags().StringVar(&sortBy, "sort-by", "", "Sort by field")
 	listCmd.Flags().BoolVar(&sortDesc, "sort-desc", false, "Sort in descending order")
