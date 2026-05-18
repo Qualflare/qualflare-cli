@@ -69,10 +69,12 @@ Breaking changes should include `!` after the type, e.g. `feat!: rename --api-ke
 ## Adding a New Parser
 
 1. Create a new package under `internal/adapters/parsers/<category>/<framework>/`.
-2. Implement the `ports.Parser` interface (`Parse(*os.File) (*domain.Suite, error)` and `GetFramework() domain.Framework`).
+   - Valid categories: `generic`, `unit`, `bdd`, `e2e`, `api`, `security`.
+   - If your framework emits standard JUnit XML, use the shared helper: `internal/adapters/parsers/shared/junitxml`. Import it and call `junitxml.Parse(reader, domain.FrameworkYours)` — no XML decoding needed in your package.
+2. Implement the `ports.Parser` interface (`Parse(io.Reader) (*domain.Suite, error)`, `GetFramework() domain.Framework`, `SupportedFileExtensions() []string`).
 3. Register the parser in `internal/adapters/parsers/factory/factory.go`.
-4. Add the framework constant to `internal/core/domain/models.go` (`Framework.IsValid`, `AllFrameworks`, `GetCategory`).
-5. Add the name to `internal/auth/identifier.go:reservedNames` if it collides with a CLI subcommand.
-6. Add a fixture file under `examples/<category>/<framework>/` and wire up a `make validate-<framework>` target in the `Makefile`.
+4. Add the framework constant to `internal/core/domain/models.go` (`AllFrameworks`, `GetCategory`).
+5. Add the name to `internal/auth/identifier.go:reservedNames` only if it matches a top-level CLI subcommand name.
+6. Add a fixture file under `examples/<category>/<framework>-example.<ext>` and wire up `make validate-<framework>` and `make collect-<framework>` targets in the `Makefile`.
 7. Write a `_test.go` file that covers at minimum: a happy-path parse, an empty file, and a malformed file.
 

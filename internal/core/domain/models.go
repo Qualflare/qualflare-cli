@@ -10,24 +10,30 @@ import (
 type Framework string
 
 const (
+	// Generic (JUnit-compatible) — any tool that emits standard JUnit XML
+	FrameworkJUnit Framework = "junit"
+
 	// Unit Testing Frameworks
-	FrameworkJUnit   Framework = "junit"
 	FrameworkPython  Framework = "python"
 	FrameworkGolang  Framework = "golang"
 	FrameworkJest    Framework = "jest"
 	FrameworkMocha   Framework = "mocha"
 	FrameworkRSpec   Framework = "rspec"
 	FrameworkPHPUnit Framework = "phpunit"
+	FrameworkTestNG  Framework = "testng"
 
 	// BDD Frameworks
 	FrameworkCucumber Framework = "cucumber"
 	FrameworkKarate   Framework = "karate"
 
-	// UI/E2E Testing Frameworks
+	// UI/E2E / Mobile Testing Frameworks
 	FrameworkPlaywright Framework = "playwright"
 	FrameworkCypress    Framework = "cypress"
 	FrameworkSelenium   Framework = "selenium"
 	FrameworkTestCafe   Framework = "testcafe"
+	FrameworkMaestro    Framework = "maestro"
+	FrameworkXCTest     Framework = "xctest"
+	FrameworkEspresso   Framework = "espresso"
 
 	// API Testing Frameworks
 	FrameworkNewman Framework = "newman"
@@ -50,12 +56,16 @@ func AllFrameworks() []Framework {
 		FrameworkMocha,
 		FrameworkRSpec,
 		FrameworkPHPUnit,
+		FrameworkTestNG,
 		FrameworkCucumber,
 		FrameworkKarate,
 		FrameworkPlaywright,
 		FrameworkCypress,
 		FrameworkSelenium,
 		FrameworkTestCafe,
+		FrameworkMaestro,
+		FrameworkXCTest,
+		FrameworkEspresso,
 		FrameworkNewman,
 		FrameworkK6,
 		FrameworkZAP,
@@ -69,6 +79,7 @@ func AllFrameworks() []Framework {
 type FrameworkCategory string
 
 const (
+	CategoryGeneric  FrameworkCategory = "generic"
 	CategoryUnitTest FrameworkCategory = "unit"
 	CategoryBDD      FrameworkCategory = "bdd"
 	CategoryE2E      FrameworkCategory = "e2e"
@@ -79,12 +90,15 @@ const (
 // GetCategory returns the category for a framework
 func (f Framework) GetCategory() FrameworkCategory {
 	switch f {
-	case FrameworkJUnit, FrameworkPython, FrameworkGolang, FrameworkJest,
-		FrameworkMocha, FrameworkRSpec, FrameworkPHPUnit:
+	case FrameworkJUnit:
+		return CategoryGeneric
+	case FrameworkPython, FrameworkGolang, FrameworkJest,
+		FrameworkMocha, FrameworkRSpec, FrameworkPHPUnit, FrameworkTestNG:
 		return CategoryUnitTest
 	case FrameworkCucumber, FrameworkKarate:
 		return CategoryBDD
-	case FrameworkPlaywright, FrameworkCypress, FrameworkSelenium, FrameworkTestCafe:
+	case FrameworkPlaywright, FrameworkCypress, FrameworkSelenium, FrameworkTestCafe,
+		FrameworkMaestro, FrameworkXCTest, FrameworkEspresso:
 		return CategoryE2E
 	case FrameworkNewman, FrameworkK6:
 		return CategoryAPI
