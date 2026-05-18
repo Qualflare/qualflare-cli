@@ -185,12 +185,12 @@ type ErrorResponse struct {
 	Code    string `json:"code"`
 }
 
-// API error codes
+// API error codes — must match server's result.Code constants (dot-notation).
 const (
-	ErrCodeEnvironmentNotFound = "ENVIRONMENT_NOT_FOUND"
-	ErrCodeMilestoneNotFound   = "MILESTONE_NOT_FOUND"
-	ErrCodeValidationFailed    = "VALIDATION_FAILED"
-	ErrCodeLanguageNotFound    = "LANGUAGE_NOT_FOUND"
+	ErrCodeEnvironmentNotFound = "environment.not_found"
+	ErrCodeMilestoneNotFound   = "milestone.not_found"
+	ErrCodeValidationFailed    = "common.validation_failed"
+	ErrCodeLanguageNotFound    = "common.resource_not_found"
 )
 
 // getUserFriendlyMessage returns a user-friendly error message for known error codes
