@@ -5,7 +5,7 @@
 [![Go Report Card](https://goreportcard.com/badge/github.com/qualflare/qualflare-cli)](https://goreportcard.com/report/github.com/qualflare/qualflare-cli)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
 
-Upload test results to [Qualflare](https://qualflare.com) from any CI pipeline or local machine. Supports 19 testing frameworks with automatic format detection.
+Upload test results to [Qualflare](https://qualflare.com) from any CI pipeline or local machine. Supports 23 testing frameworks with automatic format detection.
 
 ## Installation
 
@@ -16,12 +16,6 @@ brew install qualflare/tap/qf
 
 # Upgrade to the latest version
 brew upgrade qualflare/tap/qf
-```
-
-**Docker**
-
-```bash
-docker run --rm ghcr.io/qualflare/qf:latest version
 ```
 
 **Binary download** — grab the latest release for your platform from the [Releases](https://github.com/qualflare/qualflare-cli/releases/latest) page and place `qf` on your `PATH`.
@@ -109,7 +103,7 @@ Add a single step after your test run. Store your token in a repository secret n
     QF_COMMIT: ${{ github.sha }}
 ```
 
-`qf` is a single static binary with no runtime dependencies. If you're using GitLab CI, CircleCI, Jenkins, or another platform, download the binary from [Releases](https://github.com/qualflare/qualflare-cli/releases/latest) or use the Docker image and run the same two commands. See [the documentation](https://docs.qualflare.com) for platform-specific snippets.
+`qf` is a single static binary with no runtime dependencies. If you're using GitLab CI, CircleCI, Jenkins, or another platform, download the binary from [Releases](https://github.com/qualflare/qualflare-cli/releases/latest) and run the same two commands. See [the documentation](https://docs.qualflare.com) for platform-specific snippets.
 
 ## Commands
 
@@ -130,13 +124,16 @@ Run `qf <command> --help` for flags and examples.
 
 | Category | Frameworks |
 |----------|-----------|
-| **Unit Testing** | JUnit, pytest, Go testing, Jest/Vitest, Mocha, RSpec, PHPUnit |
+| **Generic (JUnit-compatible)** | JUnit |
+| **Unit Testing** | pytest, Go testing, Jest/Vitest, Mocha, RSpec, PHPUnit, TestNG |
 | **BDD** | Cucumber, Karate |
-| **E2E / UI** | Playwright, Cypress, Selenium, TestCafe |
+| **UI / E2E / Mobile** | Playwright, Cypress, Selenium, TestCafe, Maestro, XCTest, Espresso |
 | **API Testing** | Newman (Postman), k6 |
 | **Security** | OWASP ZAP, Trivy, Snyk, SonarQube |
 
 Format is auto-detected from the filename and file content. Pass `--format <name>` to override. Run `qf list-formats` for all valid format names.
+
+Any framework that emits standard JUnit XML — NUnit, MSTest, xUnit.net, Robot Framework, and others — can be uploaded using `--format junit`. Because all JUnit emitters share the same XML schema, use `--format <name>` (or a recognizable filename like `maestro-results.xml`) to disambiguate Maestro, XCTest, Espresso, and TestNG outputs from generic JUnit.
 
 ## Configuration
 
@@ -146,7 +143,6 @@ Key environment variables:
 
 | Variable | Description |
 |----------|-------------|
-| `QF_API_ENDPOINT` | Override the API host (default: `https://api.qualflare.com`) |
 | `QF_VERBOSE` | Set to `true` for debug request/response logging |
 | `QF_BRANCH` / `QF_COMMIT` | Git context (auto-detected from common CI vars if unset) |
 

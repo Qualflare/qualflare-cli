@@ -28,11 +28,11 @@ func (c *CLI) fetchAndPrint(path string, params url.Values) error {
 	// Pretty-print JSON
 	var buf bytes.Buffer
 	if err := json.Indent(&buf, data, "", "  "); err != nil {
-		fmt.Fprintln(os.Stdout, string(data))
+		_, _ = fmt.Fprintln(os.Stdout, string(data))
 		return nil
 	}
 
-	fmt.Fprintln(os.Stdout, buf.String())
+	_, _ = fmt.Fprintln(os.Stdout, buf.String())
 	return nil
 }
 
@@ -47,9 +47,7 @@ func addSorting(params url.Values, sortBy string, sortDesc bool) {
 	if sortBy != "" {
 		params.Set("sortBy", sortBy)
 	}
-	if sortDesc {
-		params.Set("sortDir", "desc")
-	}
+	params.Set("sortDir", strconv.FormatBool(sortDesc))
 }
 
 func addSliceParam(params url.Values, key string, values []string) {

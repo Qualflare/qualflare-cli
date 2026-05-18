@@ -130,14 +130,12 @@ func TestSave_AtomicCleansTempOnRenameFailure(t *testing.T) {
 		t.Fatalf("write blocker: %v", err)
 	}
 
-	s, err := Load(target) // Load on a directory should error
+	_, err := Load(target) // Load on a directory should error
 	if err == nil {
 		t.Logf("Load on directory unexpectedly succeeded; constructing store manually")
-		s = &Store{path: target, data: fileFormat{SchemaVersion: schemaVersion, Identifiers: map[string]Identifier{}}}
-	} else {
-		// We deliberately construct the store directly because Load wraps the read error.
-		s = &Store{path: target, data: fileFormat{SchemaVersion: schemaVersion, Identifiers: map[string]Identifier{}}}
 	}
+	// We deliberately construct the store directly because Load wraps the read error.
+	s := &Store{path: target, data: fileFormat{SchemaVersion: schemaVersion, Identifiers: map[string]Identifier{}}}
 	s.Set("myapp", "qf_aaa")
 	if err := s.Save(); err == nil {
 		t.Fatal("Save: expected error when target is a non-empty directory")

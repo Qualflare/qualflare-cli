@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuites name="Maestro Flow Tests" tests="4" failures="1" errors="0" skipped="0" time="12.456">
+  <testsuite name="LoginFlow" tests="2" failures="0" errors="0" skipped="0" time="5.234" timestamp="2024-01-15T10:30:00">
+    <testcase classname="LoginFlow" name="user can log in with valid credentials" time="2.456">
+    </testcase>
+    <testcase classname="LoginFlow" name="user sees error on invalid credentials" time="2.778">
+    </testcase>
+  </testsuite>
+  <testsuite name="CheckoutFlow" tests="2" failures="1" errors="0" skipped="0" time="7.222" timestamp="2024-01-15T10:30:06">
+    <testcase classname="CheckoutFlow" name="user can add item to cart" time="3.100">
+    </testcase>
+    <testcase classname="CheckoutFlow" name="user can complete purchase" time="4.122">
+      <failure message="Element not found: #confirm-button" type="AssertionError">
+maestro.sdk.AssertionError: Element not found: #confirm-button
+  at CheckoutFlow.yaml:28
+      </failure>
+    </testcase>
+  </testsuite>
+</testsuites>

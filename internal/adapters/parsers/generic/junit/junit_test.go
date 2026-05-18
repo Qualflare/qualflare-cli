@@ -33,7 +33,6 @@ func TestJUnitParserDefaultRetryCount(t *testing.T) {
 }
 
 func TestJUnitParserExtractsRetryFromProperties(t *testing.T) {
-	// Some tools add retry count as a property
 	xmlReport := `
     <testsuites>
         <testsuite name="Test Suite" tests="1">
@@ -62,7 +61,6 @@ func TestJUnitParserExtractsRetryFromProperties(t *testing.T) {
 }
 
 func TestJUnitParserFailedTestWithRetries(t *testing.T) {
-	// Test that fails after retries - should not be marked as flaky
 	xmlReport := `
     <testsuites>
         <testsuite name="Test Suite" tests="1">
@@ -91,6 +89,18 @@ func TestJUnitParserFailedTestWithRetries(t *testing.T) {
 	}
 	if testCase.Status != domain.StatusFailed {
 		t.Errorf("expected StatusFailed, got %s", testCase.Status)
+	}
+}
+
+func TestJUnitParser_Category(t *testing.T) {
+	xmlReport := `<testsuites><testsuite name="S" tests="1"><testcase name="t" classname="C"/></testsuite></testsuites>`
+	parser := New()
+	suite, err := parser.Parse(strings.NewReader(xmlReport))
+	if err != nil {
+		t.Fatalf("parse error: %v", err)
+	}
+	if suite.Category != domain.CategoryGeneric {
+		t.Errorf("expected CategoryGeneric, got %s", suite.Category)
 	}
 }
 

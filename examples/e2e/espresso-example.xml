@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuites name="Espresso Tests" tests="4" failures="1" errors="0" skipped="0" time="22.345">
+  <testsuite name="com.example.app.LoginActivityTest" tests="2" failures="0" errors="0" skipped="0" time="10.234" timestamp="2024-01-15T09:00:00">
+    <properties>
+      <property name="device" value="Pixel_6_API_33"/>
+      <property name="android.version" value="13"/>
+    </properties>
+    <testcase classname="com.example.app.LoginActivityTest" name="testValidLoginNavigatesToHome" time="5.678">
+    </testcase>
+    <testcase classname="com.example.app.LoginActivityTest" name="testInvalidLoginShowsErrorMessage" time="4.556">
+    </testcase>
+  </testsuite>
+  <testsuite name="com.example.app.CartActivityTest" tests="2" failures="1" errors="0" skipped="0" time="12.111" timestamp="2024-01-15T09:00:12">
+    <testcase classname="com.example.app.CartActivityTest" name="testAddItemToCartUpdatesCount" time="6.002">
+    </testcase>
+    <testcase classname="com.example.app.CartActivityTest" name="testRemoveItemFromCart" time="6.109">
+      <failure message="View with id 'R.id.remove_button' not found in hierarchy" type="androidx.test.espresso.NoMatchingViewException">
+androidx.test.espresso.NoMatchingViewException: View with id 'R.id.remove_button' not found in hierarchy
+  at com.example.app.CartActivityTest.testRemoveItemFromCart(CartActivityTest.kt:58)
+      </failure>
+    </testcase>
+  </testsuite>
+</testsuites>

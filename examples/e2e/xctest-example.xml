@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuites name="XCTest Results" tests="5" failures="1" errors="0" skipped="1" time="8.910">
+  <testsuite name="AuthViewControllerTests" tests="3" failures="1" errors="0" skipped="0" time="4.230" timestamp="2024-01-15T11:00:00">
+    <testcase classname="AuthViewControllerTests" name="testLoginWithValidCredentials" time="1.234">
+    </testcase>
+    <testcase classname="AuthViewControllerTests" name="testLoginWithInvalidPassword" time="0.987">
+    </testcase>
+    <testcase classname="AuthViewControllerTests" name="testBiometricAuthentication" time="2.009">
+      <failure message="Expected element 'FaceID prompt' to appear within 2s" type="XCTAssertionFailure">
+XCTAssertionFailure: Expected element 'FaceID prompt' to appear within 2s
+  AuthViewControllerTests.swift:72
+      </failure>
+    </testcase>
+  </testsuite>
+  <testsuite name="ProfileViewControllerTests" tests="2" failures="0" errors="0" skipped="1" time="4.680" timestamp="2024-01-15T11:00:05">
+    <testcase classname="ProfileViewControllerTests" name="testProfileImageUpload" time="3.120">
+    </testcase>
+    <testcase classname="ProfileViewControllerTests" name="testProfileEditingDisabledForGuest" time="0.0">
+      <skipped message="Requires guest account setup"/>
+    </testcase>
+  </testsuite>
+</testsuites>

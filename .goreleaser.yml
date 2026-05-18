@@ -28,7 +28,8 @@ builds:
 
 archives:
   - id: default
-    format: tar.gz
+    formats:
+      - tar.gz
     name_template: >-
       {{ .ProjectName }}_
       {{- .Version }}_
@@ -36,7 +37,8 @@ archives:
       {{- .Arch }}
     format_overrides:
       - goos: windows
-        format: zip
+        formats:
+          - zip
     files:
       - LICENSE*
       - README*
@@ -69,34 +71,17 @@ changelog:
     - title: Others
       order: 999
 
-brews:
+homebrew_casks:
   - name: qf
     repository:
       owner: qualflare
       name: homebrew-tap
       token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
-    directory: Formula
+    directory: Casks
     homepage: https://github.com/qualflare/qualflare-cli
     description: CLI tool for collecting test results for Qualflare
     license: Apache-2.0
-    test: |
-      system "#{bin}/qf", "version"
-    install: |
-      bin.install "qf"
     skip_upload: "{{ if .Env.HOMEBREW_TAP_TOKEN }}false{{ else }}true{{ end }}"
-
-dockers:
-  - image_templates:
-      - "ghcr.io/qualflare/qf:{{ .Version }}"
-      - "ghcr.io/qualflare/qf:latest"
-    dockerfile: Dockerfile
-    build_flag_templates:
-      - "--pull"
-      - "--label=org.opencontainers.image.created={{.Date}}"
-      - "--label=org.opencontainers.image.title={{.ProjectName}}"
-      - "--label=org.opencontainers.image.revision={{.FullCommit}}"
-      - "--label=org.opencontainers.image.version={{.Version}}"
-    skip_push: auto
 
 release:
   github:
@@ -115,11 +100,6 @@ release:
 
     ### Binary Download
     Download the appropriate binary for your platform from the assets below.
-
-    ### Docker
-    ```bash
-    docker pull ghcr.io/qualflare/qf:{{.Version}}
-    ```
 
     ## Quick Start
     ```bash

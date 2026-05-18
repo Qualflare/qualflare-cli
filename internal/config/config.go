@@ -2,8 +2,6 @@
 package config
 
 import (
-	"fmt"
-	"net/url"
 	"os"
 	"strconv"
 	"time"
@@ -14,11 +12,12 @@ const (
 	MaxFileSize   = 100 * 1024 * 1024 // 100 MB
 )
 
+const apiEndpoint = "https://api.qualflare.com"
+
 // Config holds the application configuration
 type Config struct {
 	// API settings
-	APIKey      string
-	APIEndpoint string
+	APIKey string
 
 	// Project settings
 	Environment string
@@ -46,7 +45,6 @@ type Config struct {
 func DefaultConfig() *Config {
 	return &Config{
 		APIKey:         "",
-		APIEndpoint:    "https://api.qualflare.com",
 		Environment:    "development",
 		Language:       "en-US",
 		Branch:         "",
@@ -72,9 +70,6 @@ func NewConfig() *Config {
 // Note: QF_API_KEY is intentionally NOT read here — tokens come from the
 // auth store via `qf login <identifier> <token>`.
 func (c *Config) LoadFromEnv() {
-	if v := os.Getenv("QF_API_ENDPOINT"); v != "" {
-		c.APIEndpoint = v
-	}
 	if v := os.Getenv("QF_ENVIRONMENT"); v != "" {
 		c.Environment = v
 	}
@@ -123,13 +118,6 @@ func (c *Config) LoadFromEnv() {
 func (c *Config) SetAPIKey(key string) {
 	if key != "" {
 		c.APIKey = key
-	}
-}
-
-// SetAPIEndpoint sets the API endpoint
-func (c *Config) SetAPIEndpoint(endpoint string) {
-	if endpoint != "" {
-		c.APIEndpoint = endpoint
 	}
 }
 
@@ -190,7 +178,7 @@ func (c *Config) GetAPIKey() string {
 
 // GetAPIEndpoint returns the API endpoint
 func (c *Config) GetAPIEndpoint() string {
-	return c.APIEndpoint
+	return apiEndpoint
 }
 
 // GetEnvironment returns the environment
@@ -244,18 +232,6 @@ func (c *Config) Validate() error {
 		return &ValidationError{
 			Field:   "api_key",
 			Message: "no token loaded; run 'qf login <identifier> <token>' first",
-		}
-	}
-	if c.APIEndpoint == "" {
-		return &ValidationError{
-			Field:   "api_endpoint",
-			Message: "API endpoint is required.",
-		}
-	}
-	if _, err := url.ParseRequestURI(c.APIEndpoint); err != nil {
-		return &ValidationError{
-			Field:   "api_endpoint",
-			Message: fmt.Sprintf("API endpoint is not a valid URL: %s", c.APIEndpoint),
 		}
 	}
 	if c.RetryMax > maxRetryCount {

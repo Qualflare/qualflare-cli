@@ -78,7 +78,6 @@ type ConfigProvider interface {
 // ConfigMutator defines the interface for mutating configuration
 type ConfigMutator interface {
 	SetAPIKey(key string)
-	SetAPIEndpoint(endpoint string)
 	SetEnvironment(env string)
 	SetLanguage(language string)
 	SetBranch(branch string)

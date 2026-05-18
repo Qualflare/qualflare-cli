@@ -205,7 +205,7 @@ func (s *ReportService) parseFile(filePath string, parser ports.Parser) (*domain
 	if err != nil {
 		return nil, fmt.Errorf("failed to open file: %w", err)
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 
 	suite, err := parser.Parse(file)
 	if err != nil {
