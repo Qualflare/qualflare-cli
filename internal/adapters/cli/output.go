@@ -47,9 +47,7 @@ func addSorting(params url.Values, sortBy string, sortDesc bool) {
 	if sortBy != "" {
 		params.Set("sortBy", sortBy)
 	}
-	if sortDesc {
-		params.Set("sortDir", "desc")
-	}
+	params.Set("sortDir", strconv.FormatBool(sortDesc))
 }
 
 func addSliceParam(params url.Values, key string, values []string) {

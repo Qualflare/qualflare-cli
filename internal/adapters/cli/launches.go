@@ -42,7 +42,7 @@ func (c *CLI) createLaunchesCommand() *cobra.Command {
 				params.Set("milestone", strconv.Itoa(milestoneSeq))
 			}
 			if environment != "" {
-				params.Add("environments[]", environment)
+				params.Add("environments", environment)
 			}
 			return c.fetchAndPrint(apiV1+"/launches", params)
 		},
