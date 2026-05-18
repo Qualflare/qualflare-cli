@@ -79,13 +79,6 @@ func (c *Client) Close() {
 	c.resty.Close()
 }
 
-// WithEndpoint overrides the API endpoint
-func WithEndpoint(endpoint string) ClientOption {
-	return func(c *Client) {
-		c.endpoint = strings.TrimRight(endpoint, "/")
-	}
-}
-
 // SendReport sends a report to the API
 func (c *Client) SendReport(ctx context.Context, report *domain.Launch) error {
 	url := c.endpoint + apiBasePath + "/collect"

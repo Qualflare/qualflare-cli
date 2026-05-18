@@ -20,16 +20,16 @@ CMD_DIR := cmd
 EXAMPLES_DIR := examples
 
 .PHONY: all build clean test lint fmt vet run install help
-.PHONY: validate-examples validate-unit validate-bdd validate-e2e validate-api validate-security
-.PHONY: validate-junit validate-pytest validate-golang validate-jest validate-mocha validate-rspec validate-phpunit
+.PHONY: validate-examples validate-generic validate-unit validate-bdd validate-e2e validate-api validate-security
+.PHONY: validate-junit validate-pytest validate-golang validate-jest validate-mocha validate-rspec validate-phpunit validate-testng
 .PHONY: validate-cucumber validate-karate
-.PHONY: validate-playwright validate-cypress validate-selenium validate-testcafe
+.PHONY: validate-playwright validate-cypress validate-selenium validate-testcafe validate-maestro validate-xctest validate-espresso
 .PHONY: validate-newman validate-k6
 .PHONY: validate-trivy validate-snyk validate-zap validate-sonarqube
-.PHONY: collect-examples collect-unit collect-bdd collect-e2e collect-api collect-security
-.PHONY: collect-junit collect-pytest collect-golang collect-jest collect-mocha collect-rspec collect-phpunit
+.PHONY: collect-examples collect-generic collect-unit collect-bdd collect-e2e collect-api collect-security
+.PHONY: collect-junit collect-pytest collect-golang collect-jest collect-mocha collect-rspec collect-phpunit collect-testng
 .PHONY: collect-cucumber collect-karate
-.PHONY: collect-playwright collect-cypress collect-selenium collect-testcafe
+.PHONY: collect-playwright collect-cypress collect-selenium collect-testcafe collect-maestro collect-xctest collect-espresso
 .PHONY: collect-newman collect-k6
 .PHONY: collect-trivy collect-snyk collect-zap collect-sonarqube
 
@@ -200,9 +200,13 @@ help:
 # Validate all examples
 validate-examples: build
 	@echo "Validating all examples..."
-	@./$(BUILD_DIR)/$(BINARY_NAME) validate $(EXAMPLES_DIR)/unit/* $(EXAMPLES_DIR)/bdd/* $(EXAMPLES_DIR)/e2e/* $(EXAMPLES_DIR)/api/* $(EXAMPLES_DIR)/security/*
+	@./$(BUILD_DIR)/$(BINARY_NAME) validate $(EXAMPLES_DIR)/generic/* $(EXAMPLES_DIR)/unit/* $(EXAMPLES_DIR)/bdd/* $(EXAMPLES_DIR)/e2e/* $(EXAMPLES_DIR)/api/* $(EXAMPLES_DIR)/security/*
 
 # Category targets
+validate-generic: build
+	@echo "Validating generic (JUnit-compatible) examples..."
+	@./$(BUILD_DIR)/$(BINARY_NAME) validate $(EXAMPLES_DIR)/generic/*
+
 validate-unit: build
 	@echo "Validating unit test examples..."
 	@./$(BUILD_DIR)/$(BINARY_NAME) validate $(EXAMPLES_DIR)/unit/*
@@ -223,9 +227,9 @@ validate-security: build
 	@echo "Validating security examples..."
 	@./$(BUILD_DIR)/$(BINARY_NAME) validate $(EXAMPLES_DIR)/security/*
 
-# Unit test framework targets
+# Generic (JUnit-compatible) framework targets
 validate-junit: build
-	@./$(BUILD_DIR)/$(BINARY_NAME) validate $(EXAMPLES_DIR)/unit/junit-example.xml
+	@./$(BUILD_DIR)/$(BINARY_NAME) validate $(EXAMPLES_DIR)/generic/junit-example.xml
 
 validate-pytest: build
 	@./$(BUILD_DIR)/$(BINARY_NAME) validate $(EXAMPLES_DIR)/unit/pytest-example.xml
@@ -244,6 +248,9 @@ validate-rspec: build
 
 validate-phpunit: build
 	@./$(BUILD_DIR)/$(BINARY_NAME) validate $(EXAMPLES_DIR)/unit/phpunit-example.xml
+
+validate-testng: build
+	@./$(BUILD_DIR)/$(BINARY_NAME) validate $(EXAMPLES_DIR)/unit/testng-example.xml
 
 # BDD framework targets
 validate-cucumber: build
@@ -264,6 +271,15 @@ validate-selenium: build
 
 validate-testcafe: build
 	@./$(BUILD_DIR)/$(BINARY_NAME) validate $(EXAMPLES_DIR)/e2e/testcafe-example.json
+
+validate-maestro: build
+	@./$(BUILD_DIR)/$(BINARY_NAME) validate $(EXAMPLES_DIR)/e2e/maestro-example.xml
+
+validate-xctest: build
+	@./$(BUILD_DIR)/$(BINARY_NAME) validate $(EXAMPLES_DIR)/e2e/xctest-example.xml
+
+validate-espresso: build
+	@./$(BUILD_DIR)/$(BINARY_NAME) validate $(EXAMPLES_DIR)/e2e/espresso-example.xml
 
 # API framework targets
 validate-newman: build
@@ -292,9 +308,13 @@ validate-sonarqube: build
 # Collect all examples
 collect-examples: build
 	@echo "Collecting all examples..."
-	@./$(BUILD_DIR)/$(BINARY_NAME) collect $(EXAMPLES_DIR)/unit/* $(EXAMPLES_DIR)/bdd/* $(EXAMPLES_DIR)/e2e/* $(EXAMPLES_DIR)/api/* $(EXAMPLES_DIR)/security/*
+	@./$(BUILD_DIR)/$(BINARY_NAME) collect $(EXAMPLES_DIR)/generic/* $(EXAMPLES_DIR)/unit/* $(EXAMPLES_DIR)/bdd/* $(EXAMPLES_DIR)/e2e/* $(EXAMPLES_DIR)/api/* $(EXAMPLES_DIR)/security/*
 
 # Category targets
+collect-generic: build
+	@echo "Collecting generic (JUnit-compatible) examples..."
+	@./$(BUILD_DIR)/$(BINARY_NAME) collect $(EXAMPLES_DIR)/generic/*
+
 collect-unit: build
 	@echo "Collecting unit test examples..."
 	@./$(BUILD_DIR)/$(BINARY_NAME) collect $(EXAMPLES_DIR)/unit/*
@@ -315,9 +335,9 @@ collect-security: build
 	@echo "Collecting security examples..."
 	@./$(BUILD_DIR)/$(BINARY_NAME) collect $(EXAMPLES_DIR)/security/*
 
-# Unit test framework targets
+# Generic (JUnit-compatible) framework targets
 collect-junit: build
-	@./$(BUILD_DIR)/$(BINARY_NAME) collect $(EXAMPLES_DIR)/unit/junit-example.xml
+	@./$(BUILD_DIR)/$(BINARY_NAME) collect $(EXAMPLES_DIR)/generic/junit-example.xml
 
 collect-pytest: build
 	@./$(BUILD_DIR)/$(BINARY_NAME) collect $(EXAMPLES_DIR)/unit/pytest-example.xml
@@ -336,6 +356,9 @@ collect-rspec: build
 
 collect-phpunit: build
 	@./$(BUILD_DIR)/$(BINARY_NAME) collect $(EXAMPLES_DIR)/unit/phpunit-example.xml
+
+collect-testng: build
+	@./$(BUILD_DIR)/$(BINARY_NAME) collect $(EXAMPLES_DIR)/unit/testng-example.xml
 
 # BDD framework targets
 collect-cucumber: build
@@ -356,6 +379,15 @@ collect-selenium: build
 
 collect-testcafe: build
 	@./$(BUILD_DIR)/$(BINARY_NAME) collect $(EXAMPLES_DIR)/e2e/testcafe-example.json
+
+collect-maestro: build
+	@./$(BUILD_DIR)/$(BINARY_NAME) collect $(EXAMPLES_DIR)/e2e/maestro-example.xml
+
+collect-xctest: build
+	@./$(BUILD_DIR)/$(BINARY_NAME) collect $(EXAMPLES_DIR)/e2e/xctest-example.xml
+
+collect-espresso: build
+	@./$(BUILD_DIR)/$(BINARY_NAME) collect $(EXAMPLES_DIR)/e2e/espresso-example.xml
 
 # API framework targets
 collect-newman: build

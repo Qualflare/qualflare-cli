@@ -1,4 +1,7 @@
-package junit
+// Package junitxml parses JUnit XML test results. It is shared by all
+// JUnit-compatible parsers (junit, testng, maestro, xctest, espresso, etc.)
+// so each framework only needs a thin wrapper that stamps its own Framework.
+package junitxml
 
 import (
 	"encoding/xml"
@@ -10,10 +13,7 @@ import (
 	"qualflare-cli/internal/core/domain"
 )
 
-// Parser parses JUnit XML test results
-type Parser struct{}
-
-// JUnit XML structures
+// TestSuites is the root element of a JUnit XML report.
 type TestSuites struct {
 	XMLName    xml.Name    `xml:"testsuites"`
 	Name       string      `xml:"name,attr"`
@@ -25,6 +25,7 @@ type TestSuites struct {
 	TestSuites []TestSuite `xml:"testsuite"`
 }
 
+// TestSuite represents a single <testsuite> element.
 type TestSuite struct {
 	XMLName   xml.Name   `xml:"testsuite"`
 	Name      string     `xml:"name,attr"`
@@ -37,6 +38,7 @@ type TestSuite struct {
 	TestCases []TestCase `xml:"testcase"`
 }
 
+// TestCase represents a single <testcase> element.
 type TestCase struct {
 	Name       string     `xml:"name,attr"`
 	Classname  string     `xml:"classname,attr"`
@@ -49,39 +51,39 @@ type TestCase struct {
 	SystemErr  string     `xml:"system-err,omitempty"`
 }
 
+// Property is a key/value pair inside <properties>.
 type Property struct {
 	Name  string `xml:"name,attr"`
 	Value string `xml:"value,attr"`
 }
 
+// Failure holds a <failure> child element.
 type Failure struct {
 	Message string `xml:"message,attr"`
 	Type    string `xml:"type,attr"`
 	Text    string `xml:",chardata"`
 }
 
+// Error holds an <error> child element.
 type Error struct {
 	Message string `xml:"message,attr"`
 	Type    string `xml:"type,attr"`
 	Text    string `xml:",chardata"`
 }
 
+// Skipped holds a <skipped> child element.
 type Skipped struct {
 	Message string `xml:"message,attr"`
 }
 
-// New creates a new JUnit parser
-func New() *Parser {
-	return &Parser{}
-}
-
-// Parse parses JUnit XML content
-func (p *Parser) Parse(reader io.Reader) (*domain.Suite, error) {
+// Parse decodes JUnit XML from reader and stamps it with the given framework.
+// This is the single implementation shared by all JUnit-compatible parsers.
+func Parse(reader io.Reader, framework domain.Framework) (*domain.Suite, error) {
 	var testSuites TestSuites
 	decoder := xml.NewDecoder(reader)
 
 	if err := decoder.Decode(&testSuites); err != nil {
-		// Try parsing as a single test suite
+		// Try parsing as a single <testsuite> root element
 		if seeker, ok := reader.(io.Seeker); ok {
 			if _, err := seeker.Seek(0, 0); err != nil {
 				return nil, err
@@ -96,7 +98,6 @@ func (p *Parser) Parse(reader io.Reader) (*domain.Suite, error) {
 		testSuites.TestSuites = []TestSuite{singleSuite}
 	}
 
-	// If we have multiple test suites, aggregate them
 	if len(testSuites.TestSuites) == 0 {
 		return &domain.Suite{
 			Name:      "Empty Suite",
@@ -104,16 +105,13 @@ func (p *Parser) Parse(reader io.Reader) (*domain.Suite, error) {
 		}, nil
 	}
 
-	// For multiple suites, we could either merge them or return the first one
-	// Here we'll merge all suites into one
-	return p.mergeSuites(testSuites), nil
+	return mergeSuites(testSuites, framework), nil
 }
 
-// mergeSuites merges multiple JUnit test suites into a single domain.Suite
-func (p *Parser) mergeSuites(testSuites TestSuites) *domain.Suite {
+func mergeSuites(testSuites TestSuites, framework domain.Framework) *domain.Suite {
 	suite := &domain.Suite{
 		Name:      base.CoalesceString(testSuites.Name, "JUnit Test Results"),
-		Category:  domain.FrameworkJUnit.GetCategory(),
+		Category:  framework.GetCategory(),
 		Timestamp: time.Now().UTC(),
 		Cases:     make([]domain.Case, 0),
 	}
@@ -121,24 +119,21 @@ func (p *Parser) mergeSuites(testSuites TestSuites) *domain.Suite {
 	var totalDuration time.Duration
 
 	for _, junitSuite := range testSuites.TestSuites {
-		// Parse suite duration
 		if duration, err := base.ParseDuration(junitSuite.Time); err == nil {
 			totalDuration += duration
 		}
 
-		// Convert test cases
 		for _, tc := range junitSuite.TestCases {
-			testCase := p.convertTestCase(tc, junitSuite.Name)
+			testCase := convertTestCase(tc)
 			suite.Cases = append(suite.Cases, testCase)
 
-			// Update counters
 			switch testCase.Status {
 			case domain.StatusPassed:
 				suite.Passed++
 			case domain.StatusFailed:
 				suite.Failed++
 			case domain.StatusError:
-				suite.Failed++ // Count errors as failures
+				suite.Failed++
 			case domain.StatusSkipped:
 				suite.Skipped++
 			}
@@ -151,31 +146,26 @@ func (p *Parser) mergeSuites(testSuites TestSuites) *domain.Suite {
 	return suite
 }
 
-// convertTestCase converts a JUnit test case to domain.Case
-func (p *Parser) convertTestCase(tc TestCase, suiteName string) domain.Case {
+func convertTestCase(tc TestCase) domain.Case {
 	testCase := domain.Case{
 		ID:        tc.Classname + "." + tc.Name,
 		Name:      tc.Name,
 		ClassName: tc.Classname,
 	}
 
-	// Parse duration
 	if duration, err := base.ParseDuration(tc.Time); err == nil {
 		testCase.Duration = duration
 	}
 
-	// Parse retry count from properties if present
 	var retryCount int
 	for _, prop := range tc.Properties {
 		if prop.Name == "retries" || prop.Name == "retryCount" {
-			// Parse integer from string value
 			if _, err := fmt.Sscanf(prop.Value, "%d", &retryCount); err == nil {
 				testCase.RetryCount = domain.IntPtr(retryCount)
 			}
 		}
 	}
 
-	// Determine status
 	var errMsg, stackTrace, errType string
 	if tc.Failure != nil {
 		testCase.Status = domain.StatusFailed
@@ -192,7 +182,6 @@ func (p *Parser) convertTestCase(tc TestCase, suiteName string) domain.Case {
 		errMsg = tc.Skipped.Message
 	} else {
 		testCase.Status = domain.StatusPassed
-		// Flaky if passed after retries (only set when retry info is available)
 		if testCase.RetryCount != nil {
 			testCase.IsFlaky = domain.BoolPtr(retryCount > 0)
 		}
@@ -202,7 +191,6 @@ func (p *Parser) convertTestCase(tc TestCase, suiteName string) domain.Case {
 		testCase.Error = domain.FormatError(errMsg, stackTrace, errType)
 	}
 
-	// Add system output as properties if present
 	if tc.SystemOut != "" || tc.SystemErr != "" {
 		testCase.Properties = make(map[string]string)
 		if tc.SystemOut != "" {
@@ -214,14 +202,4 @@ func (p *Parser) convertTestCase(tc TestCase, suiteName string) domain.Case {
 	}
 
 	return testCase
-}
-
-// GetFramework returns the framework type
-func (p *Parser) GetFramework() domain.Framework {
-	return domain.FrameworkJUnit
-}
-
-// SupportedFileExtensions returns supported file extensions
-func (p *Parser) SupportedFileExtensions() []string {
-	return []string{".xml"}
 }

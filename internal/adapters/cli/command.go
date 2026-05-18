@@ -73,9 +73,10 @@ Other:
   version          Print version information
 
 Supported frameworks:
-  Unit Testing:    junit, python, golang, jest, mocha, rspec, phpunit
+  Generic (JUnit): junit
+  Unit Testing:    python, golang, jest, mocha, rspec, phpunit, testng
   BDD:             cucumber, karate
-  UI/E2E Testing:  playwright, cypress, selenium, testcafe
+  UI/E2E/Mobile:   playwright, cypress, selenium, testcafe, maestro, xctest, espresso
   API Testing:     newman, k6
   Security:        zap, trivy, snyk, sonarqube`,
 		SilenceUsage:  true,
@@ -90,7 +91,6 @@ Supported frameworks:
 	}
 
 	// Global flags
-	cmd.PersistentFlags().StringVar(&c.config.APIEndpoint, "api-endpoint", "", "API endpoint URL (or set QF_API_ENDPOINT)")
 	cmd.PersistentFlags().BoolVarP(&c.config.Verbose, "verbose", "v", false, "Enable verbose output")
 	cmd.PersistentFlags().BoolVarP(&c.config.Quiet, "quiet", "q", false, "Suppress non-error output")
 
@@ -393,13 +393,14 @@ func (c *CLI) createListFormatsCommand() *cobra.Command {
 		},
 	}
 
-	cmd.Flags().StringVarP(&category, "category", "c", "", "Filter by category (unit, bdd, e2e, api, security)")
+	cmd.Flags().StringVarP(&category, "category", "c", "", "Filter by category (generic, unit, bdd, e2e, api, security)")
 
 	return cmd
 }
 
 func (c *CLI) printFormats(categoryFilter string) {
 	categories := map[domain.FrameworkCategory][]domain.Framework{
+		domain.CategoryGeneric:  {},
 		domain.CategoryUnitTest: {},
 		domain.CategoryBDD:      {},
 		domain.CategoryE2E:      {},
@@ -413,14 +414,16 @@ func (c *CLI) printFormats(categoryFilter string) {
 	}
 
 	categoryNames := map[domain.FrameworkCategory]string{
+		domain.CategoryGeneric:  "Generic (JUnit-compatible)",
 		domain.CategoryUnitTest: "Unit Testing",
 		domain.CategoryBDD:      "BDD / Behavior-Driven",
-		domain.CategoryE2E:      "UI / E2E Testing",
+		domain.CategoryE2E:      "UI / E2E / Mobile Testing",
 		domain.CategoryAPI:      "API Testing",
 		domain.CategorySecurity: "Security Testing",
 	}
 
 	order := []domain.FrameworkCategory{
+		domain.CategoryGeneric,
 		domain.CategoryUnitTest,
 		domain.CategoryBDD,
 		domain.CategoryE2E,

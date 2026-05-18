@@ -19,11 +19,17 @@ import (
 	"qualflare-cli/internal/adapters/parsers/bdd/cucumber"
 	"qualflare-cli/internal/adapters/parsers/bdd/karate"
 
-	// E2E parsers
+	// E2E / Mobile parsers
 	"qualflare-cli/internal/adapters/parsers/e2e/cypress"
+	"qualflare-cli/internal/adapters/parsers/e2e/espresso"
+	"qualflare-cli/internal/adapters/parsers/e2e/maestro"
 	"qualflare-cli/internal/adapters/parsers/e2e/playwright"
 	"qualflare-cli/internal/adapters/parsers/e2e/selenium"
 	"qualflare-cli/internal/adapters/parsers/e2e/testcafe"
+	"qualflare-cli/internal/adapters/parsers/e2e/xctest"
+
+	// Generic parsers
+	"qualflare-cli/internal/adapters/parsers/generic/junit"
 
 	// Security parsers
 	"qualflare-cli/internal/adapters/parsers/security/snyk"
@@ -34,11 +40,11 @@ import (
 	// Unit test parsers
 	"qualflare-cli/internal/adapters/parsers/unit/golang"
 	"qualflare-cli/internal/adapters/parsers/unit/jest"
-	"qualflare-cli/internal/adapters/parsers/unit/junit"
 	"qualflare-cli/internal/adapters/parsers/unit/mocha"
 	"qualflare-cli/internal/adapters/parsers/unit/phpunit"
 	"qualflare-cli/internal/adapters/parsers/unit/pytest"
 	"qualflare-cli/internal/adapters/parsers/unit/rspec"
+	"qualflare-cli/internal/adapters/parsers/unit/testng"
 )
 
 // ParserFactory manages parser registration and detection
@@ -52,24 +58,30 @@ func NewParserFactory() *ParserFactory {
 		parsers: make(map[domain.Framework]ports.Parser),
 	}
 
-	// Unit Testing Parsers
+	// Generic (JUnit-compatible) Parsers
 	f.RegisterParser(junit.New())
+
+	// Unit Testing Parsers
 	f.RegisterParser(pytest.New())
 	f.RegisterParser(golang.New())
 	f.RegisterParser(jest.New())
 	f.RegisterParser(mocha.New())
 	f.RegisterParser(rspec.New())
 	f.RegisterParser(phpunit.New())
+	f.RegisterParser(testng.New())
 
 	// BDD Parsers
 	f.RegisterParser(cucumber.New())
 	f.RegisterParser(karate.New())
 
-	// UI/E2E Testing Parsers
+	// UI/E2E / Mobile Testing Parsers
 	f.RegisterParser(playwright.New())
 	f.RegisterParser(cypress.New())
 	f.RegisterParser(selenium.New())
 	f.RegisterParser(testcafe.New())
+	f.RegisterParser(maestro.New())
+	f.RegisterParser(xctest.New())
+	f.RegisterParser(espresso.New())
 
 	// API Testing Parsers
 	f.RegisterParser(newman.New())
@@ -124,7 +136,7 @@ func (f *ParserFactory) DetectFramework(filename string) (domain.Framework, erro
 	case strings.Contains(base, "sonar"):
 		return domain.FrameworkSonarQube, nil
 
-	// UI/E2E tools
+	// UI/E2E / Mobile tools
 	case strings.Contains(base, "playwright"):
 		return domain.FrameworkPlaywright, nil
 	case strings.Contains(base, "cypress") || strings.Contains(base, "mochawesome"):
@@ -133,6 +145,12 @@ func (f *ParserFactory) DetectFramework(filename string) (domain.Framework, erro
 		return domain.FrameworkTestCafe, nil
 	case strings.Contains(base, "selenium") || strings.Contains(base, "webdriver"):
 		return domain.FrameworkSelenium, nil
+	case strings.Contains(base, "maestro"):
+		return domain.FrameworkMaestro, nil
+	case strings.Contains(base, "xctest") || strings.Contains(base, "xcresult"):
+		return domain.FrameworkXCTest, nil
+	case strings.Contains(base, "espresso"):
+		return domain.FrameworkEspresso, nil
 
 	// API tools
 	case strings.Contains(base, "newman") || strings.Contains(base, "postman"):
@@ -155,6 +173,8 @@ func (f *ParserFactory) DetectFramework(filename string) (domain.Framework, erro
 		return domain.FrameworkRSpec, nil
 	case strings.Contains(base, "phpunit"):
 		return domain.FrameworkPHPUnit, nil
+	case strings.Contains(base, "testng"):
+		return domain.FrameworkTestNG, nil
 	case strings.Contains(base, "pytest") || strings.Contains(base, "python"):
 		return domain.FrameworkPython, nil
 	case strings.Contains(base, "go-test") || (strings.Contains(base, "go") && (ext == ".json" || ext == ".out")):
