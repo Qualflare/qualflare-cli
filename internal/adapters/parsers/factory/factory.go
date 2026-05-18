@@ -195,12 +195,13 @@ func (f *ParserFactory) DetectFrameworkFromContent(filename string, content []by
 	ext := strings.ToLower(filepath.Ext(filename))
 
 	// Try content-based detection
-	if ext == ".json" {
+	switch ext {
+	case ".json":
 		framework, err := f.detectJSONFramework(content)
 		if err == nil {
 			return framework, nil
 		}
-	} else if ext == ".xml" {
+	case ".xml":
 		framework, err := f.detectXMLFramework(content)
 		if err == nil {
 			return framework, nil

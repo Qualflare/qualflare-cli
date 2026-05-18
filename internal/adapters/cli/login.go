@@ -64,7 +64,7 @@ Examples:
 // confirmOverwrite prompts on stdin for [y/N]. Fails closed on non-TTY stdin.
 func confirmOverwrite(id string) (bool, error) {
 	if !term.IsTerminal(int(os.Stdin.Fd())) {
-		return false, fmt.Errorf("identifier %q already exists; cannot prompt because stdin is not a terminal. Use --force to overwrite.", id)
+		return false, fmt.Errorf("identifier %q already exists; cannot prompt because stdin is not a terminal — use --force to overwrite", id)
 	}
 	fmt.Fprintf(os.Stderr, "Identifier %q already exists. Overwrite? [y/N]: ", id)
 	reader := bufio.NewReader(os.Stdin)

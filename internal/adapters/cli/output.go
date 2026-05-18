@@ -28,11 +28,11 @@ func (c *CLI) fetchAndPrint(path string, params url.Values) error {
 	// Pretty-print JSON
 	var buf bytes.Buffer
 	if err := json.Indent(&buf, data, "", "  "); err != nil {
-		fmt.Fprintln(os.Stdout, string(data))
+		_, _ = fmt.Fprintln(os.Stdout, string(data))
 		return nil
 	}
 
-	fmt.Fprintln(os.Stdout, buf.String())
+	_, _ = fmt.Fprintln(os.Stdout, buf.String())
 	return nil
 }
 

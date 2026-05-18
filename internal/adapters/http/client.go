@@ -76,7 +76,7 @@ func NewHTTPClient(config ports.ConfigProvider, opts ...ClientOption) *Client {
 
 // Close releases resources held by the client
 func (c *Client) Close() {
-	c.resty.Close()
+	_ = c.resty.Close()
 }
 
 // SendReport sends a report to the API
