@@ -205,7 +205,7 @@ The format is auto-detected if not specified.`,
 
 	// Flags
 	cmd.Flags().StringVarP(&format, "format", "f", "", "Test framework format (auto-detected if not specified)")
-	cmd.Flags().StringVarP(&environment, "environment", "e", "", "Environment name")
+	cmd.Flags().StringVarP(&environment, "environment", "e", "staging", "Environment name")
 	cmd.Flags().StringVar(&language, "lang", "en-US", "Language/culture (BCP 47 format, e.g., en-US, de-DE)")
 	cmd.Flags().StringVar(&branch, "branch", "", "Git branch name")
 	cmd.Flags().StringVar(&commit, "commit", "", "Git commit hash")
