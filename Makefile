@@ -19,7 +19,7 @@ BUILD_DIR := build
 CMD_DIR := cmd
 EXAMPLES_DIR := examples
 
-.PHONY: all build clean test lint fmt vet run install help
+.PHONY: all build local clean test lint fmt vet run install help
 .PHONY: validate-examples validate-generic validate-unit validate-bdd validate-e2e validate-api validate-security
 .PHONY: validate-junit validate-pytest validate-golang validate-jest validate-mocha validate-rspec validate-phpunit validate-testng
 .PHONY: validate-cucumber validate-karate
@@ -59,6 +59,19 @@ build-darwin:
 build-windows:
 	@echo "Building for Windows..."
 	GOOS=windows GOARCH=amd64 $(GO) build $(LDFLAGS) -o $(BUILD_DIR)/$(BINARY_NAME)-windows-amd64.exe ./$(CMD_DIR)
+
+# Build a local-testing binary pointed at http://0.0.0.0:8003
+LOCAL_API_ENDPOINT := http://0.0.0.0:8003
+LOCAL_LDFLAGS := -ldflags "-X qualflare-cli/internal/version.Version=$(VERSION) \
+	-X qualflare-cli/internal/version.Commit=$(COMMIT) \
+	-X qualflare-cli/internal/version.BuildDate=$(BUILD_DATE) \
+	-X qualflare-cli/internal/config.apiEndpoint=$(LOCAL_API_ENDPOINT)"
+
+local:
+	@echo "Building $(BINARY_NAME)-local (API: $(LOCAL_API_ENDPOINT))..."
+	@mkdir -p $(BUILD_DIR)
+	GOWORK=off $(GO) build $(LOCAL_LDFLAGS) -o $(BUILD_DIR)/$(BINARY_NAME)-local ./$(CMD_DIR)
+	@echo "Local binary built at $(BUILD_DIR)/$(BINARY_NAME)-local"
 
 # Clean build artifacts
 clean:
@@ -158,6 +171,7 @@ help:
 	@echo "Targets:"
 	@echo "  all          Build the binary (default)"
 	@echo "  build        Build the binary for current OS/arch"
+	@echo "  local        Build binary pointed at http://0.0.0.0:8003 for local testing"
 	@echo "  build-all    Build for all platforms (linux, darwin, windows)"
 	@echo "  clean        Remove build artifacts"
 	@echo "  test         Run all tests with coverage"
