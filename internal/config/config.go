@@ -2,9 +2,12 @@
 package config
 
 import (
+	"context"
 	"os"
 	"strconv"
 	"time"
+
+	"qualflare-cli/internal/git"
 )
 
 const (
@@ -12,7 +15,7 @@ const (
 	MaxFileSize   = 100 * 1024 * 1024 // 100 MB
 )
 
-const apiEndpoint = "https://api.qualflare.com"
+var apiEndpoint = "https://api.qualflare.com"
 
 // Config holds the application configuration
 type Config struct {
@@ -77,9 +80,19 @@ func (c *Config) LoadFromEnv() {
 		c.Language = v
 	}
 
-	// Git information (common CI environment variables)
+	// Git information: CI env vars first, then fall back to local git detection.
 	c.Branch = getFirstEnv("QF_BRANCH", "GIT_BRANCH", "GITHUB_REF_NAME", "CI_COMMIT_REF_NAME", "BITBUCKET_BRANCH")
 	c.Commit = getFirstEnv("QF_COMMIT", "GIT_COMMIT", "GITHUB_SHA", "CI_COMMIT_SHA", "BITBUCKET_COMMIT")
+	if c.Branch == "" || c.Commit == "" {
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+		if c.Branch == "" {
+			c.Branch = git.DetectBranch(ctx)
+		}
+		if c.Commit == "" {
+			c.Commit = git.DetectCommit(ctx)
+		}
+	}
 
 	// Retry settings
 	if v := os.Getenv("QF_RETRY_MAX"); v != "" {
