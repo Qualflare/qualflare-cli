@@ -322,6 +322,23 @@ const (
 	SeverityUnknown  Severity = "unknown"
 )
 
+// ToCasePriority maps a finding severity onto the API's case `priority` enum
+// (critical/high/medium/low). Security scanners emit "info" and "unknown",
+// which are not valid priorities: "info" becomes the lowest priority and
+// "unknown" (or anything unrecognized) becomes "" so the field is omitted
+// rather than 500'ing the upload server-side. Kept distinct from Severity
+// itself because SecurityFinding.Severity legitimately uses the full set.
+func (s Severity) ToCasePriority() Severity {
+	switch s {
+	case SeverityCritical, SeverityHigh, SeverityMedium, SeverityLow:
+		return s
+	case SeverityInfo:
+		return SeverityLow
+	default:
+		return ""
+	}
+}
+
 // SecuritySuite represents a security scan result as a suite
 type SecuritySuite struct {
 	Suite
