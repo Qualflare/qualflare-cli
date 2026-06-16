@@ -217,6 +217,7 @@ func (s *ReportService) parseFile(filePath string, parser ports.Parser) (*domain
 
 // createReport creates a Launch report from test suites
 func (s *ReportService) createReport(testSuites []domain.Suite, framework domain.Framework) *domain.Launch {
+	normalizeCasePriorities(testSuites)
 	return &domain.Launch{
 		Framework:   string(framework),
 		Platform:    "api",
@@ -231,5 +232,18 @@ func (s *ReportService) createReport(testSuites []domain.Suite, framework domain
 			CLIName:   "qf",
 		},
 		Suites: testSuites,
+	}
+}
+
+// normalizeCasePriorities coerces every case's Priority into a value the API's
+// `priority` enum accepts (critical/high/medium/low). Security parsers emit
+// "info"/"unknown" severities, which an older server rejects with a 500 on the
+// whole launch; this guarantees a valid wire payload regardless of API version.
+// The server normalizes authoritatively too — this is defense in depth.
+func normalizeCasePriorities(suites []domain.Suite) {
+	for i := range suites {
+		for j := range suites[i].Cases {
+			suites[i].Cases[j].Priority = suites[i].Cases[j].Priority.ToCasePriority()
+		}
 	}
 }

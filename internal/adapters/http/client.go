@@ -3,6 +3,7 @@ package http
 
 import (
 	"context"
+	"crypto/rand"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -85,10 +86,16 @@ func (c *Client) SendReport(ctx context.Context, report *domain.Launch) error {
 	if c.config.IsVerbose() {
 		fmt.Printf("POST %s\n", url)
 	}
-	resp, err := c.resty.R().
+	req := c.resty.R().
 		SetContext(ctx).
-		SetBody(report).
-		Post(url)
+		SetBody(report)
+	// Idempotency-Key dedupes retries server-side: resty reuses this same request
+	// across its retry attempts, so a 5xx/timeout that fires after the server
+	// already committed won't create a duplicate launch (or double-count quota).
+	if key := newIdempotencyKey(); key != "" {
+		req.SetHeader("Idempotency-Key", key)
+	}
+	resp, err := req.Post(url)
 	if err != nil {
 		return &APIError{Op: "send", Message: "failed to send request", Err: err}
 	}
@@ -98,6 +105,21 @@ func (c *Client) SendReport(ctx context.Context, report *domain.Launch) error {
 	}
 
 	return c.buildAPIError("send", resp)
+}
+
+// newIdempotencyKey returns a random RFC 4122 v4 UUID string (≤255 chars, the
+// server's limit). One key is generated per collect invocation; resty reuses the
+// underlying request across retries so the key stays stable, letting the server
+// resolve a retried upload to the existing launch. Returns "" on the (practically
+// impossible) RNG failure so the caller omits the header rather than failing.
+func newIdempotencyKey() string {
+	var b [16]byte
+	if _, err := rand.Read(b[:]); err != nil {
+		return ""
+	}
+	b[6] = (b[6] & 0x0f) | 0x40 // version 4
+	b[8] = (b[8] & 0x3f) | 0x80 // variant 10 (RFC 4122)
+	return fmt.Sprintf("%x-%x-%x-%x-%x", b[0:4], b[4:6], b[6:8], b[8:10], b[10:16])
 }
 
 // Get performs a GET request to the API. path must include the full API path (e.g. /api/v1/suites).

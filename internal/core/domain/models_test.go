@@ -2,6 +2,30 @@ package domain
 
 import "testing"
 
+// TestSeverityToCasePriority guards the CLI half of the P0 fix: security parsers
+// emit "info"/"unknown" severities, which the API's `priority` enum rejects.
+// ToCasePriority must coerce every value to an enum-valid priority or "".
+func TestSeverityToCasePriority(t *testing.T) {
+	tests := []struct {
+		in   Severity
+		want Severity
+	}{
+		{SeverityCritical, SeverityCritical},
+		{SeverityHigh, SeverityHigh},
+		{SeverityMedium, SeverityMedium},
+		{SeverityLow, SeverityLow},
+		{SeverityInfo, SeverityLow},
+		{SeverityUnknown, ""},
+		{"", ""},
+		{"garbage", ""},
+	}
+	for _, tt := range tests {
+		if got := tt.in.ToCasePriority(); got != tt.want {
+			t.Errorf("Severity(%q).ToCasePriority() = %q, want %q", tt.in, got, tt.want)
+		}
+	}
+}
+
 func TestCaseWithRetryCount(t *testing.T) {
 	testCase := Case{
 		ID:         "test-1",
