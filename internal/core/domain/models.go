@@ -219,6 +219,36 @@ func (s *Suite) GetStatus() Status {
 	return StatusPassed
 }
 
+// RecomputeCounts derives Passed/Failed/Skipped/Errors and TotalTests from the
+// actual case statuses, so the suite counters can never disagree with the cases
+// (the source of truth the server itself recomputes from). Parsers that build
+// counters from a report header — or that increment them independently of case
+// status (the trivy/snyk suite.Failed++ bug) — call this at the end of Parse so
+// a report with real failures can never roll up green. Pending is folded into
+// Skipped (matching GetStatus); Flaky/Assertions/Retries are orthogonal to
+// pass/fail and left untouched.
+func (s *Suite) RecomputeCounts() {
+	var passed, failed, skipped, errors int
+	for _, c := range s.Cases {
+		switch c.Status {
+		case StatusPassed:
+			passed++
+		case StatusFailed:
+			failed++
+		case StatusError:
+			errors++
+		case StatusSkipped, StatusPending:
+			skipped++
+		default:
+			// An unrecognized status is a parser bug; count it as an error so it
+			// surfaces (red) rather than silently vanishing from the totals.
+			errors++
+		}
+	}
+	s.Passed, s.Failed, s.Skipped, s.Errors = passed, failed, skipped, errors
+	s.TotalTests = len(s.Cases)
+}
+
 // Case represents a single test case
 type Case struct {
 	// Identification
