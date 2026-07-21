@@ -72,6 +72,82 @@ func TestParserFactory_DetectFramework_FilenamePatterns(t *testing.T) {
 	}
 }
 
+// BUG-31: weak filename tokens (go/feature/python) were matched as unanchored
+// substrings, so unrelated files misrouted — e.g. "django" embeds "go" and was
+// routed to the Go parser (a false-green risk: a non-Go report parsed as Go).
+func TestParserFactory_DetectFramework_WeakTokenMisrouting(t *testing.T) {
+	f := NewParserFactory()
+
+	misrouting := []string{
+		"django-results.json", // embeds "go"
+		"cargo-audit.json",    // embeds "go"
+	}
+	for _, name := range misrouting {
+		t.Run(name, func(t *testing.T) {
+			fw, err := f.DetectFramework(name)
+			if err == nil && fw == domain.FrameworkGolang {
+				t.Fatalf("%s misrouted to golang via unanchored 'go' substring", name)
+			}
+		})
+	}
+}
+
+// BUG-31: anchoring the weak tokens must not break legitimate detection.
+func TestParserFactory_DetectFramework_WeakTokenLegitimate(t *testing.T) {
+	f := NewParserFactory()
+
+	tests := []struct {
+		filename  string
+		framework domain.Framework
+	}{
+		{"go-test-results.json", domain.FrameworkGolang},
+		{"app_go_test.json", domain.FrameworkGolang}, // underscore-delimited 'go' token
+		{"results.out", domain.FrameworkGolang},       // explicit .out extension
+		{"python-results.json", domain.FrameworkPython},
+		{"smoke.feature", domain.FrameworkCucumber},
+	}
+	for _, tt := range tests {
+		t.Run(tt.filename, func(t *testing.T) {
+			fw, err := f.DetectFramework(tt.filename)
+			if err != nil {
+				t.Fatalf("unexpected error for %s: %v", tt.filename, err)
+			}
+			if fw != tt.framework {
+				t.Errorf("for %s: expected %s, got %s", tt.filename, tt.framework, fw)
+			}
+		})
+	}
+}
+
+// BUG-10: an array-rooted JSON must only match array-capable detectors. Here
+// the first array element carries the object-only mocha keys ("stats"+"tests");
+// the unwrapped element must NOT be routed to the object-only mocha detector.
+func TestParserFactory_DetectJSONFramework_ArrayIsExclusionary(t *testing.T) {
+	f := NewParserFactory()
+
+	content := []byte(`[{"stats": {"tests": 3}, "tests": [{"title": "x"}]}]`)
+
+	fw, err := f.detectJSONFramework(content)
+	if err == nil {
+		t.Fatalf("array-rooted JSON matched object-only detector, got framework %q", fw)
+	}
+}
+
+// BUG-10: a genuine array-rooted format (cucumber) must still be detected.
+func TestParserFactory_DetectJSONFramework_ArrayCapableStillMatches(t *testing.T) {
+	f := NewParserFactory()
+
+	content := []byte(`[{"keyword": "Feature", "elements": [{"name": "scenario"}]}]`)
+
+	fw, err := f.detectJSONFramework(content)
+	if err != nil {
+		t.Fatalf("unexpected error detecting cucumber array: %v", err)
+	}
+	if fw != domain.FrameworkCucumber {
+		t.Errorf("expected cucumber, got %s", fw)
+	}
+}
+
 func TestParserFactory_GetSupportedFrameworks(t *testing.T) {
 	f := NewParserFactory()
 	frameworks := f.GetSupportedFrameworks()

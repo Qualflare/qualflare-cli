@@ -102,8 +102,9 @@ func (p *Parser) Parse(reader io.Reader) (*domain.Suite, error) {
 		}
 	}
 
-	// Calculate totals
-	suite.TotalTests = len(suite.Cases)
+	// Derive Passed/Failed/Skipped/Errors and TotalTests from the actual case
+	// statuses so the counters can never disagree with the cases (rule #3).
+	suite.RecomputeCounts()
 
 	// Add performance metrics as suite properties
 	suite.Properties = p.extractMetricsSummary(report.Metrics)
@@ -122,16 +123,8 @@ func (p *Parser) processGroup(group Group, suite *domain.Suite, prefix string) {
 	for _, check := range group.Checks {
 		testCase := p.convertCheck(check, currentPrefix)
 		suite.Cases = append(suite.Cases, testCase)
-
-		// Update counters
-		if check.Fails == 0 {
-			suite.Passed++
-		} else if check.Passes == 0 {
-			suite.Failed++
-		} else {
-			// Partial failures - count as failed
-			suite.Failed++
-		}
+		// Counters are derived from case status via suite.RecomputeCounts() at
+		// the end of Parse, so they can never disagree with the cases.
 	}
 
 	// Process nested groups
@@ -142,9 +135,18 @@ func (p *Parser) processGroup(group Group, suite *domain.Suite, prefix string) {
 
 // convertCheck converts a k6 check to domain.Case
 func (p *Parser) convertCheck(check Check, groupPath string) domain.Case {
+	// BUG-05: qualify the check name with its group path so distinct checks that
+	// share a title in different groups don't collide. The server dedupes cases
+	// by Name within a suite, so a bare title would silently merge two checks
+	// (and drop one) — a QA false-green. Case.ID stays the raw check ID.
+	name := check.Name
+	if groupPath != "" {
+		name = groupPath + " > " + check.Name
+	}
+
 	testCase := domain.Case{
 		ID:   check.ID,
-		Name: check.Name,
+		Name: name,
 	}
 
 	total := check.Passes + check.Fails
@@ -190,11 +192,9 @@ func (p *Parser) processThresholds(metrics map[string]Metric, suite *domain.Suit
 
 			if threshold.OK {
 				testCase.Status = domain.StatusPassed
-				suite.Passed++
 			} else {
 				testCase.Status = domain.StatusFailed
 				testCase.Error = fmt.Sprintf("Threshold '%s' failed for metric '%s'", thresholdName, metricName)
-				suite.Failed++
 			}
 
 			// Add metric values as properties

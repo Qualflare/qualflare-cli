@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"os"
 	"strconv"
 	"time"
 
@@ -78,10 +79,26 @@ func (p *Parser) Parse(reader io.Reader) (*domain.Suite, error) {
 		Cases:     make([]domain.Case, 0),
 	}
 
-	// Parse generated time if available
+	// Parse generated time if available.
+	// BUG-34: ZAP emits a non-zero-padded day (Java "d"), e.g. "Wed, 7 Jul 2021".
+	// A single "02" (zero-padded) layout failed to parse single-digit days, silently
+	// falling back to the upload time. Try both single- and zero-padded day layouts,
+	// and warn (never silently mask) when none match.
 	if report.Generated != "" {
-		if t, err := time.Parse("Mon, 02 Jan 2006 15:04:05", report.Generated); err == nil {
-			suite.Timestamp = t
+		layouts := []string{
+			"Mon, 2 Jan 2006 15:04:05",  // single-digit day
+			"Mon, 02 Jan 2006 15:04:05", // zero-padded day
+		}
+		parsed := false
+		for _, layout := range layouts {
+			if t, err := time.Parse(layout, report.Generated); err == nil {
+				suite.Timestamp = t
+				parsed = true
+				break
+			}
+		}
+		if !parsed {
+			fmt.Fprintf(os.Stderr, "warning: zap: could not parse @generated timestamp %q; using upload time\n", report.Generated)
 		}
 	}
 
@@ -90,23 +107,12 @@ func (p *Parser) Parse(reader io.Reader) (*domain.Suite, error) {
 		for _, alert := range site.Alerts {
 			testCase := p.convertAlert(alert, site)
 			suite.Cases = append(suite.Cases, testCase)
-
-			// Count by risk level
-			riskCode, _ := strconv.Atoi(alert.RiskCode)
-			switch riskCode {
-			case 3: // High
-				suite.Failed++
-			case 2: // Medium
-				suite.Failed++
-			case 1: // Low
-				suite.Failed++
-			default: // Informational
-				suite.Passed++
-			}
 		}
 	}
 
-	suite.TotalTests = len(suite.Cases)
+	// Derive counters from the case statuses (never from independent increments)
+	// so a real finding can never disagree with the cases or roll up green.
+	suite.RecomputeCounts()
 
 	// Add version as property
 	suite.Properties = map[string]string{
@@ -138,8 +144,10 @@ func (p *Parser) convertAlert(alert Alert, site Site) domain.Case {
 	case 1: // Low
 		testCase.Status = domain.StatusFailed
 		testCase.Priority = domain.SeverityLow
-	default: // Informational
-		testCase.Status = domain.StatusPassed
+	default: // Informational or an unrecognized/unparseable risk code
+		// A security finding is never a pass — fail closed so an unknown risk
+		// code can't roll up green (the cardinal sin for a QA/security parser).
+		testCase.Status = domain.StatusFailed
 		testCase.Priority = domain.SeverityInfo
 	}
 
@@ -203,7 +211,10 @@ func (p *Parser) GetFramework() domain.Framework {
 	return domain.FrameworkZAP
 }
 
-// SupportedFileExtensions returns supported file extensions
+// SupportedFileExtensions returns supported file extensions.
+// BUG-11: ".xml" was advertised but Parse only decodes JSON, so every ZAP XML
+// upload failed. Dropped ".xml" (simplest correct fix) rather than adding an XML
+// decode path, since Parse is JSON-only.
 func (p *Parser) SupportedFileExtensions() []string {
-	return []string{".json", ".xml"}
+	return []string{".json"}
 }

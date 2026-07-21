@@ -19,9 +19,12 @@ type Report struct {
 	NumPendingTests    int          `json:"numPendingTests"`
 	NumTodoTests       int          `json:"numTodoTests"`
 	NumTotalTestSuites int          `json:"numTotalTestSuites"`
-	StartTime          int64        `json:"startTime"`
-	Success            bool         `json:"success"`
-	TestResults        []TestResult `json:"testResults"`
+	// NumRuntimeErrorTestSuites counts suites that threw at import/collection
+	// time (CLI-H9) — these produce a testResult with no assertionResults.
+	NumRuntimeErrorTestSuites int          `json:"numRuntimeErrorTestSuites"`
+	StartTime                 int64        `json:"startTime"`
+	Success                   bool         `json:"success"`
+	TestResults               []TestResult `json:"testResults"`
 }
 
 type TestResult struct {
@@ -63,15 +66,19 @@ func (p *Parser) Parse(reader io.Reader) (*domain.Suite, error) {
 		return nil, err
 	}
 
+	// BUG-37: only trust startTime when it is present; otherwise a missing
+	// startTime decodes to 0 and time.UnixMilli(0) stamps the suite at the Unix
+	// epoch (1970). Fall back to now instead.
+	timestamp := time.Now().UTC()
+	if report.StartTime > 0 {
+		timestamp = time.UnixMilli(report.StartTime)
+	}
+
 	suite := &domain.Suite{
-		Name:       "Jest Test Results",
-		Category:   domain.FrameworkJest.GetCategory(),
-		TotalTests: report.NumTotalTests,
-		Passed:     report.NumPassedTests,
-		Failed:     report.NumFailedTests,
-		Skipped:    report.NumPendingTests + report.NumTodoTests,
-		Timestamp:  time.UnixMilli(report.StartTime),
-		Cases:      make([]domain.Case, 0),
+		Name:      "Jest Test Results",
+		Category:  domain.FrameworkJest.GetCategory(),
+		Timestamp: timestamp,
+		Cases:     make([]domain.Case, 0),
 	}
 
 	var totalDuration time.Duration
@@ -85,10 +92,40 @@ func (p *Parser) Parse(reader io.Reader) (*domain.Suite, error) {
 			testCase := p.convertAssertion(assertion, testResult.Name)
 			suite.Cases = append(suite.Cases, testCase)
 		}
+
+		// CLI-H9: a suite that crashes at import/collection time yields a
+		// testResult with a failed/error status and NO assertionResults. Without
+		// synthesizing a case here, the crash produces zero cases and the launch
+		// rolls up green — a failing run reported as PASSED.
+		if len(testResult.AssertionResults) == 0 &&
+			(testResult.Status == "failed" || testResult.Status == "error") {
+			suite.Cases = append(suite.Cases, domain.Case{
+				ID:        testResult.Name,
+				Name:      testResult.Name,
+				ClassName: testResult.Name,
+				Status:    domain.StatusFailed,
+				Duration:  suiteDuration,
+				Error:     domain.FormatError(testResult.Message, "", ""),
+			})
+		}
+	}
+
+	// CLI-H9: if the report as a whole signals failure (unsuccessful run or a
+	// runtime-error suite) but we still produced no cases, emit a synthetic
+	// failed case so the launch cannot roll up green on an empty suite.
+	if len(suite.Cases) == 0 && (!report.Success || report.NumRuntimeErrorTestSuites > 0) {
+		suite.Cases = append(suite.Cases, domain.Case{
+			ID:     "jest-runtime-error",
+			Name:   "Jest run reported failure with no test cases",
+			Status: domain.StatusFailed,
+			Error:  "Jest reported an unsuccessful run (possible suite runtime error) but produced no test cases",
+		})
 	}
 
 	suite.Duration = totalDuration
-	suite.TotalTests = len(suite.Cases)
+	// Counters must derive from the case statuses, never the report header, so a
+	// crashed/failed run can never disagree with the cases (see RecomputeCounts).
+	suite.RecomputeCounts()
 
 	return suite, nil
 }
@@ -120,10 +157,12 @@ func (p *Parser) convertAssertion(assertion Assertion, fileName string) domain.C
 			}
 			testCase.Error = domain.FormatError(errMsg, stackTrace, "")
 		}
-	case "pending", "todo", "skipped":
+	case "pending", "todo", "skipped", "disabled":
+		// BUG-36: "disabled" is a skip, not a pass.
 		testCase.Status = domain.StatusSkipped
 	default:
-		testCase.Status = domain.StatusPassed
+		// BUG-36: an unknown assertion status must fail-visible, never pass.
+		testCase.Status = domain.StatusError
 	}
 
 	// Add ancestor titles as tags

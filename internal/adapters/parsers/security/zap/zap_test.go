@@ -3,6 +3,7 @@ package zap
 import (
 	"strings"
 	"testing"
+	"time"
 
 	"qualflare-cli/internal/core/domain"
 )
@@ -86,6 +87,93 @@ func TestZAPParser_ParseAlerts(t *testing.T) {
 				t.Errorf("expected failed status for low risk, got %s", c.Status)
 			}
 		}
+	}
+}
+
+// BUG-34: ZAP emits a non-zero-padded day (Java "d"), e.g. "Wed, 7 Jul 2021".
+// The old layout used "02" (zero-padded) so single-digit days failed to parse and
+// the scan timestamp silently fell back to upload time (time.Now()).
+func TestZAPParser_SingleDigitDayTimestamp(t *testing.T) {
+	jsonReport := `{
+    "@version": "2.14.0",
+    "@generated": "Wed, 7 Jul 2021 10:30:00",
+    "site": [
+        {
+            "@name": "https://example.com",
+            "@host": "example.com",
+            "@port": "443",
+            "@ssl": "true",
+            "alerts": []
+        }
+    ]
+}`
+
+	parser := New()
+	suite, err := parser.Parse(strings.NewReader(jsonReport))
+	if err != nil {
+		t.Fatalf("parse error: %v", err)
+	}
+
+	want := time.Date(2021, 7, 7, 10, 30, 0, 0, time.UTC)
+	if !suite.Timestamp.Equal(want) {
+		t.Errorf("expected timestamp %v parsed from single-digit day, got %v (fell back to now)", want, suite.Timestamp)
+	}
+}
+
+// BUG-11: SupportedFileExtensions advertised ".xml" but Parse only decodes JSON,
+// so every ZAP XML upload failed. Assert we no longer claim an extension Parse
+// cannot handle.
+func TestZAPParser_SupportedExtensionsAreParseable(t *testing.T) {
+	parser := New()
+	for _, ext := range parser.SupportedFileExtensions() {
+		if ext == ".xml" {
+			t.Errorf("SupportedFileExtensions claims %q but Parse only decodes JSON", ext)
+		}
+	}
+}
+
+// A riskcode the parser doesn't recognize (or that fails to parse) must fail
+// closed for a security finding — never roll up as passed/green.
+func TestZAPParser_UnknownRiskCodeFailsClosed(t *testing.T) {
+	jsonReport := `{
+    "@version": "2.14.0",
+    "@generated": "",
+    "site": [
+        {
+            "@name": "https://example.com",
+            "@host": "example.com",
+            "@port": "443",
+            "@ssl": "true",
+            "alerts": [
+                {
+                    "pluginid": "99999",
+                    "name": "Novel Finding With Unexpected Risk",
+                    "riskcode": "7",
+                    "desc": "some finding",
+                    "solution": "fix it"
+                }
+            ]
+        }
+    ]
+}`
+
+	parser := New()
+	suite, err := parser.Parse(strings.NewReader(jsonReport))
+	if err != nil {
+		t.Fatalf("parse error: %v", err)
+	}
+
+	if len(suite.Cases) != 1 {
+		t.Fatalf("expected 1 case, got %d", len(suite.Cases))
+	}
+	if suite.Cases[0].Status == domain.StatusPassed {
+		t.Errorf("unknown riskcode must not be passed (false green); got %s", suite.Cases[0].Status)
+	}
+	if suite.Passed != 0 {
+		t.Errorf("expected 0 passed for an unknown-risk finding, got %d", suite.Passed)
+	}
+	if suite.Failed != 1 {
+		t.Errorf("expected 1 failed (fail closed), got %d", suite.Failed)
 	}
 }
 

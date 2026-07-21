@@ -83,6 +83,68 @@ func TestSnykParser_ParseVulnerabilities(t *testing.T) {
 	}
 }
 
+// TestSnykParser_UnknownSeverityFailsVisible covers CLI-H7 and BUG-32: a vuln
+// whose severity Snyk didn't map (a new/unknown level) must fail-visible with an
+// empty priority, and a missing language must not produce an empty tag.
+func TestSnykParser_UnknownSeverityFailsVisible(t *testing.T) {
+	jsonReport := `{
+    "ok": false,
+    "projectName": "my-project",
+    "packageManager": "npm",
+    "vulnerabilities": [
+        {
+            "id": "SNYK-UNKNOWN-0001",
+            "title": "Novel issue",
+            "severity": "moderate",
+            "description": "Severity level not in the mapped set",
+            "packageName": "acme",
+            "version": "1.0.0",
+            "identifiers": {"CVE": [], "CWE": []}
+        }
+    ]
+}`
+
+	parser := New()
+	suite, err := parser.Parse(strings.NewReader(jsonReport))
+	if err != nil {
+		t.Fatalf("parse error: %v", err)
+	}
+
+	if len(suite.Cases) != 1 {
+		t.Fatalf("expected 1 case, got %d", len(suite.Cases))
+	}
+	c := suite.Cases[0]
+	if c.Status != domain.StatusFailed {
+		t.Errorf("unknown-severity vuln must fail-visible, got status %s", c.Status)
+	}
+	if c.Priority != "" {
+		t.Errorf("unknown-severity vuln must have empty priority, got %q", c.Priority)
+	}
+	if suite.Failed != 1 {
+		t.Errorf("expected suite.Failed=1, got %d", suite.Failed)
+	}
+	if suite.Passed != 0 {
+		t.Errorf("expected suite.Passed=0, got %d", suite.Passed)
+	}
+	// BUG-32: no language → no empty tag
+	for _, tag := range c.Tags {
+		if tag == "" {
+			t.Errorf("tags must not contain an empty string: %v", c.Tags)
+		}
+	}
+}
+
+// TestSnykParser_WrongSchemaReturnsError covers CLI-H6: valid JSON that is not a
+// Snyk report (no vulnerabilities field and no projectName) must error rather
+// than yield an empty passing suite that uploads green.
+func TestSnykParser_WrongSchemaReturnsError(t *testing.T) {
+	parser := New()
+	_, err := parser.Parse(strings.NewReader(`{"some":"other","json":123}`))
+	if err == nil {
+		t.Error("expected error for non-Snyk JSON schema, got nil")
+	}
+}
+
 func TestSnykParser_EmptyInput(t *testing.T) {
 	parser := New()
 	_, err := parser.Parse(strings.NewReader(""))

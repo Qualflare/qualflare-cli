@@ -88,6 +88,81 @@ func TestSonarQubeParser_ParseIssues(t *testing.T) {
 	}
 }
 
+func TestSonarQubeParser_UnknownSeverityFailsClosed(t *testing.T) {
+	// CLI-H7: an issue whose severity is out of the known list must map to
+	// StatusFailed (fail closed for a security finding) and turn the suite red —
+	// never be silently marked passed.
+	jsonReport := `{
+    "total": 1,
+    "paging": {"pageIndex": 1, "pageSize": 100, "total": 1},
+    "issues": [
+        {
+            "key": "issue-x",
+            "rule": "java:S9999",
+            "severity": "WEIRD",
+            "component": "com.example:MyClass.java",
+            "project": "my-project",
+            "line": 7,
+            "status": "OPEN",
+            "message": "Some novel severity level",
+            "type": "VULNERABILITY"
+        }
+    ]
+}`
+
+	parser := New()
+	suite, err := parser.Parse(strings.NewReader(jsonReport))
+	if err != nil {
+		t.Fatalf("parse error: %v", err)
+	}
+
+	if len(suite.Cases) != 1 {
+		t.Fatalf("expected 1 case, got %d", len(suite.Cases))
+	}
+	if suite.Cases[0].Status != domain.StatusFailed {
+		t.Errorf("expected unknown-severity issue to be StatusFailed, got %s", suite.Cases[0].Status)
+	}
+	if suite.Failed != 1 {
+		t.Errorf("expected suite.Failed == 1, got %d", suite.Failed)
+	}
+	if suite.Passed != 0 {
+		t.Errorf("expected suite.Passed == 0, got %d", suite.Passed)
+	}
+	if suite.GetStatus() != domain.StatusFailed {
+		t.Errorf("expected suite to be red, got %s", suite.GetStatus())
+	}
+}
+
+func TestSonarQubeParser_PaginationShortfallErrors(t *testing.T) {
+	// BUG-33: the report declares more issues (paging.total) than are present on
+	// this page. The parser must fail loudly rather than silently drop the rest.
+	jsonReport := `{
+    "total": 5,
+    "p": 1,
+    "ps": 1,
+    "paging": {"pageIndex": 1, "pageSize": 1, "total": 5},
+    "issues": [
+        {
+            "key": "issue-1",
+            "rule": "java:S1234",
+            "severity": "CRITICAL",
+            "component": "com.example:MyClass.java",
+            "project": "my-project",
+            "line": 42,
+            "status": "OPEN",
+            "message": "Remove this unused variable",
+            "type": "VULNERABILITY"
+        }
+    ]
+}`
+
+	parser := New()
+	_, err := parser.Parse(strings.NewReader(jsonReport))
+	if err == nil {
+		t.Fatal("expected error when report declares more issues than are present (pagination shortfall), got nil")
+	}
+}
+
 func TestSonarQubeParser_EmptyInput(t *testing.T) {
 	parser := New()
 	_, err := parser.Parse(strings.NewReader(""))

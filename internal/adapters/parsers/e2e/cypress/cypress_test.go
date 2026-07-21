@@ -3,6 +3,8 @@ package cypress
 import (
 	"strings"
 	"testing"
+
+	"qualflare-cli/internal/core/domain"
 )
 
 func TestCypressParserExtractsRetryCount(t *testing.T) {
@@ -81,6 +83,91 @@ func TestCypressParserNoRetries(t *testing.T) {
 	}
 	if testCase.IsFlaky != nil && *testCase.IsFlaky {
 		t.Errorf("expected IsFlaky nil or false, got true")
+	}
+}
+
+// BUG-08: a mochawesome `state:"pending"` test (an it.skip) must map to
+// domain.StatusSkipped, not StatusPending. The server ranks pending above passed,
+// so a single it.skip would otherwise flip the whole suite's rolled-up status to
+// pending. Mocha semantics: pending == skipped.
+func TestCypressParser_ItSkipMapsToSkipped(t *testing.T) {
+	jsonReport := `
+    {
+        "stats": {
+            "tests": 2,
+            "passes": 1,
+            "failures": 0,
+            "pending": 1,
+            "duration": 500
+        },
+        "results": [{
+            "file": "spec.cy.js",
+            "tests": [
+                {"title": "runs", "state": "passed", "duration": 100, "uuid": "p1"},
+                {"title": "is skipped", "state": "pending", "pending": true, "duration": 0, "uuid": "p2"}
+            ]
+        }]
+    }
+    `
+
+	parser := New()
+	suite, err := parser.Parse(strings.NewReader(jsonReport))
+	if err != nil {
+		t.Fatalf("parse error: %v", err)
+	}
+
+	if len(suite.Cases) != 2 {
+		t.Fatalf("expected 2 cases, got %d", len(suite.Cases))
+	}
+	skip := suite.Cases[1]
+	if skip.Status != domain.StatusSkipped {
+		t.Errorf("it.skip: expected StatusSkipped, got %q", skip.Status)
+	}
+	// A pending status would leak through and out-rank passed on the server.
+	if skip.Status == domain.StatusPending {
+		t.Errorf("it.skip must not map to StatusPending")
+	}
+}
+
+// BUG-29: the skip count must come from the real cases, not a misread header.
+// The old code summed `pending` + a nonexistent `skippedRegistered` stats field,
+// so a report that reported its skips via the real `skipped` field rolled up with
+// suite.Skipped == 0 while a genuinely-skipped case was present (a hidden skip).
+func TestCypressParser_SuiteSkipCountReflectsCases(t *testing.T) {
+	jsonReport := `
+    {
+        "stats": {
+            "tests": 2,
+            "passes": 1,
+            "failures": 0,
+            "pending": 0,
+            "skipped": 1,
+            "duration": 500
+        },
+        "results": [{
+            "file": "spec.cy.js",
+            "tests": [
+                {"title": "runs", "state": "passed", "duration": 100, "uuid": "s1"},
+                {"title": "registered but skipped", "state": "", "skipped": true, "duration": 0, "uuid": "s2"}
+            ]
+        }]
+    }
+    `
+
+	parser := New()
+	suite, err := parser.Parse(strings.NewReader(jsonReport))
+	if err != nil {
+		t.Fatalf("parse error: %v", err)
+	}
+
+	if suite.TotalTests != 2 {
+		t.Errorf("expected TotalTests 2, got %d", suite.TotalTests)
+	}
+	if suite.Passed != 1 {
+		t.Errorf("expected Passed 1, got %d", suite.Passed)
+	}
+	if suite.Skipped != 1 {
+		t.Errorf("expected Skipped 1 (reflecting the report's skipped test), got %d", suite.Skipped)
 	}
 }
 

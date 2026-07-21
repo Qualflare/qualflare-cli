@@ -118,6 +118,96 @@ func TestCucumberParser_ParseFeatureWithScenarios(t *testing.T) {
 	}
 }
 
+// TestCucumberParser_FailingBackground reproduces CLI-H3: a failing Background is
+// emitted by cucumber runners as a separate `background` element; the dependent
+// scenario's own steps then all roll up to "skipped". If the parser skips
+// `background` elements the failure vanishes and the scenario (and suite) report
+// as skipped/green instead of red.
+func TestCucumberParser_FailingBackground(t *testing.T) {
+	jsonReport := `[
+    {
+        "uri": "features/checkout.feature",
+        "id": "checkout-feature",
+        "keyword": "Feature",
+        "name": "Checkout",
+        "elements": [
+            {
+                "id": "checkout-feature;background",
+                "keyword": "Background",
+                "name": "",
+                "type": "background",
+                "steps": [
+                    {
+                        "keyword": "Given ",
+                        "name": "the payment gateway is available",
+                        "line": 3,
+                        "match": {"location": "steps.go:5"},
+                        "result": {"status": "failed", "duration": 500000, "error_message": "gateway unreachable"}
+                    }
+                ]
+            },
+            {
+                "id": "checkout-feature;purchase-item",
+                "keyword": "Scenario",
+                "name": "Purchase item",
+                "type": "scenario",
+                "steps": [
+                    {
+                        "keyword": "When ",
+                        "name": "the user checks out",
+                        "line": 7,
+                        "match": {"location": "steps.go:20"},
+                        "result": {"status": "skipped", "duration": 0}
+                    },
+                    {
+                        "keyword": "Then ",
+                        "name": "the order is confirmed",
+                        "line": 8,
+                        "match": {"location": "steps.go:30"},
+                        "result": {"status": "skipped", "duration": 0}
+                    }
+                ]
+            }
+        ],
+        "tags": []
+    }
+]`
+
+	parser := New()
+	suite, err := parser.Parse(strings.NewReader(jsonReport))
+	if err != nil {
+		t.Fatalf("parse error: %v", err)
+	}
+
+	if suite.TotalTests != 1 {
+		t.Errorf("expected 1 total test, got %d", suite.TotalTests)
+	}
+	if suite.Failed != 1 {
+		t.Errorf("expected 1 failed (background step failed), got %d", suite.Failed)
+	}
+	if suite.Skipped != 0 {
+		t.Errorf("expected 0 skipped, got %d", suite.Skipped)
+	}
+	if got := suite.GetStatus(); got != domain.StatusFailed {
+		t.Errorf("expected suite status failed, got %s", got)
+	}
+
+	if len(suite.Cases) != 1 {
+		t.Fatalf("expected 1 case, got %d", len(suite.Cases))
+	}
+	c := suite.Cases[0]
+	if c.Status != domain.StatusFailed {
+		t.Errorf("expected scenario to be failed due to failing background, got %s", c.Status)
+	}
+	if !strings.Contains(c.Error, "gateway unreachable") {
+		t.Errorf("expected background error to be surfaced on the case, got %q", c.Error)
+	}
+	// Background step must be attached alongside the scenario's own steps.
+	if len(c.Steps) != 3 {
+		t.Errorf("expected 3 steps (1 background + 2 scenario), got %d", len(c.Steps))
+	}
+}
+
 func TestCucumberParser_EmptyInput(t *testing.T) {
 	parser := New()
 	_, err := parser.Parse(strings.NewReader(""))

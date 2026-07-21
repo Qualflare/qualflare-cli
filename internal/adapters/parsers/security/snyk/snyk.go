@@ -114,6 +114,14 @@ func (p *Parser) Parse(reader io.Reader) (*domain.Suite, error) {
 		return nil, err
 	}
 
+	// CLI-H6: reject documents that are valid JSON but not a Snyk report. A real
+	// Snyk report always carries a projectName; a clean scan legitimately has no
+	// vulnerabilities but still names the project. Missing both means we decoded
+	// the wrong schema — fail loudly instead of emitting an empty passing suite.
+	if len(report.Vulnerabilities) == 0 && report.ProjectName == "" {
+		return nil, fmt.Errorf("snyk: unrecognized report schema (no vulnerabilities and no projectName)")
+	}
+
 	suite := &domain.Suite{
 		Name:      base.CoalesceString(report.ProjectName, "Snyk Security Scan"),
 		Category:  domain.FrameworkSnyk.GetCategory(),
@@ -125,11 +133,12 @@ func (p *Parser) Parse(reader io.Reader) (*domain.Suite, error) {
 	for _, vuln := range report.Vulnerabilities {
 		testCase := p.convertVulnerability(vuln)
 		suite.Cases = append(suite.Cases, testCase)
-
-		suite.Failed++
 	}
 
-	suite.TotalTests = len(suite.Cases)
+	// CLI-H7: derive counters from the case statuses so a vuln that maps to a
+	// non-failed status (e.g. an unknown severity) can never be masked by an
+	// unconditional suite.Failed++.
+	suite.RecomputeCounts()
 
 	// Add metadata as properties
 	suite.Properties = map[string]string{
@@ -166,17 +175,23 @@ func (p *Parser) convertVulnerability(vuln Vulnerability) domain.Case {
 		testCase.Status = domain.StatusFailed
 		testCase.Priority = domain.SeverityLow
 	default:
-		testCase.Status = domain.StatusPassed
-		testCase.Priority = domain.SeverityUnknown
+		// CLI-H7: an unmapped severity is a finding we can't rank — fail closed
+		// (visible) rather than passing it, and omit the priority since it isn't
+		// one of the API's valid values.
+		testCase.Status = domain.StatusFailed
+		testCase.Priority = ""
 	}
 
 	testCase.Error = domain.FormatError(vuln.Title, vuln.Description, "")
 
-	// Add tags
-	testCase.Tags = []string{
-		"vulnerability",
-		"severity:" + vuln.Severity,
-		vuln.Language,
+	// Add tags. BUG-32: only append the severity/language tags when non-empty so
+	// a vuln with no language doesn't emit a blank tag.
+	testCase.Tags = []string{"vulnerability"}
+	if vuln.Severity != "" {
+		testCase.Tags = append(testCase.Tags, "severity:"+vuln.Severity)
+	}
+	if vuln.Language != "" {
+		testCase.Tags = append(testCase.Tags, vuln.Language)
 	}
 	testCase.Tags = append(testCase.Tags, vuln.Identifiers.CVE...)
 	testCase.Tags = append(testCase.Tags, vuln.Identifiers.CWE...)

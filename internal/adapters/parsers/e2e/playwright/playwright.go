@@ -146,7 +146,11 @@ func (p *Parser) Parse(reader io.Reader) (*domain.Suite, error) {
 		}
 	}
 
-	suite.TotalTests = len(suite.Cases)
+	// Rule #3: derive Passed/Failed/Skipped/Errors and TotalTests from the actual
+	// case statuses so the counters can never disagree with the cases (and so
+	// StatusError cases — interrupted/unknown — are counted, not dropped).
+	// Flaky (from stats) and Retries (accumulated above) are left untouched.
+	suite.RecomputeCounts()
 
 	return suite, nil
 }
@@ -173,16 +177,6 @@ func (p *Parser) processSuites(suites []Suite, domainSuite *domain.Suite, prefix
 				// Track retries (each result beyond the first is a retry)
 				if len(test.Results) > 1 {
 					domainSuite.Retries += len(test.Results) - 1
-				}
-
-				// Update counters
-				switch testCase.Status {
-				case domain.StatusPassed:
-					domainSuite.Passed++
-				case domain.StatusFailed:
-					domainSuite.Failed++
-				case domain.StatusSkipped:
-					domainSuite.Skipped++
 				}
 			}
 		}
@@ -231,7 +225,21 @@ func (p *Parser) convertTest(spec Spec, test Test, file string, prefix string) d
 			}
 		case "skipped":
 			testCase.Status = domain.StatusSkipped
+		case "interrupted":
+			// CLI-H4: emitted on --max-failures / SIGINT — an aborted test, not a
+			// pass. Fail-visible.
+			testCase.Status = domain.StatusError
 		default:
+			// CLI-H4: an unknown Playwright status must never roll up green.
+			testCase.Status = domain.StatusError
+		}
+
+		// BUG-09: test.fail() marks a test as an expected failure via
+		// ExpectedStatus. When the observed result matches the expected status the
+		// test behaved as designed, so record it as passed while preserving the
+		// captured failure message. Only applies when ExpectedStatus is populated.
+		if test.ExpectedStatus != "" && lastResult.Status == test.ExpectedStatus &&
+			testCase.Status == domain.StatusFailed {
 			testCase.Status = domain.StatusPassed
 		}
 
@@ -256,7 +264,8 @@ func (p *Parser) convertTest(spec Spec, test Test, file string, prefix string) d
 		case "skipped":
 			testCase.Status = domain.StatusSkipped
 		default:
-			testCase.Status = domain.StatusPassed
+			// CLI-H4: an unknown test-level status must never roll up green.
+			testCase.Status = domain.StatusError
 		}
 	}
 

@@ -32,6 +32,36 @@ func TestPytestParserDefaultRetryCount(t *testing.T) {
 	}
 }
 
+// BUG-38: the parser read the nonexistent attribute `skips` instead of pytest's
+// real `skipped`, so a skipped test was counted as passed (Skipped=0, Passed
+// inflated). A skipped case must roll up as skipped, never passed.
+func TestPytestParser_SkippedNotCountedAsPassed(t *testing.T) {
+	xmlReport := `
+    <testsuite name="pytest" tests="2" failures="0" errors="0" skipped="1">
+        <testcase name="test_ok" classname="test_module"></testcase>
+        <testcase name="test_skip" classname="test_module">
+            <skipped message="not applicable"/>
+        </testcase>
+    </testsuite>
+    `
+
+	parser := New()
+	suite, err := parser.Parse(strings.NewReader(xmlReport))
+	if err != nil {
+		t.Fatalf("parse error: %v", err)
+	}
+
+	if suite.Skipped != 1 {
+		t.Errorf("expected Skipped == 1, got %d", suite.Skipped)
+	}
+	if suite.Passed != 1 {
+		t.Errorf("expected Passed == 1 (not inflated by skipped), got %d", suite.Passed)
+	}
+	if suite.TotalTests != 2 {
+		t.Errorf("expected TotalTests == 2, got %d", suite.TotalTests)
+	}
+}
+
 func TestPytestParser_EmptyInput(t *testing.T) {
 	parser := New()
 	_, err := parser.Parse(strings.NewReader(""))

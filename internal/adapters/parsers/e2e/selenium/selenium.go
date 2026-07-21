@@ -79,15 +79,11 @@ func (p *Parser) Parse(reader io.Reader) (*domain.Suite, error) {
 	}
 
 	suite := &domain.Suite{
-		Name:       "Selenium Test Results",
-		Category:   domain.FrameworkSelenium.GetCategory(),
-		TotalTests: report.Total,
-		Passed:     report.Passed,
-		Failed:     report.Failed,
-		Skipped:    report.Skipped,
-		Duration:   time.Duration(report.Duration * float64(time.Second)),
-		Timestamp:  time.Now().UTC(),
-		Cases:      make([]domain.Case, 0),
+		Name:      "Selenium Test Results",
+		Category:  domain.FrameworkSelenium.GetCategory(),
+		Duration:  time.Duration(report.Duration * float64(time.Second)),
+		Timestamp: time.Now().UTC(),
+		Cases:     make([]domain.Case, 0),
 	}
 
 	// Parse start time if available
@@ -114,20 +110,10 @@ func (p *Parser) Parse(reader io.Reader) (*domain.Suite, error) {
 		}
 	}
 
-	// Update totals if they weren't in the report
-	if suite.TotalTests == 0 {
-		suite.TotalTests = len(suite.Cases)
-		for _, c := range suite.Cases {
-			switch c.Status {
-			case domain.StatusPassed:
-				suite.Passed++
-			case domain.StatusFailed:
-				suite.Failed++
-			case domain.StatusSkipped:
-				suite.Skipped++
-			}
-		}
-	}
+	// CLI-H5 / rule #3: derive all counters from the actual case statuses instead
+	// of trusting the report header, so a broken/errored case can never roll up
+	// green (the header could claim passed=N while a case is StatusError).
+	suite.RecomputeCounts()
 
 	return suite, nil
 }
@@ -147,18 +133,23 @@ func (p *Parser) convertTest(test Test, suiteName string) domain.Case {
 		testCase.Status = domain.StatusPassed
 	case "failed", "fail", "FAILED", "failure":
 		testCase.Status = domain.StatusFailed
-		if test.Error != nil {
-			testCase.Error = domain.FormatError(test.Error.Message, test.Error.StackTrace, test.Error.Type)
-		}
 	case "skipped", "skip", "SKIPPED", "pending":
 		testCase.Status = domain.StatusSkipped
-	case "error", "ERROR":
+	// CLI-H5: Allure-style "broken"/"timeout"/"aborted" mean the test errored
+	// (setup/WebDriver failure), not passed.
+	case "error", "ERROR", "broken", "timeout", "aborted":
 		testCase.Status = domain.StatusError
-		if test.Error != nil {
-			testCase.Error = domain.FormatError(test.Error.Message, test.Error.StackTrace, test.Error.Type)
-		}
 	default:
-		testCase.Status = domain.StatusPassed
+		// CLI-H5: an unknown status must fail-visible as Error, never silently
+		// pass (the old default:StatusPassed uploaded broken tests as GREEN).
+		testCase.Status = domain.StatusError
+	}
+
+	// CLI-H5: attach the error object for ANY non-passed status (broken/error/
+	// failed) — previously it lived only inside the failed/error branches, so a
+	// "broken" test's stack trace was stripped on upload.
+	if testCase.Status != domain.StatusPassed && test.Error != nil {
+		testCase.Error = domain.FormatError(test.Error.Message, test.Error.StackTrace, test.Error.Type)
 	}
 
 	// Add properties
