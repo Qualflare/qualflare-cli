@@ -37,6 +37,12 @@ func NewHTTPClient(config ports.ConfigProvider, opts ...ClientOption) *Client {
 		SetRetryCount(maxRetries).
 		SetRetryWaitTime(baseDelay).
 		SetRetryMaxWaitTime(maxDelay).
+		// resty v3 refuses to retry non-idempotent methods (POST) unless this is
+		// set, so without it the whole retry policy above is dead for the CLI's
+		// primary job — a single transient 429/503 fails the upload (CLI-H2).
+		// Safe here because SendReport sends a stable Idempotency-Key that the
+		// server resolves to the existing launch, so a retry cannot double-create.
+		SetAllowNonIdempotentRetry(true).
 		// Do not follow redirects: the auth middleware re-runs on every hop, so
 		// a redirect to a different host would forward QF_TOKEN to that host.
 		SetRedirectPolicy(resty.NoRedirectPolicy()).
