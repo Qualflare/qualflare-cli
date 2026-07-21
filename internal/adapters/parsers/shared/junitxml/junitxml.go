@@ -9,6 +9,8 @@ import (
 	"io"
 	"time"
 
+	"golang.org/x/net/html/charset"
+
 	"qualflare-cli/internal/adapters/parsers/base"
 	"qualflare-cli/internal/core/domain"
 )
@@ -25,17 +27,21 @@ type TestSuites struct {
 	TestSuites []TestSuite `xml:"testsuite"`
 }
 
-// TestSuite represents a single <testsuite> element.
+// TestSuite represents a single <testsuite> element. A <testsuite> may itself
+// contain nested <testsuite> children (Maven Surefire aggregate reports, several
+// Android/iOS JUnit converters); TestSuites captures them so their cases are not
+// silently dropped (CLI-H8).
 type TestSuite struct {
-	XMLName   xml.Name   `xml:"testsuite"`
-	Name      string     `xml:"name,attr"`
-	Tests     int        `xml:"tests,attr"`
-	Failures  int        `xml:"failures,attr"`
-	Errors    int        `xml:"errors,attr"`
-	Skipped   int        `xml:"skipped,attr"`
-	Time      string     `xml:"time,attr"`
-	Timestamp string     `xml:"timestamp,attr"`
-	TestCases []TestCase `xml:"testcase"`
+	XMLName    xml.Name    `xml:"testsuite"`
+	Name       string      `xml:"name,attr"`
+	Tests      int         `xml:"tests,attr"`
+	Failures   int         `xml:"failures,attr"`
+	Errors     int         `xml:"errors,attr"`
+	Skipped    int         `xml:"skipped,attr"`
+	Time       string      `xml:"time,attr"`
+	Timestamp  string      `xml:"timestamp,attr"`
+	TestCases  []TestCase  `xml:"testcase"`
+	TestSuites []TestSuite `xml:"testsuite"`
 }
 
 // TestCase represents a single <testcase> element.
@@ -81,27 +87,37 @@ type Skipped struct {
 func Parse(reader io.Reader, framework domain.Framework) (*domain.Suite, error) {
 	var testSuites TestSuites
 	decoder := xml.NewDecoder(reader)
+	// Honour a non-UTF-8 encoding declared in the XML prolog (ISO-8859-1,
+	// UTF-16, ...) instead of hard-erroring on the whole upload (BUG-12).
+	decoder.CharsetReader = charset.NewReaderLabel
 
 	if err := decoder.Decode(&testSuites); err != nil {
 		// Try parsing as a single <testsuite> root element
 		if seeker, ok := reader.(io.Seeker); ok {
-			if _, err := seeker.Seek(0, 0); err != nil {
-				return nil, err
+			if _, serr := seeker.Seek(0, 0); serr != nil {
+				return nil, serr
 			}
 		}
 
 		var singleSuite TestSuite
 		decoder = xml.NewDecoder(reader)
-		if err := decoder.Decode(&singleSuite); err != nil {
-			return nil, err
+		decoder.CharsetReader = charset.NewReaderLabel
+		if derr := decoder.Decode(&singleSuite); derr != nil {
+			return nil, derr
 		}
 		testSuites.TestSuites = []TestSuite{singleSuite}
 	}
 
 	if len(testSuites.TestSuites) == 0 {
+		// Cases must be a non-nil slice: the server validates it as `required`,
+		// and a nil slice marshals to `null`, 400-ing the whole multi-file
+		// upload (SYNC-06). Category is stamped so an empty file still declares
+		// its framework family.
 		return &domain.Suite{
 			Name:      "Empty Suite",
+			Category:  framework.GetCategory(),
 			Timestamp: time.Now().UTC(),
+			Cases:     make([]domain.Case, 0),
 		}, nil
 	}
 
@@ -110,40 +126,64 @@ func Parse(reader io.Reader, framework domain.Framework) (*domain.Suite, error) 
 
 func mergeSuites(testSuites TestSuites, framework domain.Framework) *domain.Suite {
 	suite := &domain.Suite{
-		Name:      base.CoalesceString(testSuites.Name, "JUnit Test Results"),
-		Category:  framework.GetCategory(),
-		Timestamp: time.Now().UTC(),
-		Cases:     make([]domain.Case, 0),
+		Name:     base.CoalesceString(testSuites.Name, "JUnit Test Results"),
+		Category: framework.GetCategory(),
+		Cases:    make([]domain.Case, 0),
 	}
 
 	var totalDuration time.Duration
+	var suiteTimestamp time.Time
 
-	for _, junitSuite := range testSuites.TestSuites {
-		if duration, err := base.ParseDuration(junitSuite.Time); err == nil {
-			totalDuration += duration
-		}
+	for i := range testSuites.TestSuites {
+		collectSuite(&testSuites.TestSuites[i], suite, &totalDuration, &suiteTimestamp)
+	}
 
-		for _, tc := range junitSuite.TestCases {
-			testCase := convertTestCase(tc)
-			suite.Cases = append(suite.Cases, testCase)
+	suite.Duration = totalDuration
+	if suiteTimestamp.IsZero() {
+		suite.Timestamp = time.Now().UTC()
+	} else {
+		suite.Timestamp = suiteTimestamp
+	}
+	// Counters are derived from the (possibly deeply nested) cases so they can
+	// never disagree with the case list.
+	suite.RecomputeCounts()
 
-			switch testCase.Status {
-			case domain.StatusPassed:
-				suite.Passed++
-			case domain.StatusFailed:
-				suite.Failed++
-			case domain.StatusError:
-				suite.Failed++
-			case domain.StatusSkipped:
-				suite.Skipped++
+	return suite
+}
+
+// collectSuite appends js's cases — and, recursively, the cases of any nested
+// <testsuite> children — into dst. Without the recursion, tests inside nested
+// suites (and their failures) are silently dropped (CLI-H8).
+func collectSuite(js *TestSuite, dst *domain.Suite, totalDuration *time.Duration, ts *time.Time) {
+	// Prefer the suite-level time attribute; fall back to the sum of this
+	// suite's own case durations when it is absent or unparseable (BUG-13).
+	if d, err := base.ParseDuration(js.Time); err == nil && d > 0 {
+		*totalDuration += d
+	} else {
+		for _, tc := range js.TestCases {
+			if cd, cerr := base.ParseDuration(tc.Time); cerr == nil {
+				*totalDuration += cd
 			}
 		}
 	}
 
-	suite.TotalTests = len(suite.Cases)
-	suite.Duration = totalDuration
+	// First non-empty report timestamp wins, instead of stamping upload
+	// wall-clock time onto every suite (BUG-14).
+	if ts.IsZero() && js.Timestamp != "" {
+		for _, layout := range []string{"2006-01-02T15:04:05", time.RFC3339, "2006-01-02T15:04:05.999999999"} {
+			if parsed, err := time.Parse(layout, js.Timestamp); err == nil {
+				*ts = parsed
+				break
+			}
+		}
+	}
 
-	return suite
+	for _, tc := range js.TestCases {
+		dst.Cases = append(dst.Cases, convertTestCase(tc))
+	}
+	for i := range js.TestSuites {
+		collectSuite(&js.TestSuites[i], dst, totalDuration, ts)
+	}
 }
 
 func convertTestCase(tc TestCase) domain.Case {

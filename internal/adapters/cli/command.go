@@ -90,9 +90,11 @@ Supported frameworks:
 		},
 	}
 
-	// Global flags
-	cmd.PersistentFlags().BoolVarP(&c.config.Verbose, "verbose", "v", false, "Enable verbose output")
-	cmd.PersistentFlags().BoolVarP(&c.config.Quiet, "quiet", "q", false, "Suppress non-error output")
+	// Global flags. Seed the defaults from the already-loaded config (which read
+	// QF_VERBOSE/QF_QUIET) so pflag's registration does not zero the env-derived
+	// value before any command runs (BUG-02).
+	cmd.PersistentFlags().BoolVarP(&c.config.Verbose, "verbose", "v", c.config.Verbose, "Enable verbose output")
+	cmd.PersistentFlags().BoolVarP(&c.config.Quiet, "quiet", "q", c.config.Quiet, "Suppress non-error output")
 
 	// Flat (auth-less) subcommands
 	cmd.AddCommand(c.createLoginCommand())
@@ -204,9 +206,13 @@ The format is auto-detected if not specified.`,
 	}
 
 	// Flags
+	// environment/language default to "" so an explicit flag overrides, but an
+	// unset flag falls through to QF_ENVIRONMENT/QF_LANGUAGE (or the built-in
+	// DefaultConfig default) instead of a non-empty flag default always winning
+	// over the env var (CLI-H1). SetEnvironment/SetLanguage skip on "".
 	cmd.Flags().StringVarP(&format, "format", "f", "", "Test framework format (auto-detected if not specified)")
-	cmd.Flags().StringVarP(&environment, "environment", "e", "staging", "Environment name")
-	cmd.Flags().StringVar(&language, "lang", "en-US", "Language/culture (BCP 47 format, e.g., en-US, de-DE)")
+	cmd.Flags().StringVarP(&environment, "environment", "e", "", "Environment name (default: $QF_ENVIRONMENT or 'development')")
+	cmd.Flags().StringVar(&language, "lang", "", "Language/culture, BCP 47 (default: $QF_LANGUAGE or 'en-US')")
 	cmd.Flags().StringVar(&branch, "branch", "", "Git branch name")
 	cmd.Flags().StringVar(&commit, "commit", "", "Git commit hash")
 	cmd.Flags().DurationVar(&timeout, "timeout", 30*time.Second, "Request timeout")
