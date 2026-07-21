@@ -72,6 +72,89 @@ func TestKarateParser_ParseScenarios(t *testing.T) {
 	}
 }
 
+// BUG-07: convertScenario aliased report.Tags' backing array via
+// append(report.Tags, scenario.Tags...). When report.Tags has spare capacity
+// (here 3 tags decode to len=3/cap=4), each scenario's append writes its own
+// tag into the SAME backing slot, so the second scenario silently overwrites
+// the first scenario's tag. Each scenario must keep its own tags (plus the
+// shared report tags). The three shared @report* tags are what give the
+// backing array spare capacity and expose the aliasing.
+func TestKarateParser_ScenarioTagsNotAliased(t *testing.T) {
+	jsonReport := `[
+    {
+        "featureName": "users.feature",
+        "name": "Users API",
+        "durationMillis": 500,
+        "tags": ["@report1", "@report2", "@report3"],
+        "scenarioResults": [
+            {
+                "name": "Scenario One",
+                "durationMillis": 200,
+                "failed": false,
+                "skipped": false,
+                "tags": ["@smoke"],
+                "stepResults": [
+                    {"step": "Given something", "line": 5, "durationNanos": 100000000, "result": "passed", "hidden": false}
+                ]
+            },
+            {
+                "name": "Scenario Two",
+                "durationMillis": 300,
+                "failed": false,
+                "skipped": false,
+                "tags": ["@regression"],
+                "stepResults": [
+                    {"step": "Given something else", "line": 10, "durationNanos": 100000000, "result": "passed", "hidden": false}
+                ]
+            }
+        ]
+    }
+]`
+
+	parser := New()
+	suite, err := parser.Parse(strings.NewReader(jsonReport))
+	if err != nil {
+		t.Fatalf("parse error: %v", err)
+	}
+
+	tagsFor := func(name string) []string {
+		for _, c := range suite.Cases {
+			if c.Name == name {
+				return c.Tags
+			}
+		}
+		t.Fatalf("case %q not found", name)
+		return nil
+	}
+	contains := func(tags []string, want string) bool {
+		for _, tag := range tags {
+			if tag == want {
+				return true
+			}
+		}
+		return false
+	}
+
+	one := tagsFor("Scenario One")
+	if !contains(one, "@smoke") {
+		t.Errorf("Scenario One should keep its own tag @smoke, got %v", one)
+	}
+	if !contains(one, "@report1") {
+		t.Errorf("Scenario One should keep the shared report tags, got %v", one)
+	}
+	if contains(one, "@regression") {
+		t.Errorf("Scenario One's tags were corrupted by Scenario Two (aliasing): got %v", one)
+	}
+
+	two := tagsFor("Scenario Two")
+	if !contains(two, "@regression") {
+		t.Errorf("Scenario Two should keep its own tag @regression, got %v", two)
+	}
+	if !contains(two, "@report1") {
+		t.Errorf("Scenario Two should keep the shared report tags, got %v", two)
+	}
+}
+
 func TestKarateParser_EmptyInput(t *testing.T) {
 	parser := New()
 	_, err := parser.Parse(strings.NewReader(""))

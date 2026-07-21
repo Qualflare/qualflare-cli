@@ -109,6 +109,21 @@ func (p *Parser) Parse(reader io.Reader) (*domain.Suite, error) {
 		return nil, err
 	}
 
+	// BUG-33: SonarQube's issues export is paginated. If the report declares more
+	// issues than are present on this page, the remainder would be silently
+	// dropped — a QA product must never under-report findings. Fail loudly naming
+	// the shortfall instead of uploading a partial result as if it were complete.
+	declaredTotal := report.Paging.Total
+	if report.Total > declaredTotal {
+		declaredTotal = report.Total
+	}
+	if declaredTotal > len(report.Issues) {
+		return nil, fmt.Errorf(
+			"sonarqube: report declares %d issues but only %d are present on this page; %d would be silently dropped — re-export with a larger page size or fetch all pages",
+			declaredTotal, len(report.Issues), declaredTotal-len(report.Issues),
+		)
+	}
+
 	suite := &domain.Suite{
 		Name:      "SonarQube Analysis",
 		Category:  domain.FrameworkSonarQube.GetCategory(),
@@ -132,23 +147,13 @@ func (p *Parser) Parse(reader io.Reader) (*domain.Suite, error) {
 	for _, issue := range report.Issues {
 		testCase := p.convertIssue(issue, componentMap, ruleMap)
 		suite.Cases = append(suite.Cases, testCase)
-
-		// Count by severity
-		switch issue.Severity {
-		case "BLOCKER", "CRITICAL":
-			suite.Failed++
-		case "MAJOR":
-			suite.Failed++
-		case "MINOR":
-			suite.Failed++
-		case "INFO":
-			suite.Passed++
-		default:
-			suite.Passed++
-		}
 	}
 
-	suite.TotalTests = len(suite.Cases)
+	// CLI-H7: derive the counters from the case statuses so they can never
+	// disagree with the cases. The previous per-severity counting switch counted
+	// any unknown severity as passed (masking findings) — RecomputeCounts is the
+	// single source of truth (also sets TotalTests).
+	suite.RecomputeCounts()
 
 	// Add paging info
 	suite.Properties = map[string]string{
@@ -194,7 +199,9 @@ func (p *Parser) convertIssue(issue Issue, components map[string]Component, rule
 		testCase.Status = domain.StatusPassed
 		testCase.Priority = domain.SeverityInfo
 	default:
-		testCase.Status = domain.StatusPassed
+		// CLI-H7: an out-of-list severity must fail closed for a security finding —
+		// never mark an unknown finding as passed.
+		testCase.Status = domain.StatusFailed
 		testCase.Priority = domain.SeverityUnknown
 	}
 

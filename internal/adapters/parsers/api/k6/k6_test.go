@@ -72,6 +72,81 @@ func TestK6Parser_ParseChecks(t *testing.T) {
 	}
 }
 
+// TestK6Parser_DuplicateCheckTitlesAcrossGroups reproduces BUG-05: two checks
+// that share the same title in different groups must yield two cases with
+// distinct Names. The server dedupes cases by Name within a suite, so a bare
+// check title collides and one check is silently merged away (a QA false-green).
+func TestK6Parser_DuplicateCheckTitlesAcrossGroups(t *testing.T) {
+	jsonReport := `{
+    "root_group": {
+        "name": "",
+        "path": "",
+        "id": "root",
+        "groups": [
+            {
+                "name": "Login Flow",
+                "path": "::Login Flow",
+                "id": "group-1",
+                "groups": [],
+                "checks": [
+                    {
+                        "name": "status is 200",
+                        "path": "::Login Flow::status is 200",
+                        "id": "check-login",
+                        "passes": 10,
+                        "fails": 0
+                    }
+                ]
+            },
+            {
+                "name": "Checkout Flow",
+                "path": "::Checkout Flow",
+                "id": "group-2",
+                "groups": [],
+                "checks": [
+                    {
+                        "name": "status is 200",
+                        "path": "::Checkout Flow::status is 200",
+                        "id": "check-checkout",
+                        "passes": 5,
+                        "fails": 0
+                    }
+                ]
+            }
+        ],
+        "checks": []
+    },
+    "options": {"summaryTrendStats": ["avg", "p(95)"]},
+    "state": {"isStdOutTTY": true, "isStdErrTTY": true, "testRunDurationMs": 3000},
+    "metrics": {}
+}`
+
+	parser := New()
+	suite, err := parser.Parse(strings.NewReader(jsonReport))
+	if err != nil {
+		t.Fatalf("parse error: %v", err)
+	}
+
+	if len(suite.Cases) != 2 {
+		t.Fatalf("expected 2 cases, got %d", len(suite.Cases))
+	}
+
+	names := make(map[string]int)
+	for _, c := range suite.Cases {
+		names[c.Name]++
+	}
+
+	if len(names) != 2 {
+		t.Errorf("expected 2 distinct case names (checks in different groups must not collide), got %d: %v", len(names), names)
+	}
+	if names["Login Flow > status is 200"] != 1 {
+		t.Errorf("expected a case named 'Login Flow > status is 200', names were: %v", names)
+	}
+	if names["Checkout Flow > status is 200"] != 1 {
+		t.Errorf("expected a case named 'Checkout Flow > status is 200', names were: %v", names)
+	}
+}
+
 func TestK6Parser_EmptyInput(t *testing.T) {
 	parser := New()
 	_, err := parser.Parse(strings.NewReader(""))

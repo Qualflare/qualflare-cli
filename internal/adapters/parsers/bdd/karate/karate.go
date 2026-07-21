@@ -115,11 +115,19 @@ func (p *Parser) Parse(reader io.Reader) (*domain.Suite, error) {
 
 // convertScenario converts a Karate scenario to domain.Case
 func (p *Parser) convertScenario(scenario Scenario, report Report) domain.Case {
+	// BUG-07: append(report.Tags, scenario.Tags...) aliased report.Tags' backing
+	// array, so scenarios overwrote each other's tags across the loop. Build a
+	// FRESH slice per scenario so each keeps only its own tags plus the shared
+	// report tags.
+	tags := make([]string, 0, len(report.Tags)+len(scenario.Tags))
+	tags = append(tags, report.Tags...)
+	tags = append(tags, scenario.Tags...)
+
 	testCase := domain.Case{
 		ID:       report.FeatureName + "_" + scenario.Name,
 		Name:     scenario.Name,
 		Duration: time.Duration(scenario.DurationMillis) * time.Millisecond,
-		Tags:     append(report.Tags, scenario.Tags...),
+		Tags:     tags,
 	}
 
 	// Build steps

@@ -90,29 +90,34 @@ func (p *Parser) Parse(reader io.Reader) (*domain.Suite, error) {
 	var totalDuration time.Duration
 
 	for _, feature := range features {
-		for _, scenario := range feature.Elements {
-			if scenario.Type != "scenario" && scenario.Type != "scenario_outline" {
+		// CLI-H3: cucumber runners (cucumber-js/-ruby) emit a Background as a
+		// separate `background` element that precedes the scenario(s) it applies
+		// to. When a background step fails, the dependent scenario's own steps all
+		// roll up to "skipped" — so skipping the background element entirely would
+		// make the failure vanish (scenario -> skipped, suite -> green). Track the
+		// most recent background's failure and fold it into the following
+		// scenario(s). A passing/skipped background clears it so unaffected
+		// scenarios aren't force-failed.
+		var pendingBackground *backgroundFailure
+		for _, element := range feature.Elements {
+			switch element.Type {
+			case "background":
+				pendingBackground = extractBackgroundFailure(element)
+			case "scenario", "scenario_outline":
+				testCase := p.convertScenario(feature, element, pendingBackground)
+				suite.Cases = append(suite.Cases, testCase)
+				totalDuration += testCase.Duration
+			default:
+				// Unknown/non-runnable element type — skip.
 				continue
-			}
-
-			testCase := p.convertScenario(feature, scenario)
-			suite.Cases = append(suite.Cases, testCase)
-			totalDuration += testCase.Duration
-
-			// Update counters
-			switch testCase.Status {
-			case domain.StatusPassed:
-				suite.Passed++
-			case domain.StatusFailed:
-				suite.Failed++
-			case domain.StatusSkipped, domain.StatusPending:
-				suite.Skipped++
 			}
 		}
 	}
 
-	suite.TotalTests = len(suite.Cases)
 	suite.Duration = totalDuration
+	// Derive counters from the case statuses so they can never disagree with the
+	// cases (and so an error/pending case can't slip past the counters). (CLI-H3)
+	suite.RecomputeCounts()
 
 	return suite, nil
 }
@@ -201,8 +206,35 @@ func processSteps(steps []Step) ([]domain.Step, time.Duration, domain.Status, []
 	return domainSteps, totalDuration, scenarioStatus, errorMessages, stackTraces
 }
 
-// convertScenario converts a Cucumber scenario to domain.Case
-func (p *Parser) convertScenario(feature Feature, scenario Scenario) domain.Case {
+// backgroundFailure carries a failing `background` element's results so they can
+// be folded into the scenario(s) that depend on it. (CLI-H3)
+type backgroundFailure struct {
+	steps         []domain.Step
+	duration      time.Duration
+	errorMessages []string
+	stackTraces   []string
+}
+
+// extractBackgroundFailure processes a `background` element and returns its
+// results ONLY when a background step failed; a passing/skipped background
+// returns nil so the dependent scenarios are processed normally. (CLI-H3)
+func extractBackgroundFailure(bg Scenario) *backgroundFailure {
+	steps, duration, status, errorMessages, stackTraces := processSteps(bg.Steps)
+	if status != domain.StatusFailed {
+		return nil
+	}
+	return &backgroundFailure{
+		steps:         steps,
+		duration:      duration,
+		errorMessages: errorMessages,
+		stackTraces:   stackTraces,
+	}
+}
+
+// convertScenario converts a Cucumber scenario to domain.Case. bg, when non-nil,
+// is a failing background whose steps/errors are folded in and force the scenario
+// red (CLI-H3).
+func (p *Parser) convertScenario(feature Feature, scenario Scenario, bg *backgroundFailure) domain.Case {
 	testCase := domain.Case{
 		ID:   feature.ID + "_" + scenario.ID,
 		Name: feature.Name + " - " + scenario.Name,
@@ -211,6 +243,20 @@ func (p *Parser) convertScenario(feature Feature, scenario Scenario) domain.Case
 
 	// Process steps
 	steps, duration, scenarioStatus, errorMessages, stackTraces := processSteps(scenario.Steps)
+
+	// CLI-H3: a failing background is emitted as a separate element and the
+	// scenario's own steps then all roll up to "skipped". Prepend the background's
+	// failed steps (they run first) and force the scenario red so the failure
+	// can't vanish. Not double-counted: the background is not emitted as its own
+	// case.
+	if bg != nil {
+		steps = append(append([]domain.Step{}, bg.steps...), steps...)
+		duration += bg.duration
+		scenarioStatus = domain.StatusFailed
+		errorMessages = append(append([]string{}, bg.errorMessages...), errorMessages...)
+		stackTraces = append(append([]string{}, bg.stackTraces...), stackTraces...)
+	}
+
 	testCase.Steps = steps
 	testCase.Duration = duration
 

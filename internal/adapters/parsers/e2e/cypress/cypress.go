@@ -18,18 +18,21 @@ type Report struct {
 }
 
 type Stats struct {
-	Suites            int     `json:"suites"`
-	Tests             int     `json:"tests"`
-	Passes            int     `json:"passes"`
-	Pending           int     `json:"pending"`
-	Failures          int     `json:"failures"`
-	Start             string  `json:"start"`
-	End               string  `json:"end"`
-	Duration          int     `json:"duration"` // milliseconds
-	TestsRegistered   int     `json:"testsRegistered"`
-	PassPercent       float64 `json:"passPercent"`
-	PendingPercent    float64 `json:"pendingPercent"`
-	SkippedRegistered int     `json:"skippedRegistered"`
+	Suites          int     `json:"suites"`
+	Tests           int     `json:"tests"`
+	Passes          int     `json:"passes"`
+	Pending         int     `json:"pending"`
+	Failures        int     `json:"failures"`
+	Start           string  `json:"start"`
+	End             string  `json:"end"`
+	Duration        int     `json:"duration"` // milliseconds
+	TestsRegistered int     `json:"testsRegistered"`
+	PassPercent     float64 `json:"passPercent"`
+	PendingPercent  float64 `json:"pendingPercent"`
+	// BUG-29: mochawesome emits `skipped`, not `skippedRegistered`; the old field
+	// tag never matched, so skips were always read as 0. The header is no longer
+	// trusted for the counters anyway (see RecomputeCounts in Parse).
+	Skipped int `json:"skipped"`
 }
 
 type Result struct {
@@ -63,24 +66,24 @@ type Suite struct {
 }
 
 type Test struct {
-	Title      string   `json:"title"`
-	FullTitle  string   `json:"fullTitle"`
-	TimedOut   bool     `json:"timedOut"`
-	Duration   int      `json:"duration"`
-	State      string   `json:"state"` // passed, failed, pending
-	Speed      string   `json:"speed"`
-	Pass       bool     `json:"pass"`
-	Fail       bool     `json:"fail"`
-	Pending    bool     `json:"pending"`
-	Retries    int      `json:"_retries,omitempty"`  // Number of retries
+	Title      string    `json:"title"`
+	FullTitle  string    `json:"fullTitle"`
+	TimedOut   bool      `json:"timedOut"`
+	Duration   int       `json:"duration"`
+	State      string    `json:"state"` // passed, failed, pending
+	Speed      string    `json:"speed"`
+	Pass       bool      `json:"pass"`
+	Fail       bool      `json:"fail"`
+	Pending    bool      `json:"pending"`
+	Retries    int       `json:"_retries,omitempty"` // Number of retries
 	Attempts   []Attempt `json:"attempts,omitempty"` // Individual attempts
-	Context    string   `json:"context"`
-	Code       string   `json:"code"`
-	Err        Error    `json:"err"`
-	UUID       string   `json:"uuid"`
-	ParentUUID string   `json:"parentUUID"`
-	IsHook     bool     `json:"isHook"`
-	Skipped    bool     `json:"skipped"`
+	Context    string    `json:"context"`
+	Code       string    `json:"code"`
+	Err        Error     `json:"err"`
+	UUID       string    `json:"uuid"`
+	ParentUUID string    `json:"parentUUID"`
+	IsHook     bool      `json:"isHook"`
+	Skipped    bool      `json:"skipped"`
 }
 
 type Attempt struct {
@@ -124,16 +127,15 @@ func (p *Parser) Parse(reader io.Reader) (*domain.Suite, error) {
 		return nil, err
 	}
 
+	// BUG-29: counters are derived from the actual cases at the end of Parse
+	// (RecomputeCounts) rather than from the mochawesome stats header, so a
+	// misread/inconsistent header can never disagree with the case list.
 	suite := &domain.Suite{
-		Name:       "Cypress Test Results",
-		Category:   domain.FrameworkCypress.GetCategory(),
-		TotalTests: report.Stats.Tests,
-		Passed:     report.Stats.Passes,
-		Failed:     report.Stats.Failures,
-		Skipped:    report.Stats.Pending + report.Stats.SkippedRegistered,
-		Duration:   time.Duration(report.Stats.Duration) * time.Millisecond,
-		Timestamp:  time.Now().UTC(),
-		Cases:      make([]domain.Case, 0),
+		Name:      "Cypress Test Results",
+		Category:  domain.FrameworkCypress.GetCategory(),
+		Duration:  time.Duration(report.Stats.Duration) * time.Millisecond,
+		Timestamp: time.Now().UTC(),
+		Cases:     make([]domain.Case, 0),
 	}
 
 	// Parse start time if available
@@ -147,6 +149,10 @@ func (p *Parser) Parse(reader io.Reader) (*domain.Suite, error) {
 	for _, result := range report.Results {
 		p.processResult(result, suite)
 	}
+
+	// BUG-29: derive Passed/Failed/Skipped/Errors/TotalTests from the built cases
+	// so the counters can never disagree with the case statuses.
+	suite.RecomputeCounts()
 
 	return suite, nil
 }
@@ -210,7 +216,10 @@ func (p *Parser) convertTest(test Test, file string) domain.Case {
 			testCase.Error = domain.FormatError(test.Err.Message, test.Err.Estack, "")
 		}
 	case "pending":
-		testCase.Status = domain.StatusPending
+		// BUG-08: a pending test is an it.skip; map it to Skipped (mocha semantics,
+		// matching every other parser). StatusPending out-ranks passed server-side
+		// and would flip a whole suite pending for one skipped test.
+		testCase.Status = domain.StatusSkipped
 	default:
 		if test.Skipped {
 			testCase.Status = domain.StatusSkipped

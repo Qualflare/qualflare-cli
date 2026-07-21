@@ -123,24 +123,18 @@ func (p *Parser) Parse(reader io.Reader) (*domain.Suite, error) {
 		return nil, err
 	}
 
-	totalTests := report.Run.Stats.Assertions.Total
-	failedTests := report.Run.Stats.Assertions.Failed
-	pendingTests := report.Run.Stats.Assertions.Pending
-
 	duration := time.Duration(0)
 	if report.Run.Timings.Completed > 0 && report.Run.Timings.Started > 0 {
 		duration = time.Duration(report.Run.Timings.Completed-report.Run.Timings.Started) * time.Millisecond
 	}
 
 	suite := &domain.Suite{
-		Name:       base.CoalesceString(report.Collection.Info.Name, "Newman Test Results"),
-		Category:   domain.FrameworkNewman.GetCategory(),
-		TotalTests: totalTests,
-		Passed:     totalTests - failedTests - pendingTests,
-		Failed:     failedTests,
-		Skipped:    pendingTests,
-		Duration:   duration,
-		Timestamp:  time.UnixMilli(report.Run.Timings.Started),
+		Name:      base.CoalesceString(report.Collection.Info.Name, "Newman Test Results"),
+		Category:  domain.FrameworkNewman.GetCategory(),
+		Duration:  duration,
+		Timestamp: time.UnixMilli(report.Run.Timings.Started),
+		// Assertions is the assertion-level total from the stats header; unlike the
+		// pass/fail counters it is orthogonal to case status, so it stays as-is.
 		Assertions: report.Run.Stats.Assertions.Total,
 		Cases:      make([]domain.Case, 0),
 	}
@@ -158,6 +152,12 @@ func (p *Parser) Parse(reader io.Reader) (*domain.Suite, error) {
 		suite.Cases = append(suite.Cases, testCase)
 	}
 
+	// Counters (rule 3): derive Passed/Failed/Skipped/Errors and TotalTests from
+	// the per-request case statuses rather than the assertion-level stats header,
+	// so the suite totals can never disagree with the cases (the source of truth
+	// the server recomputes from). Assertions is left as set above.
+	suite.RecomputeCounts()
+
 	return suite, nil
 }
 
@@ -169,15 +169,21 @@ func (p *Parser) convertExecution(exec Execution, failureMap map[string][]Failur
 		Duration: time.Duration(exec.Response.ResponseTime) * time.Millisecond,
 	}
 
-	// Determine status based on assertions
+	// Determine status based on assertions.
+	// BUG-06: track whether any NON-skipped assertion actually executed. The old
+	// `anySkipped` flag was only ever set inside this loop, so the later
+	// `anySkipped && len(exec.Assertions) == 0` guard was dead (unreachable) and a
+	// request whose assertions were all skipped fell through to StatusPassed.
 	allPassed := true
-	anySkipped := false
+	anyRan := false
 	var errorMsgs []string
 
 	for _, assertion := range exec.Assertions {
 		if assertion.Skipped {
-			anySkipped = true
-		} else if assertion.Error != nil {
+			continue
+		}
+		anyRan = true
+		if assertion.Error != nil {
 			allPassed = false
 			errorMsgs = append(errorMsgs, assertion.Error.Message)
 		}
@@ -200,7 +206,10 @@ func (p *Parser) convertExecution(exec Execution, failureMap map[string][]Failur
 		if len(errorMsgs) > 0 {
 			testCase.Error = domain.FormatError(errorMsgs[0], stackTrace, "")
 		}
-	} else if anySkipped && len(exec.Assertions) == 0 {
+	} else if len(exec.Assertions) > 0 && !anyRan {
+		// BUG-06: assertions were present but every one was skipped, so the request
+		// was never actually verified — mark it skipped instead of passing it. A
+		// request with genuinely zero assertions still falls through to passed.
 		testCase.Status = domain.StatusSkipped
 	} else {
 		testCase.Status = domain.StatusPassed

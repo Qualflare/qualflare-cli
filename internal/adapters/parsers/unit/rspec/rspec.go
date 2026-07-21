@@ -62,22 +62,39 @@ func (p *Parser) Parse(reader io.Reader) (*domain.Suite, error) {
 	}
 
 	suite := &domain.Suite{
-		Name:       "RSpec Test Results",
-		Category:   domain.FrameworkRSpec.GetCategory(),
-		TotalTests: report.Summary.ExampleCount,
-		Failed:     report.Summary.FailureCount,
-		Skipped:    report.Summary.PendingCount,
-		Duration:   time.Duration(report.Summary.Duration * float64(time.Second)),
-		Timestamp:  time.Now().UTC(),
-		Cases:      make([]domain.Case, 0, len(report.Examples)),
+		Name:      "RSpec Test Results",
+		Category:  domain.FrameworkRSpec.GetCategory(),
+		Duration:  time.Duration(report.Summary.Duration * float64(time.Second)),
+		Timestamp: time.Now().UTC(),
+		Cases:     make([]domain.Case, 0, len(report.Examples)),
 	}
-
-	suite.Passed = suite.TotalTests - suite.Failed - suite.Skipped
 
 	for _, example := range report.Examples {
 		testCase := p.convertExample(example)
 		suite.Cases = append(suite.Cases, testCase)
 	}
+
+	// BUG-17: a load-time error (spec_helper/rails_helper raising) makes RSpec
+	// report example_count 0, failure_count 0, but errors_outside_of_examples_count
+	// > 0. Without a synthesized case the suite would upload empty and roll up
+	// green, hiding the failure. Materialize it as a failed case so the suite goes
+	// red and the summary line is preserved.
+	if report.Summary.ErrorsOutsideOfExamplesCount > 0 {
+		message := report.SummaryLine
+		if message == "" {
+			message = "RSpec reported errors that occurred outside of examples (e.g. a load-time failure in spec_helper/rails_helper)"
+		}
+		suite.Cases = append(suite.Cases, domain.Case{
+			ID:     "rspec:errors-outside-of-examples",
+			Name:   "Errors occurred outside of examples",
+			Status: domain.StatusFailed,
+			Error:  domain.FormatError(message, "", ""),
+		})
+	}
+
+	// Counters are header-derived; recompute from case statuses so they can never
+	// disagree with the cases (and can never roll up green over a load-time error).
+	suite.RecomputeCounts()
 
 	return suite, nil
 }
@@ -111,7 +128,9 @@ func (p *Parser) convertExample(example Example) domain.Case {
 		testCase.Status = domain.StatusPending
 		testCase.Error = domain.FormatError(example.PendingMessage, "", "")
 	default:
-		testCase.Status = domain.StatusSkipped
+		// BUG-17: an unrecognized RSpec status must fail visibly, never be masked as
+		// skipped/passed (the cardinal sin is a non-passing test rolling up green).
+		testCase.Status = domain.StatusError
 	}
 
 	// Add properties
