@@ -19,6 +19,12 @@ type TestSuite struct {
 	Tests      int        `xml:"tests,attr"`
 	Failures   int        `xml:"failures,attr"`
 	Errors     int        `xml:"errors,attr"`
+	// BUG-38: pytest emits the header attribute `skipped`, not `skips`. Reading
+	// the nonexistent `skips` left this 0 and inflated the passed count. Counters
+	// are now derived from the cases (RecomputeCounts) instead of this header,
+	// but keep the correct tag for anyone reading the raw value. Skips remains a
+	// fallback for ancient pytest that emitted `skips`.
+	Skipped    int        `xml:"skipped,attr"`
 	Skips      int        `xml:"skips,attr"`
 	Time       string     `xml:"time,attr"`
 	Timestamp  string     `xml:"timestamp,attr"`
@@ -78,16 +84,11 @@ func (p *Parser) Parse(reader io.Reader) (*domain.Suite, error) {
 	}
 
 	suite := &domain.Suite{
-		Name:       testSuite.Name,
-		Category:   domain.FrameworkPython.GetCategory(),
-		TotalTests: testSuite.Tests,
-		Failed:     testSuite.Failures + testSuite.Errors,
-		Skipped:    testSuite.Skips,
-		Timestamp:  time.Now().UTC(),
-		Cases:      make([]domain.Case, 0, len(testSuite.TestCases)),
+		Name:      testSuite.Name,
+		Category:  domain.FrameworkPython.GetCategory(),
+		Timestamp: time.Now().UTC(),
+		Cases:     make([]domain.Case, 0, len(testSuite.TestCases)),
 	}
-
-	suite.Passed = suite.TotalTests - suite.Failed - suite.Skipped
 
 	if duration, err := base.ParseDuration(testSuite.Time); err == nil {
 		suite.Duration = duration
@@ -105,6 +106,10 @@ func (p *Parser) Parse(reader io.Reader) (*domain.Suite, error) {
 		testCase := p.convertTestCase(tc)
 		suite.Cases = append(suite.Cases, testCase)
 	}
+
+	// BUG-38: derive Passed/Failed/Skipped/Errors/TotalTests from the actual case
+	// statuses so a skipped (or failed) case can never be counted as passed.
+	suite.RecomputeCounts()
 
 	return suite, nil
 }

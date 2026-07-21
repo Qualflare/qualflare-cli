@@ -105,6 +105,14 @@ func (p *Parser) Parse(reader io.Reader) (*domain.Suite, error) {
 		return nil, err
 	}
 
+	// CLI-H6: a real Trivy report always carries a SchemaVersion. A wrong-schema
+	// file (e.g. SARIF) decodes into an empty Report with neither a SchemaVersion
+	// nor any Results — treat that as unparseable rather than an empty passing
+	// suite, so a scan that never ran against this tool can't roll up green.
+	if report.SchemaVersion == 0 && len(report.Results) == 0 {
+		return nil, fmt.Errorf("trivy: not a Trivy report (no SchemaVersion and no Results)")
+	}
+
 	suite := &domain.Suite{
 		Name:      base.CoalesceString(report.ArtifactName, "Trivy Security Scan"),
 		Category:  domain.FrameworkTrivy.GetCategory(),
@@ -118,24 +126,18 @@ func (p *Parser) Parse(reader io.Reader) (*domain.Suite, error) {
 		for _, vuln := range result.Vulnerabilities {
 			testCase := p.convertVulnerability(vuln, result.Target)
 			suite.Cases = append(suite.Cases, testCase)
-
-			suite.Failed++
 		}
 
 		// Process misconfigurations
 		for _, misconf := range result.Misconfigurations {
 			testCase := p.convertMisconfig(misconf, result.Target)
 			suite.Cases = append(suite.Cases, testCase)
-
-			if misconf.Status == "FAIL" {
-				suite.Failed++
-			} else {
-				suite.Passed++
-			}
 		}
 	}
 
-	suite.TotalTests = len(suite.Cases)
+	// Derive counters from the case statuses (never from independent increments)
+	// so a real finding can never disagree with the cases or roll up green.
+	suite.RecomputeCounts()
 
 	// Add metadata as properties
 	suite.Properties = map[string]string{
@@ -169,8 +171,9 @@ func (p *Parser) convertVulnerability(vuln Vulnerability, target string) domain.
 		testCase.Status = domain.StatusFailed
 		testCase.Priority = domain.SeverityLow
 	default:
-		testCase.Status = domain.StatusPassed
-		testCase.Priority = domain.SeverityUnknown
+		// CLI-H7: Trivy legitimately emits "UNKNOWN". A security finding is never a
+		// pass — fail closed. Priority is left empty (no valid severity to map).
+		testCase.Status = domain.StatusFailed
 	}
 
 	testCase.Error = domain.FormatError(vuln.Title, vuln.Description, "")
