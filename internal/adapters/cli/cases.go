@@ -8,15 +8,6 @@ import (
 )
 
 func (c *CLI) createCasesCommand() *cobra.Command {
-	var (
-		suiteSeq int
-		query    string
-		states   []string
-		priority []string
-		sortBy   string
-		sortDesc bool
-	)
-
 	cmd := &cobra.Command{
 		Use:   "cases",
 		Short: "List test cases",
@@ -28,32 +19,34 @@ func (c *CLI) createCasesCommand() *cobra.Command {
   qf <id> cases list --suite 5 --state active,review`,
 	}
 
-	listCmd := &cobra.Command{
-		Use:   "list",
-		Short: "List test cases in a suite",
-		RunE: func(cmd *cobra.Command, args []string) error {
+	var (
+		suiteSeq         int
+		query            string
+		states, priority []string
+	)
+	// Unpaginated: the suite-cases endpoint returns the whole suite, so no --page flag
+	// (SYNC-08). --suite is required and the path is suite-scoped.
+	cmd.AddCommand(c.newListCommand(listSpec{
+		short:     "List test cases in a suite",
+		paginated: false,
+		registerFilters: func(lc *cobra.Command) {
+			lc.Flags().IntVar(&suiteSeq, "suite", 0, "Suite sequence number (required)")
+			lc.Flags().StringVar(&query, "query", "", "Search query")
+			lc.Flags().StringSliceVar(&states, "state", nil, "Filter by state (active,review,outdated,draft)")
+			lc.Flags().StringSliceVar(&priority, "priority", nil, "Filter by priority (low,medium,high,critical)")
+		},
+		buildRequest: func(_ *cobra.Command, params url.Values) (string, error) {
 			if suiteSeq <= 0 {
-				return fmt.Errorf("--suite flag is required")
+				return "", fmt.Errorf("--suite flag is required")
 			}
-			params := url.Values{}
-			addSorting(params, sortBy, sortDesc, cmd.Flags().Changed("sort-desc"))
 			if query != "" {
 				params.Set("q", query)
 			}
 			addSliceParam(params, "state", states)
 			addSliceParam(params, "priority", priority)
-			return c.fetchAndPrint(fmt.Sprintf(apiV1+"/suite/%d/cases", suiteSeq), params)
+			return fmt.Sprintf(apiV1+"/suite/%d/cases", suiteSeq), nil
 		},
-	}
-
-	listCmd.Flags().IntVar(&suiteSeq, "suite", 0, "Suite sequence number (required)")
-	listCmd.Flags().StringVar(&query, "query", "", "Search query")
-	listCmd.Flags().StringSliceVar(&states, "state", nil, "Filter by state (active,review,outdated,draft)")
-	listCmd.Flags().StringSliceVar(&priority, "priority", nil, "Filter by priority (low,medium,high,critical)")
-	listCmd.Flags().StringVar(&sortBy, "sort-by", "", "Sort by field")
-	listCmd.Flags().BoolVar(&sortDesc, "sort-desc", false, "Sort in descending order")
-
-	cmd.AddCommand(listCmd)
+	}))
 	return cmd
 }
 
