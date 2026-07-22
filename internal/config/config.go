@@ -25,6 +25,8 @@ type Config struct {
 	// Project settings
 	Environment string
 	Language    string
+	Platform    string
+	Milestone   int64
 
 	// Git information
 	Branch string
@@ -50,6 +52,7 @@ func DefaultConfig() *Config {
 		APIKey:         "",
 		Environment:    "development",
 		Language:       "en-US",
+		Platform:       "api", // backward-compatible default; override with --platform / QF_PLATFORM
 		Branch:         "",
 		Commit:         "",
 		RetryMax:       3,
@@ -78,6 +81,14 @@ func (c *Config) LoadFromEnv() {
 	}
 	if v := os.Getenv("QF_LANGUAGE"); v != "" {
 		c.Language = v
+	}
+	if v := os.Getenv("QF_PLATFORM"); v != "" {
+		c.Platform = v
+	}
+	if v := os.Getenv("QF_MILESTONE"); v != "" {
+		if n, err := strconv.ParseInt(v, 10, 64); err == nil && n > 0 {
+			c.Milestone = n
+		}
 	}
 
 	// Git information: CI env vars first, then fall back to local git detection.
@@ -148,6 +159,21 @@ func (c *Config) SetLanguage(language string) {
 	}
 }
 
+// SetPlatform sets the platform (skips empty so an unset flag doesn't clobber
+// the env var / default, matching SetEnvironment).
+func (c *Config) SetPlatform(platform string) {
+	if platform != "" {
+		c.Platform = platform
+	}
+}
+
+// SetMilestone sets the milestone sequence number (skips 0 = unset).
+func (c *Config) SetMilestone(milestone int64) {
+	if milestone > 0 {
+		c.Milestone = milestone
+	}
+}
+
 // SetBranch sets the git branch
 func (c *Config) SetBranch(branch string) {
 	if branch != "" {
@@ -202,6 +228,16 @@ func (c *Config) GetEnvironment() string {
 // GetLanguage returns the language
 func (c *Config) GetLanguage() string {
 	return c.Language
+}
+
+// GetPlatform returns the platform (android/ios/desktop/web/api).
+func (c *Config) GetPlatform() string {
+	return c.Platform
+}
+
+// GetMilestone returns the milestone sequence number (0 = none).
+func (c *Config) GetMilestone() int64 {
+	return c.Milestone
 }
 
 // GetBranch returns the git branch

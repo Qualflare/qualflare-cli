@@ -162,6 +162,8 @@ func (c *CLI) createCollectCommand() *cobra.Command {
 		format      string
 		environment string
 		language    string
+		platform    string
+		milestone   int64
 		branch      string
 		commit      string
 		timeout     time.Duration
@@ -196,6 +198,8 @@ The format is auto-detected if not specified.`,
 				format:      format,
 				environment: environment,
 				language:    language,
+				platform:    platform,
+				milestone:   milestone,
 				branch:      branch,
 				commit:      commit,
 				timeout:     timeout,
@@ -213,6 +217,8 @@ The format is auto-detected if not specified.`,
 	cmd.Flags().StringVarP(&format, "format", "f", "", "Test framework format (auto-detected if not specified)")
 	cmd.Flags().StringVarP(&environment, "environment", "e", "", "Environment name (default: $QF_ENVIRONMENT or 'development')")
 	cmd.Flags().StringVar(&language, "lang", "", "Language/culture, BCP 47 (default: $QF_LANGUAGE or 'en-US')")
+	cmd.Flags().StringVar(&platform, "platform", "", "Platform: android|ios|desktop|web|api (default: $QF_PLATFORM or 'api')")
+	cmd.Flags().Int64Var(&milestone, "milestone", 0, "Milestone sequence number to link this launch to (or $QF_MILESTONE)")
 	cmd.Flags().StringVar(&branch, "branch", "", "Git branch name")
 	cmd.Flags().StringVar(&commit, "commit", "", "Git commit hash")
 	cmd.Flags().DurationVar(&timeout, "timeout", 30*time.Second, "Request timeout")
@@ -226,6 +232,8 @@ type collectOptions struct {
 	format      string
 	environment string
 	language    string
+	platform    string
+	milestone   int64
 	branch      string
 	commit      string
 	timeout     time.Duration
@@ -233,11 +241,26 @@ type collectOptions struct {
 	output      string
 }
 
+// validPlatforms mirrors the server's launch platform enum
+// (oneof=android ios desktop web api).
+var validPlatforms = map[string]struct{}{
+	"android": {}, "ios": {}, "desktop": {}, "web": {}, "api": {},
+}
+
 func (c *CLI) runCollect(ctx context.Context, files []string, opts collectOptions) error {
 	warnLegacyAPIKey()
+	// Validate an explicit --platform before it reaches the server (fail fast with
+	// a clear message instead of a 400 on the whole upload).
+	if opts.platform != "" {
+		if _, ok := validPlatforms[opts.platform]; !ok {
+			return fmt.Errorf("invalid --platform %q: must be one of android, ios, desktop, web, api", opts.platform)
+		}
+	}
 	// Apply command line overrides
 	c.config.SetEnvironment(opts.environment)
 	c.config.SetLanguage(opts.language)
+	c.config.SetPlatform(opts.platform)
+	c.config.SetMilestone(opts.milestone)
 	c.config.SetBranch(opts.branch)
 	c.config.SetCommit(opts.commit)
 	c.config.SetTimeout(opts.timeout)

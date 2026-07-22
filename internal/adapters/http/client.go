@@ -167,20 +167,32 @@ func (c *Client) buildAPIError(op string, resp *resty.Response) *APIError {
 	var errResp ErrorResponse
 	if err := json.Unmarshal(resp.Bytes(), &errResp); err == nil {
 		apiErr.Code = errResp.Code
-		if friendlyMsg := getUserFriendlyMessage(errResp.Code); friendlyMsg != "" {
-			apiErr.Message = friendlyMsg
-		} else if errResp.Error != "" {
-			apiErr.Message = errResp.Error
-		} else if errResp.Message != "" {
-			apiErr.Message = errResp.Message
-		} else {
-			apiErr.Message = fmt.Sprintf("API request failed with status %d", resp.StatusCode())
-		}
+		apiErr.RequestID = errResp.RequestID
+		apiErr.Message = resolveErrorMessage(errResp, resp.StatusCode())
 	} else {
 		apiErr.Message = fmt.Sprintf("API request failed with status %d", resp.StatusCode())
 	}
 
 	return apiErr
+}
+
+// resolveErrorMessage picks the message to show the user. It prefers the server's
+// own message (the enriched envelope is client-safe for 4xx), falling back to a
+// CLI-specific friendly hint only when the server gave no message (SYNC-01/10).
+// The previous order let a hardcoded friendly string override the server — and
+// mapped the GENERIC 404 code common.resource_not_found to "Language not found",
+// so a missing cluster or suite rendered as a BCP-47 language error.
+func resolveErrorMessage(errResp ErrorResponse, statusCode int) string {
+	switch {
+	case errResp.Message != "":
+		return errResp.Message
+	case getUserFriendlyMessage(errResp.Code) != "":
+		return getUserFriendlyMessage(errResp.Code)
+	case errResp.Error != "":
+		return errResp.Error
+	default:
+		return fmt.Sprintf("API request failed with status %d", statusCode)
+	}
 }
 
 // APIError represents an API error
@@ -189,47 +201,55 @@ type APIError struct {
 	Message    string
 	Code       string
 	StatusCode int
+	RequestID  string
 	Err        error
 }
 
 func (e *APIError) Error() string {
+	// Surface the server's request_id so a user can quote it to support (OBS-01).
+	suffix := ""
+	if e.RequestID != "" {
+		suffix = fmt.Sprintf(" [request_id: %s]", e.RequestID)
+	}
 	if e.StatusCode > 0 {
-		return fmt.Sprintf("%s: %s (status: %d)", e.Op, e.Message, e.StatusCode)
+		return fmt.Sprintf("%s: %s (status: %d)%s", e.Op, e.Message, e.StatusCode, suffix)
 	}
 	if e.Err != nil {
-		return fmt.Sprintf("%s: %s: %v", e.Op, e.Message, e.Err)
+		return fmt.Sprintf("%s: %s: %v%s", e.Op, e.Message, e.Err, suffix)
 	}
-	return fmt.Sprintf("%s: %s", e.Op, e.Message)
+	return fmt.Sprintf("%s: %s%s", e.Op, e.Message, suffix)
 }
 
 func (e *APIError) Unwrap() error {
 	return e.Err
 }
 
-// ErrorResponse represents an API error response
+// ErrorResponse mirrors the server's enriched error envelope
+// {code, message?, request_id?, fields?}. `error` is legacy/back-compat.
 type ErrorResponse struct {
-	Error   string `json:"error"`
-	Message string `json:"message"`
-	Code    string `json:"code"`
+	Error     string `json:"error"`
+	Message   string `json:"message"`
+	Code      string `json:"code"`
+	RequestID string `json:"request_id"`
 }
 
 // API error codes — must match server's result.Code constants (dot-notation).
+// NOTE: common.resource_not_found is the GENERIC 404 and must NOT be aliased to a
+// specific resource — doing so rendered every 404 as "Language not found" (SYNC-10).
 const (
 	ErrCodeEnvironmentNotFound = "environment.not_found"
 	ErrCodeMilestoneNotFound   = "milestone.not_found"
 	ErrCodeValidationFailed    = "common.validation_failed"
-	ErrCodeLanguageNotFound    = "common.resource_not_found"
 )
 
-// getUserFriendlyMessage returns a user-friendly error message for known error codes
+// getUserFriendlyMessage returns a CLI-specific hint for a few known codes. It is
+// only used as a fallback when the server sent no message (see buildAPIError).
 func getUserFriendlyMessage(code string) string {
 	switch code {
 	case ErrCodeEnvironmentNotFound:
 		return "Environment not found. Please check the environment name or create it in Qualflare."
 	case ErrCodeMilestoneNotFound:
-		return "Milestone not found. Please check the milestone ID or create it in Qualflare."
-	case ErrCodeLanguageNotFound:
-		return "Language not found. Please use a valid BCP 47 language code (e.g., en-US, de-DE)."
+		return "Milestone not found. Please check the milestone sequence number or create it in Qualflare."
 	case ErrCodeValidationFailed:
 		return "Validation failed. Please check your request data."
 	default:

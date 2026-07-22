@@ -220,10 +220,11 @@ func (s *ReportService) createReport(testSuites []domain.Suite, framework domain
 	normalizeCasePriorities(testSuites)
 	return &domain.Launch{
 		Framework:   string(framework),
-		Platform:    "api",
+		Platform:    s.config.GetPlatform(),
 		OS:          fmt.Sprintf("%s/%s", runtime.GOOS, runtime.GOARCH),
 		Environment: s.config.GetEnvironment(),
 		Language:    s.config.GetLanguage(),
+		Milestone:   s.config.GetMilestone(),
 		Branch:      s.config.GetBranch(),
 		Commit:      s.config.GetCommit(),
 		Metadata: domain.Metadata{
