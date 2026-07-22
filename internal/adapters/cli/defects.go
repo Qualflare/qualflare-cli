@@ -67,7 +67,7 @@ func (c *CLI) createDefectCommand() *cobra.Command {
 		Short: "Get a defect by sequence number",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return c.fetchAndPrint(fmt.Sprintf(apiV1+"/defect/%s", args[0]), nil)
+			return c.fetchAndPrint(fmt.Sprintf(apiV1+"/defect/%s", pathArg(args[0])), nil)
 		},
 	}
 

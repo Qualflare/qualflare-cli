@@ -72,7 +72,7 @@ func (c *CLI) createLaunchCommand() *cobra.Command {
 		Short: "Get a launch by sequence number",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return c.fetchAndPrint(fmt.Sprintf(apiV1+"/launch/%s", args[0]), nil)
+			return c.fetchAndPrint(fmt.Sprintf(apiV1+"/launch/%s", pathArg(args[0])), nil)
 		},
 	}
 

@@ -66,7 +66,7 @@ func (c *CLI) createSuiteCommand() *cobra.Command {
 		Short: "Get a test suite by sequence number",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return c.fetchAndPrint(fmt.Sprintf(apiV1+"/suite/%s", args[0]), nil)
+			return c.fetchAndPrint(fmt.Sprintf(apiV1+"/suite/%s", pathArg(args[0])), nil)
 		},
 	}
 

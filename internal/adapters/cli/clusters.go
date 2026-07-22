@@ -61,7 +61,7 @@ func (c *CLI) createClusterCommand() *cobra.Command {
 		Short: "Get a failure cluster by ID",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return c.fetchAndPrint(fmt.Sprintf(apiV1+"/cluster/%s", args[0]), nil)
+			return c.fetchAndPrint(fmt.Sprintf(apiV1+"/cluster/%s", pathArg(args[0])), nil)
 		},
 	}
 
