@@ -77,7 +77,7 @@ func (c *CLI) createCaseCommand() *cobra.Command {
 		Short: "Get a test case by sequence number",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return c.fetchAndPrint(fmt.Sprintf(apiV1+"/case/%s", args[0]), nil)
+			return c.fetchAndPrint(fmt.Sprintf(apiV1+"/case/%s", pathArg(args[0])), nil)
 		},
 	}
 
@@ -86,7 +86,7 @@ func (c *CLI) createCaseCommand() *cobra.Command {
 		Short: "Get steps for a test case",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return c.fetchAndPrint(fmt.Sprintf(apiV1+"/case/%s/steps", args[0]), nil)
+			return c.fetchAndPrint(fmt.Sprintf(apiV1+"/case/%s/steps", pathArg(args[0])), nil)
 		},
 	}
 
