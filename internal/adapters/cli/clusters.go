@@ -32,7 +32,7 @@ func (c *CLI) createClustersCommand() *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			params := url.Values{}
 			addPagination(params, page)
-			addSorting(params, sortBy, sortDesc)
+			addSorting(params, sortBy, sortDesc, cmd.Flags().Changed("sort-desc"))
 			addSliceParam(params, "severity[]", severity)
 			return c.fetchAndPrint(apiV1+"/clusters", params)
 		},
