@@ -479,15 +479,18 @@ func (c *CLI) printFormats(categoryFilter string) {
 }
 
 // Output helpers
+// printInfo/printSuccess write DIAGNOSTICS, so they go to stderr — stdout is
+// reserved for command data (the --output json payload, read-command JSON), which
+// must stay machine-parseable when piped (BUG-03/04).
 func (c *CLI) printInfo(format string, args ...interface{}) {
 	if !c.config.IsQuiet() {
-		fmt.Printf(format+"\n", args...)
+		fmt.Fprintf(os.Stderr, format+"\n", args...)
 	}
 }
 
 func (c *CLI) printSuccess(format string, args ...interface{}) {
 	if !c.config.IsQuiet() {
-		fmt.Printf("OK "+format+"\n", args...)
+		fmt.Fprintf(os.Stderr, "OK "+format+"\n", args...)
 	}
 }
 

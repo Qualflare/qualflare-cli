@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"os"
 	"qualflare-cli/internal/core/domain"
 	"qualflare-cli/internal/core/ports"
 	"qualflare-cli/internal/version"
@@ -90,7 +91,7 @@ func (c *Client) Close() {
 func (c *Client) SendReport(ctx context.Context, report *domain.Launch) error {
 	url := c.endpoint + apiBasePath + "/collect"
 	if c.config.IsVerbose() {
-		fmt.Printf("POST %s\n", url)
+		fmt.Fprintf(os.Stderr, "POST %s\n", url) // diagnostics on stderr (BUG-04)
 	}
 	req := c.resty.R().
 		SetContext(ctx).
@@ -137,7 +138,7 @@ func (c *Client) Get(ctx context.Context, path string, params url.Values) (json.
 		if len(params) > 0 {
 			display += "?" + params.Encode()
 		}
-		fmt.Printf("GET %s\n", display)
+		fmt.Fprintf(os.Stderr, "GET %s\n", display) // diagnostics on stderr (BUG-04)
 	}
 
 	req := c.resty.R().SetContext(ctx)
