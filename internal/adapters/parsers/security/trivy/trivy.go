@@ -152,7 +152,10 @@ func (p *Parser) Parse(reader io.Reader) (*domain.Suite, error) {
 func (p *Parser) convertVulnerability(vuln Vulnerability, target string) domain.Case {
 	testCase := domain.Case{
 		ID:        vuln.VulnerabilityID,
-		Name:      fmt.Sprintf("[%s] %s in %s", vuln.Severity, vuln.VulnerabilityID, vuln.PkgName),
+		// Include the target: the server dedupes cases by Name within a suite, so
+		// the same CVE+package across two scan targets would otherwise collapse
+		// into one row (SYNC-02).
+		Name:      fmt.Sprintf("[%s] %s in %s (%s)", vuln.Severity, vuln.VulnerabilityID, vuln.PkgName, target),
 		ClassName: target,
 	}
 
@@ -208,7 +211,7 @@ func (p *Parser) convertVulnerability(vuln Vulnerability, target string) domain.
 func (p *Parser) convertMisconfig(misconf Misconfig, target string) domain.Case {
 	testCase := domain.Case{
 		ID:        misconf.ID,
-		Name:      fmt.Sprintf("[%s] %s", misconf.Severity, misconf.Title),
+		Name:      fmt.Sprintf("[%s] %s (%s)", misconf.Severity, misconf.Title, target),
 		ClassName: target,
 	}
 

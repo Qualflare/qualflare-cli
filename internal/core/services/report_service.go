@@ -5,10 +5,9 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"qualflare-cli/internal/config"
+	"path/filepath"
 	"qualflare-cli/internal/core/domain"
 	"qualflare-cli/internal/core/ports"
-	"qualflare-cli/internal/version"
 	"runtime"
 	"time"
 )
@@ -54,6 +53,11 @@ func (s *ReportService) ParseTestResults(ctx context.Context, files []string, fr
 		return nil, fmt.Errorf("no files provided")
 	}
 
+	// Dedupe by resolved absolute path: the same file passed twice (directly or
+	// via overlapping globs) was parsed twice and silently double-counted every
+	// result in it (BUG-40).
+	files = dedupeFiles(files)
+
 	var parser ports.Parser
 	var err error
 
@@ -66,7 +70,7 @@ func (s *ReportService) ParseTestResults(ctx context.Context, files []string, fr
 	}
 
 	testSuites := make([]domain.Suite, 0, len(files))
-	var detectedFramework domain.Framework
+	detected := make(map[domain.Framework]struct{})
 
 	for _, filePath := range files {
 		select {
@@ -79,33 +83,40 @@ func (s *ReportService) ParseTestResults(ctx context.Context, files []string, fr
 
 		// Auto-detect framework if not specified
 		if currentParser == nil {
-			detectedFramework, err = s.detectFramework(filePath)
-			if err != nil {
-				return nil, fmt.Errorf("failed to detect framework for file %s: %w", filePath, err)
+			detectedFramework, detErr := s.detectFramework(filePath)
+			if detErr != nil {
+				return nil, fmt.Errorf("failed to detect framework for file %s: %w", filePath, detErr)
 			}
 
 			currentParser, err = s.parserFactory.GetParser(detectedFramework)
 			if err != nil {
 				return nil, fmt.Errorf("failed to get parser for detected framework %s: %w", detectedFramework, err)
 			}
+			detected[detectedFramework] = struct{}{}
 		}
 
-		suite, err := s.parseFile(filePath, currentParser)
-		if err != nil {
-			return nil, fmt.Errorf("failed to parse file %s: %w", filePath, err)
+		suite, parseErr := s.parseFile(filePath, currentParser)
+		if parseErr != nil {
+			return nil, fmt.Errorf("failed to parse file %s: %w", filePath, parseErr)
 		}
 
 		testSuites = append(testSuites, *suite)
-
-		// Use the detected framework if no explicit framework was provided
-		if framework == "" && detectedFramework != "" {
-			framework = detectedFramework
-		}
 	}
 
-	// Use the parser's framework if we had an explicit parser
-	if parser != nil {
+	// Resolve the launch-level framework label. An explicit --format wins. Otherwise,
+	// when every auto-detected file agreed, use that framework; when they disagree,
+	// label the launch "mixed" rather than tagging the whole upload with whichever file
+	// happened to be parsed first (BUG-41). The server stores framework as a free
+	// string (required,max=100), so "mixed" is a valid, honest label.
+	switch {
+	case parser != nil:
 		framework = parser.GetFramework()
+	case len(detected) == 1:
+		for f := range detected {
+			framework = f
+		}
+	case len(detected) > 1:
+		framework = domain.Framework("mixed")
 	}
 
 	return s.createReport(testSuites, framework), nil
@@ -185,8 +196,8 @@ func (s *ReportService) detectFramework(filePath string) (domain.Framework, erro
 	if err != nil {
 		return s.parserFactory.DetectFramework(filePath)
 	}
-	if info.Size() > config.MaxFileSize {
-		return "", fmt.Errorf("file %s is too large (%d bytes, max %d bytes)", filePath, info.Size(), config.MaxFileSize)
+	if info.Size() > s.config.GetMaxFileSize() {
+		return "", fmt.Errorf("file %s is too large (%d bytes, max %d bytes)", filePath, info.Size(), s.config.GetMaxFileSize())
 	}
 
 	// First try content-based detection
@@ -201,6 +212,13 @@ func (s *ReportService) detectFramework(filePath string) (domain.Framework, erro
 
 // parseFile parses a single file using the specified parser
 func (s *ReportService) parseFile(filePath string, parser ports.Parser) (*domain.Suite, error) {
+	// Enforce the size cap here (not only in detectFramework): passing --format
+	// skips detection entirely, so without this an unbounded file is read
+	// straight into memory (BUG-18).
+	if info, statErr := os.Stat(filePath); statErr == nil && info.Size() > s.config.GetMaxFileSize() {
+		return nil, fmt.Errorf("file %s is too large (%d bytes, max %d bytes)", filePath, info.Size(), s.config.GetMaxFileSize())
+	}
+
 	file, err := os.Open(filePath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open file: %w", err)
@@ -215,19 +233,43 @@ func (s *ReportService) parseFile(filePath string, parser ports.Parser) (*domain
 	return suite, nil
 }
 
+// dedupeFiles removes duplicate file arguments, keying on the resolved absolute
+// path (so ./r.xml and r.xml collapse) while preserving order and the original
+// path strings. Paths that fail to resolve fall back to their literal value.
+func dedupeFiles(files []string) []string {
+	seen := make(map[string]struct{}, len(files))
+	out := make([]string, 0, len(files))
+	for _, f := range files {
+		key := f
+		if abs, err := filepath.Abs(f); err == nil {
+			key = abs
+		}
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
+		out = append(out, f)
+	}
+	return out
+}
+
 // createReport creates a Launch report from test suites
 func (s *ReportService) createReport(testSuites []domain.Suite, framework domain.Framework) *domain.Launch {
 	normalizeCasePriorities(testSuites)
+	if s.config.IsNoCaptureOutput() {
+		stripCapturedOutput(testSuites)
+	}
 	return &domain.Launch{
 		Framework:   string(framework),
-		Platform:    "api",
+		Platform:    s.config.GetPlatform(),
 		OS:          fmt.Sprintf("%s/%s", runtime.GOOS, runtime.GOARCH),
 		Environment: s.config.GetEnvironment(),
 		Language:    s.config.GetLanguage(),
+		Milestone:   s.config.GetMilestone(),
 		Branch:      s.config.GetBranch(),
 		Commit:      s.config.GetCommit(),
 		Metadata: domain.Metadata{
-			Version:   version.Version,
+			Version:   s.config.GetCLIVersion(),
 			Timestamp: time.Now().UTC().Format(time.RFC3339),
 			CLIName:   "qf",
 		},
@@ -244,6 +286,20 @@ func normalizeCasePriorities(suites []domain.Suite) {
 	for i := range suites {
 		for j := range suites[i].Cases {
 			suites[i].Cases[j].Priority = suites[i].Cases[j].Priority.ToCasePriority()
+		}
+	}
+}
+
+// stripCapturedOutput removes captured stdout/stderr (JUnit system-out/system-err)
+// from every case in place. Those streams routinely echo whatever an environment
+// printed during a run — including secrets — and --no-capture-output opts out of
+// uploading them. Test status, timing, and failure messages are left intact; only
+// the bulk captured output is dropped (SEC-04). delete on a nil map is a no-op.
+func stripCapturedOutput(suites []domain.Suite) {
+	for i := range suites {
+		for j := range suites[i].Cases {
+			delete(suites[i].Cases[j].Properties, "system-out")
+			delete(suites[i].Cases[j].Properties, "system-err")
 		}
 	}
 }

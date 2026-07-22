@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"os"
 	"qualflare-cli/internal/core/domain"
 	"qualflare-cli/internal/core/ports"
 	"qualflare-cli/internal/version"
@@ -68,6 +69,14 @@ func NewHTTPClient(config ports.ConfigProvider, opts ...ClientOption) *Client {
 		return nil
 	})
 
+	// --debug logs the full request/response to stderr. The OnDebugLog callback
+	// runs BEFORE resty formats the output, so redacting the token header here
+	// guarantees the credential never appears in the log (OBS-06).
+	if config.IsDebug() {
+		rc.EnableDebug()
+		rc.OnDebugLog(redactDebugLog)
+	}
+
 	c := &Client{
 		resty:    rc,
 		config:   config,
@@ -90,7 +99,7 @@ func (c *Client) Close() {
 func (c *Client) SendReport(ctx context.Context, report *domain.Launch) error {
 	url := c.endpoint + apiBasePath + "/collect"
 	if c.config.IsVerbose() {
-		fmt.Printf("POST %s\n", url)
+		fmt.Fprintf(os.Stderr, "POST %s\n", url) // diagnostics on stderr (BUG-04)
 	}
 	req := c.resty.R().
 		SetContext(ctx).
@@ -137,7 +146,7 @@ func (c *Client) Get(ctx context.Context, path string, params url.Values) (json.
 		if len(params) > 0 {
 			display += "?" + params.Encode()
 		}
-		fmt.Printf("GET %s\n", display)
+		fmt.Fprintf(os.Stderr, "GET %s\n", display) // diagnostics on stderr (BUG-04)
 	}
 
 	req := c.resty.R().SetContext(ctx)
@@ -157,6 +166,19 @@ func (c *Client) Get(ctx context.Context, path string, params url.Values) (json.
 	return nil, c.buildAPIError("get", resp)
 }
 
+// redactDebugLog strips the API token from a --debug log entry before resty
+// formats it. resty invokes this callback BEFORE the formatter, so the mutation
+// takes effect and the credential never reaches stderr (OBS-06).
+func redactDebugLog(dl *resty.DebugLog) {
+	if dl == nil || dl.Request == nil || dl.Request.Header == nil {
+		return
+	}
+	if dl.Request.Header.Get("QF_TOKEN") != "" {
+		dl.Request.Header.Set("QF_TOKEN", "***REDACTED***")
+	}
+	dl.Request.Header.Del("Authorization")
+}
+
 // buildAPIError creates an APIError from a non-success response
 func (c *Client) buildAPIError(op string, resp *resty.Response) *APIError {
 	apiErr := &APIError{
@@ -167,20 +189,32 @@ func (c *Client) buildAPIError(op string, resp *resty.Response) *APIError {
 	var errResp ErrorResponse
 	if err := json.Unmarshal(resp.Bytes(), &errResp); err == nil {
 		apiErr.Code = errResp.Code
-		if friendlyMsg := getUserFriendlyMessage(errResp.Code); friendlyMsg != "" {
-			apiErr.Message = friendlyMsg
-		} else if errResp.Error != "" {
-			apiErr.Message = errResp.Error
-		} else if errResp.Message != "" {
-			apiErr.Message = errResp.Message
-		} else {
-			apiErr.Message = fmt.Sprintf("API request failed with status %d", resp.StatusCode())
-		}
+		apiErr.RequestID = errResp.RequestID
+		apiErr.Message = resolveErrorMessage(errResp, resp.StatusCode())
 	} else {
 		apiErr.Message = fmt.Sprintf("API request failed with status %d", resp.StatusCode())
 	}
 
 	return apiErr
+}
+
+// resolveErrorMessage picks the message to show the user. It prefers the server's
+// own message (the enriched envelope is client-safe for 4xx), falling back to a
+// CLI-specific friendly hint only when the server gave no message (SYNC-01/10).
+// The previous order let a hardcoded friendly string override the server — and
+// mapped the GENERIC 404 code common.resource_not_found to "Language not found",
+// so a missing cluster or suite rendered as a BCP-47 language error.
+func resolveErrorMessage(errResp ErrorResponse, statusCode int) string {
+	switch {
+	case errResp.Message != "":
+		return errResp.Message
+	case getUserFriendlyMessage(errResp.Code) != "":
+		return getUserFriendlyMessage(errResp.Code)
+	case errResp.Error != "":
+		return errResp.Error
+	default:
+		return fmt.Sprintf("API request failed with status %d", statusCode)
+	}
 }
 
 // APIError represents an API error
@@ -189,47 +223,69 @@ type APIError struct {
 	Message    string
 	Code       string
 	StatusCode int
+	RequestID  string
 	Err        error
 }
 
+// actionHint returns a short next-step for common auth/authz failures so the
+// error is fixable, not just descriptive (OBS-05).
+func (e *APIError) actionHint() string {
+	switch e.StatusCode {
+	case http.StatusUnauthorized:
+		return " — run `qf login <identifier> <token>` to re-authenticate"
+	case http.StatusForbidden:
+		return " — the token lacks access to this project"
+	case http.StatusPaymentRequired:
+		return " — a plan limit was reached; check your Qualflare subscription"
+	}
+	return ""
+}
+
 func (e *APIError) Error() string {
+	// Surface the server's request_id so a user can quote it to support (OBS-01).
+	suffix := e.actionHint()
+	if e.RequestID != "" {
+		suffix += fmt.Sprintf(" [request_id: %s]", e.RequestID)
+	}
 	if e.StatusCode > 0 {
-		return fmt.Sprintf("%s: %s (status: %d)", e.Op, e.Message, e.StatusCode)
+		return fmt.Sprintf("%s: %s (status: %d)%s", e.Op, e.Message, e.StatusCode, suffix)
 	}
 	if e.Err != nil {
-		return fmt.Sprintf("%s: %s: %v", e.Op, e.Message, e.Err)
+		return fmt.Sprintf("%s: %s: %v%s", e.Op, e.Message, e.Err, suffix)
 	}
-	return fmt.Sprintf("%s: %s", e.Op, e.Message)
+	return fmt.Sprintf("%s: %s%s", e.Op, e.Message, suffix)
 }
 
 func (e *APIError) Unwrap() error {
 	return e.Err
 }
 
-// ErrorResponse represents an API error response
+// ErrorResponse mirrors the server's enriched error envelope
+// {code, message?, request_id?, fields?}. `error` is legacy/back-compat.
 type ErrorResponse struct {
-	Error   string `json:"error"`
-	Message string `json:"message"`
-	Code    string `json:"code"`
+	Error     string `json:"error"`
+	Message   string `json:"message"`
+	Code      string `json:"code"`
+	RequestID string `json:"request_id"`
 }
 
 // API error codes — must match server's result.Code constants (dot-notation).
+// NOTE: common.resource_not_found is the GENERIC 404 and must NOT be aliased to a
+// specific resource — doing so rendered every 404 as "Language not found" (SYNC-10).
 const (
 	ErrCodeEnvironmentNotFound = "environment.not_found"
 	ErrCodeMilestoneNotFound   = "milestone.not_found"
 	ErrCodeValidationFailed    = "common.validation_failed"
-	ErrCodeLanguageNotFound    = "common.resource_not_found"
 )
 
-// getUserFriendlyMessage returns a user-friendly error message for known error codes
+// getUserFriendlyMessage returns a CLI-specific hint for a few known codes. It is
+// only used as a fallback when the server sent no message (see buildAPIError).
 func getUserFriendlyMessage(code string) string {
 	switch code {
 	case ErrCodeEnvironmentNotFound:
 		return "Environment not found. Please check the environment name or create it in Qualflare."
 	case ErrCodeMilestoneNotFound:
-		return "Milestone not found. Please check the milestone ID or create it in Qualflare."
-	case ErrCodeLanguageNotFound:
-		return "Language not found. Please use a valid BCP 47 language code (e.g., en-US, de-DE)."
+		return "Milestone not found. Please check the milestone sequence number or create it in Qualflare."
 	case ErrCodeValidationFailed:
 		return "Validation failed. Please check your request data."
 	default:

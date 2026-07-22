@@ -165,3 +165,16 @@ func TestLoad_CorruptToml_Errors(t *testing.T) {
 		t.Fatal("Load: expected error on corrupt toml")
 	}
 }
+
+// TestLoad_LoosePermsStillLoads (SEC-05) confirms Load warns but does NOT fail on
+// a group/world-accessible credential file — failing would lock the user out.
+func TestLoad_LoosePermsStillLoads(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.toml")
+	if err := os.WriteFile(path, []byte("schema_version = 1\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Load(path); err != nil {
+		t.Fatalf("Load must not fail on a 0644 file (warn only): %v", err)
+	}
+}

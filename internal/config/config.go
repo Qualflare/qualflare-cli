@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"qualflare-cli/internal/git"
+	"qualflare-cli/internal/version"
 )
 
 const (
@@ -25,6 +26,8 @@ type Config struct {
 	// Project settings
 	Environment string
 	Language    string
+	Platform    string
+	Milestone   int64
 
 	// Git information
 	Branch string
@@ -42,6 +45,12 @@ type Config struct {
 	Verbose bool
 	Quiet   bool
 	DryRun  bool
+	Debug   bool
+	// NoCaptureOutput suppresses uploading captured stdout/stderr (JUnit
+	// system-out/system-err) — the streams most likely to contain secrets an
+	// environment printed during a test run. Test status and failure messages are
+	// still uploaded; only the bulk captured output is dropped (SEC-04).
+	NoCaptureOutput bool
 }
 
 // DefaultConfig returns the default configuration
@@ -50,13 +59,18 @@ func DefaultConfig() *Config {
 		APIKey:         "",
 		Environment:    "development",
 		Language:       "en-US",
+		Platform:       "api", // backward-compatible default; override with --platform / QF_PLATFORM
 		Branch:         "",
 		Commit:         "",
 		RetryMax:       3,
 		RetryBaseDelay: 1 * time.Second,
 		RetryMaxDelay:  30 * time.Second,
-		Timeout:        30 * time.Second,
-		Verbose:        false,
+		// 120s (not 30s): the server's own /collect DB budget is ~30s, so a 30s client
+		// deadline had zero headroom — a large upload that legitimately took ~30s
+		// server-side would trip the client timeout at the same moment, failing an
+		// upload the server was about to accept (BUG-27). 120s leaves room for retries.
+		Timeout:  120 * time.Second,
+		Verbose:  false,
 		Quiet:          false,
 		DryRun:         false,
 	}
@@ -79,20 +93,20 @@ func (c *Config) LoadFromEnv() {
 	if v := os.Getenv("QF_LANGUAGE"); v != "" {
 		c.Language = v
 	}
-
-	// Git information: CI env vars first, then fall back to local git detection.
-	c.Branch = getFirstEnv("QF_BRANCH", "GIT_BRANCH", "GITHUB_REF_NAME", "CI_COMMIT_REF_NAME", "BITBUCKET_BRANCH")
-	c.Commit = getFirstEnv("QF_COMMIT", "GIT_COMMIT", "GITHUB_SHA", "CI_COMMIT_SHA", "BITBUCKET_COMMIT")
-	if c.Branch == "" || c.Commit == "" {
-		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-		defer cancel()
-		if c.Branch == "" {
-			c.Branch = git.DetectBranch(ctx)
-		}
-		if c.Commit == "" {
-			c.Commit = git.DetectCommit(ctx)
+	if v := os.Getenv("QF_PLATFORM"); v != "" {
+		c.Platform = v
+	}
+	if v := os.Getenv("QF_MILESTONE"); v != "" {
+		if n, err := strconv.ParseInt(v, 10, 64); err == nil && n > 0 {
+			c.Milestone = n
 		}
 	}
+
+	// Git information from CI env vars only. Local git-subprocess detection is
+	// deferred to DetectGit() so it runs once, for `collect` — not on every
+	// invocation (version/help/login/logout all forked two `git` processes) (BUG-39).
+	c.Branch = getFirstEnv("QF_BRANCH", "GIT_BRANCH", "GITHUB_REF_NAME", "CI_COMMIT_REF_NAME", "BITBUCKET_BRANCH")
+	c.Commit = getFirstEnv("QF_COMMIT", "GIT_COMMIT", "GITHUB_SHA", "CI_COMMIT_SHA", "BITBUCKET_COMMIT")
 
 	// Retry settings
 	if v := os.Getenv("QF_RETRY_MAX"); v != "" {
@@ -125,6 +139,29 @@ func (c *Config) LoadFromEnv() {
 	if v := os.Getenv("QF_QUIET"); v == "true" || v == "1" {
 		c.Quiet = true
 	}
+	if v := os.Getenv("QF_DEBUG"); v == "true" || v == "1" {
+		c.Debug = true
+	}
+	if v := os.Getenv("QF_NO_CAPTURE_OUTPUT"); v == "true" || v == "1" {
+		c.NoCaptureOutput = true
+	}
+}
+
+// DetectGit fills Branch/Commit from the local git repo when CI env vars did not
+// already supply them. It shells out to `git`, so it is invoked explicitly by the
+// `collect` path rather than on every CLI invocation (BUG-39).
+func (c *Config) DetectGit() {
+	if c.Branch != "" && c.Commit != "" {
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	if c.Branch == "" {
+		c.Branch = git.DetectBranch(ctx)
+	}
+	if c.Commit == "" {
+		c.Commit = git.DetectCommit(ctx)
+	}
 }
 
 // SetAPIKey sets the API key
@@ -145,6 +182,21 @@ func (c *Config) SetEnvironment(env string) {
 func (c *Config) SetLanguage(language string) {
 	if language != "" {
 		c.Language = language
+	}
+}
+
+// SetPlatform sets the platform (skips empty so an unset flag doesn't clobber
+// the env var / default, matching SetEnvironment).
+func (c *Config) SetPlatform(platform string) {
+	if platform != "" {
+		c.Platform = platform
+	}
+}
+
+// SetMilestone sets the milestone sequence number (skips 0 = unset).
+func (c *Config) SetMilestone(milestone int64) {
+	if milestone > 0 {
+		c.Milestone = milestone
 	}
 }
 
@@ -204,6 +256,27 @@ func (c *Config) GetLanguage() string {
 	return c.Language
 }
 
+// GetPlatform returns the platform (android/ios/desktop/web/api).
+func (c *Config) GetPlatform() string {
+	return c.Platform
+}
+
+// GetMilestone returns the milestone sequence number (0 = none).
+func (c *Config) GetMilestone() int64 {
+	return c.Milestone
+}
+
+// GetMaxFileSize returns the per-file upload size cap. Exposed via the provider
+// so the core service does not import this concrete config package (ARCH-02).
+func (c *Config) GetMaxFileSize() int64 {
+	return MaxFileSize
+}
+
+// GetCLIVersion returns the build version string.
+func (c *Config) GetCLIVersion() string {
+	return version.Version
+}
+
 // GetBranch returns the git branch
 func (c *Config) GetBranch() string {
 	return c.Branch
@@ -234,6 +307,17 @@ func (c *Config) IsQuiet() bool {
 	return c.Quiet
 }
 
+// IsDebug returns whether debug (full request/response logging) is enabled.
+func (c *Config) IsDebug() bool {
+	return c.Debug
+}
+
+// IsNoCaptureOutput returns whether captured stdout/stderr (system-out/system-err)
+// must be dropped before the report is sent (SEC-04).
+func (c *Config) IsNoCaptureOutput() bool {
+	return c.NoCaptureOutput
+}
+
 // IsDryRun returns whether dry run mode is enabled
 func (c *Config) IsDryRun() bool {
 	return c.DryRun
@@ -251,7 +335,7 @@ func (c *Config) Validate() error {
 		c.RetryMax = maxRetryCount
 	}
 	if c.Timeout <= 0 {
-		c.Timeout = 30 * time.Second
+		c.Timeout = 120 * time.Second
 	}
 	if c.RetryBaseDelay <= 0 {
 		c.RetryBaseDelay = 1 * time.Second

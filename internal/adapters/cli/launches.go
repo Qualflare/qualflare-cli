@@ -37,7 +37,7 @@ func (c *CLI) createLaunchesCommand() *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			params := url.Values{}
 			addPagination(params, page)
-			addSorting(params, sortBy, sortDesc)
+			addSorting(params, sortBy, sortDesc, cmd.Flags().Changed("sort-desc"))
 			if milestoneSeq > 0 {
 				params.Set("milestone", strconv.Itoa(milestoneSeq))
 			}
@@ -72,7 +72,7 @@ func (c *CLI) createLaunchCommand() *cobra.Command {
 		Short: "Get a launch by sequence number",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return c.fetchAndPrint(fmt.Sprintf(apiV1+"/launch/%s", args[0]), nil)
+			return c.fetchAndPrint(fmt.Sprintf(apiV1+"/launch/%s", pathArg(args[0])), nil)
 		},
 	}
 

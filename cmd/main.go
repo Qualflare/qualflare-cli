@@ -1,17 +1,48 @@
 package main
 
 import (
+	"errors"
 	"fmt"
+	"net/http"
 	"os"
 	"regexp"
 
 	"qualflare-cli/internal/adapters/cli"
-	"qualflare-cli/internal/adapters/http"
+	qfhttp "qualflare-cli/internal/adapters/http"
 	"qualflare-cli/internal/adapters/parsers/factory"
 	"qualflare-cli/internal/auth"
 	"qualflare-cli/internal/config"
 	"qualflare-cli/internal/core/services"
 )
+
+// Exit codes let CI distinguish failure classes (API-04): a transient network
+// blip is retryable, a bad token or quota wall is not.
+const (
+	exitOK        = 0
+	exitGeneric   = 1
+	exitAuth      = 3 // 401 — token invalid/expired
+	exitForbidden = 4 // 402/403 — quota/payment or access denied
+	exitNotFound  = 5 // 404
+	exitTransient = 7 // 429 / 5xx — safe to retry
+)
+
+// exitCodeForError maps an error (unwrapping to *qfhttp.APIError) to an exit code.
+func exitCodeForError(err error) int {
+	var apiErr *qfhttp.APIError
+	if errors.As(err, &apiErr) {
+		switch {
+		case apiErr.StatusCode == http.StatusUnauthorized:
+			return exitAuth
+		case apiErr.StatusCode == http.StatusPaymentRequired || apiErr.StatusCode == http.StatusForbidden:
+			return exitForbidden
+		case apiErr.StatusCode == http.StatusNotFound:
+			return exitNotFound
+		case apiErr.StatusCode == http.StatusTooManyRequests || apiErr.StatusCode >= 500:
+			return exitTransient
+		}
+	}
+	return exitGeneric
+}
 
 func main() {
 	os.Exit(run())
@@ -25,7 +56,7 @@ func run() int {
 	parserFactory := factory.NewParserFactory()
 
 	// Initialize HTTP client
-	httpClient := http.NewHTTPClient(cfg)
+	httpClient := qfhttp.NewHTTPClient(cfg)
 	defer httpClient.Close()
 
 	// Initialize report service
@@ -50,9 +81,9 @@ func run() int {
 	cmd := cliApp.CreateRootCommand()
 	if err := cmd.Execute(); err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", rewriteUnknownCommandError(err))
-		return 1
+		return exitCodeForError(err)
 	}
-	return 0
+	return exitOK
 }
 
 var unknownCommandPattern = regexp.MustCompile(`^unknown command "([^"]+)" for "qf"`)

@@ -32,7 +32,7 @@ func (c *CLI) createClustersCommand() *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			params := url.Values{}
 			addPagination(params, page)
-			addSorting(params, sortBy, sortDesc)
+			addSorting(params, sortBy, sortDesc, cmd.Flags().Changed("sort-desc"))
 			addSliceParam(params, "severity[]", severity)
 			return c.fetchAndPrint(apiV1+"/clusters", params)
 		},
@@ -61,7 +61,7 @@ func (c *CLI) createClusterCommand() *cobra.Command {
 		Short: "Get a failure cluster by ID",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return c.fetchAndPrint(fmt.Sprintf(apiV1+"/cluster/%s", args[0]), nil)
+			return c.fetchAndPrint(fmt.Sprintf(apiV1+"/cluster/%s", pathArg(args[0])), nil)
 		},
 	}
 

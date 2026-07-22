@@ -11,6 +11,12 @@ import (
 	"strings"
 )
 
+// pathArg escapes a user-supplied path segment so metacharacters (?, #, /, "..")
+// cannot alter the request path or query when interpolated into a URL (SEC-03).
+func pathArg(s string) string {
+	return url.PathEscape(s)
+}
+
 // fetchAndPrint fetches data from the API and prints it as indented JSON to stdout.
 func (c *CLI) fetchAndPrint(path string, params url.Values) error {
 	ctx, cancel := context.WithTimeout(context.Background(), c.config.GetTimeout())
@@ -43,11 +49,18 @@ func addPagination(params url.Values, page int) {
 	}
 }
 
-func addSorting(params url.Values, sortBy string, sortDesc bool) {
+// addSorting adds the sortBy/sortDir query params. sortDir is sent ONLY when the user
+// explicitly passed --sort-desc (sortDirSet). Previously it was always sent as
+// false → every list was pinned ascending, so the server could never apply its
+// newest-first default for launches/defects (API-02). Omitting it lets the server's
+// per-endpoint default direction take effect.
+func addSorting(params url.Values, sortBy string, sortDesc, sortDirSet bool) {
 	if sortBy != "" {
 		params.Set("sortBy", sortBy)
 	}
-	params.Set("sortDir", strconv.FormatBool(sortDesc))
+	if sortDirSet {
+		params.Set("sortDir", strconv.FormatBool(sortDesc))
+	}
 }
 
 func addSliceParam(params url.Values, key string, values []string) {

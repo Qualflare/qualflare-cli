@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"path/filepath"
 	"qualflare-cli/internal/auth"
 	"qualflare-cli/internal/config"
 	"qualflare-cli/internal/core/domain"
@@ -95,6 +96,8 @@ Supported frameworks:
 	// value before any command runs (BUG-02).
 	cmd.PersistentFlags().BoolVarP(&c.config.Verbose, "verbose", "v", c.config.Verbose, "Enable verbose output")
 	cmd.PersistentFlags().BoolVarP(&c.config.Quiet, "quiet", "q", c.config.Quiet, "Suppress non-error output")
+	cmd.PersistentFlags().BoolVar(&c.config.Debug, "debug", c.config.Debug, "Log full HTTP request/response to stderr (token redacted)")
+	cmd.PersistentFlags().BoolVar(&c.config.NoCaptureOutput, "no-capture-output", c.config.NoCaptureOutput, "Do not upload captured stdout/stderr (system-out/system-err) — keeps secrets printed during tests off the server")
 
 	// Flat (auth-less) subcommands
 	cmd.AddCommand(c.createLoginCommand())
@@ -162,6 +165,8 @@ func (c *CLI) createCollectCommand() *cobra.Command {
 		format      string
 		environment string
 		language    string
+		platform    string
+		milestone   int64
 		branch      string
 		commit      string
 		timeout     time.Duration
@@ -196,6 +201,8 @@ The format is auto-detected if not specified.`,
 				format:      format,
 				environment: environment,
 				language:    language,
+				platform:    platform,
+				milestone:   milestone,
 				branch:      branch,
 				commit:      commit,
 				timeout:     timeout,
@@ -213,6 +220,8 @@ The format is auto-detected if not specified.`,
 	cmd.Flags().StringVarP(&format, "format", "f", "", "Test framework format (auto-detected if not specified)")
 	cmd.Flags().StringVarP(&environment, "environment", "e", "", "Environment name (default: $QF_ENVIRONMENT or 'development')")
 	cmd.Flags().StringVar(&language, "lang", "", "Language/culture, BCP 47 (default: $QF_LANGUAGE or 'en-US')")
+	cmd.Flags().StringVar(&platform, "platform", "", "Platform: android|ios|desktop|web|api (default: $QF_PLATFORM or 'api')")
+	cmd.Flags().Int64Var(&milestone, "milestone", 0, "Milestone sequence number to link this launch to (or $QF_MILESTONE)")
 	cmd.Flags().StringVar(&branch, "branch", "", "Git branch name")
 	cmd.Flags().StringVar(&commit, "commit", "", "Git commit hash")
 	cmd.Flags().DurationVar(&timeout, "timeout", 30*time.Second, "Request timeout")
@@ -226,6 +235,8 @@ type collectOptions struct {
 	format      string
 	environment string
 	language    string
+	platform    string
+	milestone   int64
 	branch      string
 	commit      string
 	timeout     time.Duration
@@ -233,18 +244,67 @@ type collectOptions struct {
 	output      string
 }
 
+// validPlatforms mirrors the server's launch platform enum
+// (oneof=android ios desktop web api).
+var validPlatforms = map[string]struct{}{
+	"android": {}, "ios": {}, "desktop": {}, "web": {}, "api": {},
+}
+
+// expandGlobs expands any argument containing a glob metacharacter via
+// filepath.Glob, preserving order and passing literal (non-glob) args through. A
+// pattern that matches nothing is an error so a mistyped glob fails loudly rather
+// than silently uploading nothing (BUG-28).
+func expandGlobs(patterns []string) ([]string, error) {
+	out := make([]string, 0, len(patterns))
+	for _, p := range patterns {
+		if !strings.ContainsAny(p, "*?[") {
+			out = append(out, p)
+			continue
+		}
+		matches, err := filepath.Glob(p)
+		if err != nil {
+			return nil, fmt.Errorf("invalid glob pattern %q: %w", p, err)
+		}
+		if len(matches) == 0 {
+			return nil, fmt.Errorf("no files match pattern %q", p)
+		}
+		out = append(out, matches...)
+	}
+	return out, nil
+}
+
 func (c *CLI) runCollect(ctx context.Context, files []string, opts collectOptions) error {
 	warnLegacyAPIKey()
+	// Validate an explicit --platform before it reaches the server (fail fast with
+	// a clear message instead of a 400 on the whole upload).
+	if opts.platform != "" {
+		if _, ok := validPlatforms[opts.platform]; !ok {
+			return fmt.Errorf("invalid --platform %q: must be one of android, ios, desktop, web, api", opts.platform)
+		}
+	}
 	// Apply command line overrides
 	c.config.SetEnvironment(opts.environment)
 	c.config.SetLanguage(opts.language)
+	c.config.SetPlatform(opts.platform)
+	c.config.SetMilestone(opts.milestone)
 	c.config.SetBranch(opts.branch)
 	c.config.SetCommit(opts.commit)
 	c.config.SetTimeout(opts.timeout)
 	c.config.SetDryRun(opts.dryRun)
+	// Fill branch/commit from local git only now (collect is the sole consumer),
+	// after explicit flags/CI env vars have had their say (BUG-39).
+	c.config.DetectGit()
 
 	// Validate configuration
 	if err := c.config.Validate(); err != nil {
+		return err
+	}
+
+	// Expand glob patterns (the help text and examples advertise them, but the
+	// CLI never expanded them — BUG-28). A pattern that matches nothing is an
+	// error, so a typo'd glob fails loudly instead of uploading nothing.
+	files, err := expandGlobs(files)
+	if err != nil {
 		return err
 	}
 
@@ -261,6 +321,18 @@ func (c *CLI) runCollect(ctx context.Context, files []string, opts collectOption
 		framework = domain.Framework(strings.ToLower(opts.format))
 		if !framework.IsValid() {
 			return fmt.Errorf("unsupported format: %s. Use 'qf list-formats' to see supported formats", opts.format)
+		}
+	}
+
+	// Validate --output rather than silently ignoring it (API-01). It only affects
+	// dry runs and only supports "json"; previously "--output yaml" or "--output json"
+	// without --dry-run just uploaded as normal, giving no hint the flag did nothing.
+	if opts.output != "" {
+		if opts.output != "json" {
+			return fmt.Errorf("unsupported output format: %q (only 'json' is supported)", opts.output)
+		}
+		if !opts.dryRun {
+			return fmt.Errorf("--output only applies to --dry-run; add --dry-run to print the parsed report")
 		}
 	}
 
@@ -456,15 +528,18 @@ func (c *CLI) printFormats(categoryFilter string) {
 }
 
 // Output helpers
+// printInfo/printSuccess write DIAGNOSTICS, so they go to stderr — stdout is
+// reserved for command data (the --output json payload, read-command JSON), which
+// must stay machine-parseable when piped (BUG-03/04).
 func (c *CLI) printInfo(format string, args ...interface{}) {
 	if !c.config.IsQuiet() {
-		fmt.Printf(format+"\n", args...)
+		fmt.Fprintf(os.Stderr, format+"\n", args...)
 	}
 }
 
 func (c *CLI) printSuccess(format string, args ...interface{}) {
 	if !c.config.IsQuiet() {
-		fmt.Printf("OK "+format+"\n", args...)
+		fmt.Fprintf(os.Stderr, "OK "+format+"\n", args...)
 	}
 }
 

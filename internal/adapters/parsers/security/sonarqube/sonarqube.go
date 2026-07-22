@@ -180,7 +180,11 @@ func (p *Parser) convertIssue(issue Issue, components map[string]Component, rule
 
 	testCase := domain.Case{
 		ID:        issue.Key,
-		Name:      fmt.Sprintf("[%s] %s", issue.Severity, issue.Message),
+		// Include component:line: the same rule message (e.g. "Remove this unused
+		// variable") recurs across many files/lines, and the server dedupes by
+		// Name within a suite — so without a location they collapse into one row
+		// (SYNC-02).
+		Name:      fmt.Sprintf("[%s] %s (%s:%d)", issue.Severity, issue.Message, componentPath, issue.Line),
 		ClassName: componentPath,
 	}
 

@@ -47,6 +47,25 @@ checksum:
   name_template: 'checksums.txt'
   algorithm: sha256
 
+# Supply-chain integrity (SEC-02): a CycloneDX SBOM per archive, and a keyless
+# (Sigstore/Fulcio) cosign signature over the checksums file so downloads can be
+# verified. Requires syft + cosign on the runner and `id-token: write` in CI.
+sboms:
+  - artifacts: archive
+
+signs:
+  - cmd: cosign
+    signature: "${artifact}.sig"
+    certificate: "${artifact}.pem"
+    args:
+      - sign-blob
+      - "--output-signature=${signature}"
+      - "--output-certificate=${certificate}"
+      - "--yes"
+      - "${artifact}"
+    artifacts: checksum
+    output: true
+
 snapshot:
   version_template: "{{ incpatch .Version }}-next"
 

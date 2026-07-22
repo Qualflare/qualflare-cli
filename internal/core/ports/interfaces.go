@@ -55,6 +55,10 @@ type ConfigProvider interface {
 	// Project settings
 	GetEnvironment() string
 	GetLanguage() string
+	GetPlatform() string
+	GetMilestone() int64
+	GetMaxFileSize() int64
+	GetCLIVersion() string
 
 	// Git information
 	GetBranch() string
@@ -70,28 +74,13 @@ type ConfigProvider interface {
 	IsVerbose() bool
 	IsQuiet() bool
 	IsDryRun() bool
+	IsDebug() bool
+	// IsNoCaptureOutput reports whether captured stdout/stderr (system-out/
+	// system-err) must be stripped from the report before sending (SEC-04).
+	IsNoCaptureOutput() bool
 
 	// Validation
 	Validate() error
-}
-
-// ConfigMutator defines the interface for mutating configuration
-type ConfigMutator interface {
-	SetAPIKey(key string)
-	SetEnvironment(env string)
-	SetLanguage(language string)
-	SetBranch(branch string)
-	SetCommit(commit string)
-	SetTimeout(timeout time.Duration)
-	SetVerbose(verbose bool)
-	SetQuiet(quiet bool)
-	SetDryRun(dryRun bool)
-}
-
-// Config combines ConfigProvider and ConfigMutator
-type Config interface {
-	ConfigProvider
-	ConfigMutator
 }
 
 // ReportService defines the core business logic interface
