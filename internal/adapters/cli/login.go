@@ -3,6 +3,7 @@ package cli
 import (
 	"bufio"
 	"fmt"
+	"io"
 	"os"
 	"qualflare-cli/internal/auth"
 	"strings"
@@ -15,20 +16,29 @@ func (c *CLI) createLoginCommand() *cobra.Command {
 	var force bool
 
 	cmd := &cobra.Command{
-		Use:   "login <identifier> <token>",
+		Use:   "login <identifier> [token]",
 		Short: "Save credentials for a project under a local identifier",
 		Long: `Save an API token under a local identifier (alias) so other commands
 can reference it as the first positional argument.
 
+The token may be supplied (in order of precedence): as the second argument, via
+the QF_TOKEN environment variable, by an interactive hidden prompt on a terminal,
+or piped on stdin. Passing it as an argument exposes it to the process list and
+shell history, so prefer the prompt or a piped/env value in CI.
+
 Examples:
-  qf login myapp qf_xxx
-  qf login prod-app qf_yyy --force
-  qf logout myapp
-  qf projects`,
-		Args: cobra.ExactArgs(2),
+  qf login myapp                 # prompt (hidden) or read QF_TOKEN
+  QF_TOKEN=qf_xxx qf login myapp # from the environment
+  echo qf_xxx | qf login myapp   # piped stdin
+  qf login myapp qf_xxx --force  # explicit arg (discouraged)`,
+		Args: cobra.RangeArgs(1, 2),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			id, token := args[0], args[1]
+			id := args[0]
 			if err := auth.Validate(id); err != nil {
+				return err
+			}
+			token, err := resolveLoginToken(args)
+			if err != nil {
 				return err
 			}
 			if strings.TrimSpace(token) == "" {
@@ -59,6 +69,33 @@ Examples:
 
 	cmd.Flags().BoolVar(&force, "force", false, "Overwrite an existing identifier without confirmation")
 	return cmd
+}
+
+// resolveLoginToken resolves the API token WITHOUT requiring it on the command
+// line (where it leaks to the process list and shell history) — SEC-01. Order:
+// explicit argv (back-compat) → QF_TOKEN → hidden interactive prompt on a TTY →
+// piped stdin.
+func resolveLoginToken(args []string) (string, error) {
+	if len(args) == 2 {
+		return args[1], nil
+	}
+	if t := os.Getenv("QF_TOKEN"); t != "" {
+		return t, nil
+	}
+	if term.IsTerminal(int(os.Stdin.Fd())) {
+		fmt.Fprint(os.Stderr, "API token: ")
+		b, err := term.ReadPassword(int(os.Stdin.Fd()))
+		fmt.Fprintln(os.Stderr)
+		if err != nil {
+			return "", fmt.Errorf("read token: %w", err)
+		}
+		return strings.TrimSpace(string(b)), nil
+	}
+	b, err := io.ReadAll(os.Stdin)
+	if err != nil {
+		return "", fmt.Errorf("read token from stdin: %w", err)
+	}
+	return strings.TrimSpace(string(b)), nil
 }
 
 // confirmOverwrite prompts on stdin for [y/N]. Fails closed on non-TTY stdin.
