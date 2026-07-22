@@ -8,13 +8,6 @@ import (
 )
 
 func (c *CLI) createPlansCommand() *cobra.Command {
-	var (
-		page     int
-		query    string
-		sortBy   string
-		sortDesc bool
-	)
-
 	cmd := &cobra.Command{
 		Use:   "plans",
 		Short: "List test plans",
@@ -26,26 +19,20 @@ func (c *CLI) createPlansCommand() *cobra.Command {
   qf <id> plans list --query "regression"`,
 	}
 
-	listCmd := &cobra.Command{
-		Use:   "list",
-		Short: "List test plans",
-		RunE: func(cmd *cobra.Command, args []string) error {
-			params := url.Values{}
-			addPagination(params, page)
-			addSorting(params, sortBy, sortDesc, cmd.Flags().Changed("sort-desc"))
+	var query string
+	cmd.AddCommand(c.newListCommand(listSpec{
+		short:     "List test plans",
+		paginated: true,
+		registerFilters: func(lc *cobra.Command) {
+			lc.Flags().StringVar(&query, "query", "", "Search query")
+		},
+		buildRequest: func(_ *cobra.Command, params url.Values) (string, error) {
 			if query != "" {
 				params.Set("q", query)
 			}
-			return c.fetchAndPrint(apiV1+"/test-plans", params)
+			return apiV1 + "/test-plans", nil
 		},
-	}
-
-	listCmd.Flags().IntVar(&page, "page", 0, "Page number")
-	listCmd.Flags().StringVar(&query, "query", "", "Search query")
-	listCmd.Flags().StringVar(&sortBy, "sort-by", "", "Sort by field")
-	listCmd.Flags().BoolVar(&sortDesc, "sort-desc", false, "Sort in descending order")
-
-	cmd.AddCommand(listCmd)
+	}))
 	return cmd
 }
 
