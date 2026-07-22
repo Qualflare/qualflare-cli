@@ -187,9 +187,11 @@ func (p *Parser) convertTest(test Test, fixture Fixture) domain.Case {
 		})
 	}
 
-	// Mark unstable tests
+	// Mark unstable (quarantine-mode) tests: they passed only after a retry, so
+	// they are flaky — record it structurally, not just as a tag (BUG-30).
 	if test.Unstable {
 		testCase.Tags = append(testCase.Tags, "unstable")
+		testCase.IsFlaky = domain.BoolPtr(true)
 	}
 
 	return testCase
