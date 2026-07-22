@@ -21,6 +21,40 @@ func TestSetEnvironment_SkipsEmpty(t *testing.T) {
 	}
 }
 
+// TestPlatformAndMilestone (SYNC-05/SYNC-12) covers the new contract inputs:
+// QF_PLATFORM/QF_MILESTONE are read, an unset flag doesn't clobber them, and the
+// built-in platform default is the backward-compatible "api".
+func TestPlatformAndMilestone(t *testing.T) {
+	if DefaultConfig().Platform != "api" {
+		t.Fatalf("default platform = %q, want %q", DefaultConfig().Platform, "api")
+	}
+
+	t.Setenv("QF_PLATFORM", "web")
+	t.Setenv("QF_MILESTONE", "42")
+	c := DefaultConfig()
+	c.LoadFromEnv()
+	if c.GetPlatform() != "web" {
+		t.Fatalf("platform = %q, want web", c.GetPlatform())
+	}
+	if c.GetMilestone() != 42 {
+		t.Fatalf("milestone = %d, want 42", c.GetMilestone())
+	}
+
+	// An unset flag (empty / 0) must not clobber the env-derived values.
+	c.SetPlatform("")
+	c.SetMilestone(0)
+	if c.GetPlatform() != "web" || c.GetMilestone() != 42 {
+		t.Fatalf("empty flag clobbered env: platform=%q milestone=%d", c.GetPlatform(), c.GetMilestone())
+	}
+
+	// An explicit flag overrides.
+	c.SetPlatform("ios")
+	c.SetMilestone(7)
+	if c.GetPlatform() != "ios" || c.GetMilestone() != 7 {
+		t.Fatalf("explicit flag not applied: platform=%q milestone=%d", c.GetPlatform(), c.GetMilestone())
+	}
+}
+
 // TestLoadFromEnv_QFEnvironmentWins confirms QF_ENVIRONMENT/QF_LANGUAGE are read
 // and (with the empty flag default) survive to the emitted payload.
 func TestLoadFromEnv_QFEnvironmentWins(t *testing.T) {

@@ -55,6 +55,8 @@ type ConfigProvider interface {
 	// Project settings
 	GetEnvironment() string
 	GetLanguage() string
+	GetPlatform() string
+	GetMilestone() int64
 
 	// Git information
 	GetBranch() string
