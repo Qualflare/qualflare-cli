@@ -1,6 +1,23 @@
 package http
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
+
+// TestActionHint (OBS-05) asserts common auth/authz failures carry an actionable
+// next step, not just a description.
+func TestActionHint(t *testing.T) {
+	if got := (&APIError{StatusCode: 401, Message: "invalid token"}).Error(); !strings.Contains(got, "qf login") {
+		t.Fatalf("401 should hint `qf login`: %q", got)
+	}
+	if got := (&APIError{StatusCode: 403, Message: "nope"}).Error(); !strings.Contains(got, "access to this project") {
+		t.Fatalf("403 should hint about project access: %q", got)
+	}
+	if got := (&APIError{StatusCode: 500, Message: "boom"}).Error(); strings.Contains(got, "qf login") {
+		t.Fatalf("500 must not carry an auth hint: %q", got)
+	}
+}
 
 // TestResolveErrorMessage (SYNC-01/10) pins the error-message selection: the
 // server's message wins, and the generic 404 code common.resource_not_found no

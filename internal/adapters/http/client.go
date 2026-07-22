@@ -206,11 +206,25 @@ type APIError struct {
 	Err        error
 }
 
+// actionHint returns a short next-step for common auth/authz failures so the
+// error is fixable, not just descriptive (OBS-05).
+func (e *APIError) actionHint() string {
+	switch e.StatusCode {
+	case http.StatusUnauthorized:
+		return " — run `qf login <identifier> <token>` to re-authenticate"
+	case http.StatusForbidden:
+		return " — the token lacks access to this project"
+	case http.StatusPaymentRequired:
+		return " — a plan limit was reached; check your Qualflare subscription"
+	}
+	return ""
+}
+
 func (e *APIError) Error() string {
 	// Surface the server's request_id so a user can quote it to support (OBS-01).
-	suffix := ""
+	suffix := e.actionHint()
 	if e.RequestID != "" {
-		suffix = fmt.Sprintf(" [request_id: %s]", e.RequestID)
+		suffix += fmt.Sprintf(" [request_id: %s]", e.RequestID)
 	}
 	if e.StatusCode > 0 {
 		return fmt.Sprintf("%s: %s (status: %d)%s", e.Op, e.Message, e.StatusCode, suffix)
