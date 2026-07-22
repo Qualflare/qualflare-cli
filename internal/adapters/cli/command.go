@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"path/filepath"
 	"qualflare-cli/internal/auth"
 	"qualflare-cli/internal/config"
 	"qualflare-cli/internal/core/domain"
@@ -247,6 +248,29 @@ var validPlatforms = map[string]struct{}{
 	"android": {}, "ios": {}, "desktop": {}, "web": {}, "api": {},
 }
 
+// expandGlobs expands any argument containing a glob metacharacter via
+// filepath.Glob, preserving order and passing literal (non-glob) args through. A
+// pattern that matches nothing is an error so a mistyped glob fails loudly rather
+// than silently uploading nothing (BUG-28).
+func expandGlobs(patterns []string) ([]string, error) {
+	out := make([]string, 0, len(patterns))
+	for _, p := range patterns {
+		if !strings.ContainsAny(p, "*?[") {
+			out = append(out, p)
+			continue
+		}
+		matches, err := filepath.Glob(p)
+		if err != nil {
+			return nil, fmt.Errorf("invalid glob pattern %q: %w", p, err)
+		}
+		if len(matches) == 0 {
+			return nil, fmt.Errorf("no files match pattern %q", p)
+		}
+		out = append(out, matches...)
+	}
+	return out, nil
+}
+
 func (c *CLI) runCollect(ctx context.Context, files []string, opts collectOptions) error {
 	warnLegacyAPIKey()
 	// Validate an explicit --platform before it reaches the server (fail fast with
@@ -265,9 +289,20 @@ func (c *CLI) runCollect(ctx context.Context, files []string, opts collectOption
 	c.config.SetCommit(opts.commit)
 	c.config.SetTimeout(opts.timeout)
 	c.config.SetDryRun(opts.dryRun)
+	// Fill branch/commit from local git only now (collect is the sole consumer),
+	// after explicit flags/CI env vars have had their say (BUG-39).
+	c.config.DetectGit()
 
 	// Validate configuration
 	if err := c.config.Validate(); err != nil {
+		return err
+	}
+
+	// Expand glob patterns (the help text and examples advertise them, but the
+	// CLI never expanded them — BUG-28). A pattern that matches nothing is an
+	// error, so a typo'd glob fails loudly instead of uploading nothing.
+	files, err := expandGlobs(files)
+	if err != nil {
 		return err
 	}
 

@@ -207,6 +207,13 @@ func (s *ReportService) detectFramework(filePath string) (domain.Framework, erro
 
 // parseFile parses a single file using the specified parser
 func (s *ReportService) parseFile(filePath string, parser ports.Parser) (*domain.Suite, error) {
+	// Enforce the size cap here (not only in detectFramework): passing --format
+	// skips detection entirely, so without this an unbounded file is read
+	// straight into memory (BUG-18).
+	if info, statErr := os.Stat(filePath); statErr == nil && info.Size() > config.MaxFileSize {
+		return nil, fmt.Errorf("file %s is too large (%d bytes, max %d bytes)", filePath, info.Size(), config.MaxFileSize)
+	}
+
 	file, err := os.Open(filePath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open file: %w", err)
