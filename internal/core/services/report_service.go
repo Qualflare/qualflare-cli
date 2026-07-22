@@ -6,10 +6,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"qualflare-cli/internal/config"
 	"qualflare-cli/internal/core/domain"
 	"qualflare-cli/internal/core/ports"
-	"qualflare-cli/internal/version"
 	"runtime"
 	"time"
 )
@@ -191,8 +189,8 @@ func (s *ReportService) detectFramework(filePath string) (domain.Framework, erro
 	if err != nil {
 		return s.parserFactory.DetectFramework(filePath)
 	}
-	if info.Size() > config.MaxFileSize {
-		return "", fmt.Errorf("file %s is too large (%d bytes, max %d bytes)", filePath, info.Size(), config.MaxFileSize)
+	if info.Size() > s.config.GetMaxFileSize() {
+		return "", fmt.Errorf("file %s is too large (%d bytes, max %d bytes)", filePath, info.Size(), s.config.GetMaxFileSize())
 	}
 
 	// First try content-based detection
@@ -210,8 +208,8 @@ func (s *ReportService) parseFile(filePath string, parser ports.Parser) (*domain
 	// Enforce the size cap here (not only in detectFramework): passing --format
 	// skips detection entirely, so without this an unbounded file is read
 	// straight into memory (BUG-18).
-	if info, statErr := os.Stat(filePath); statErr == nil && info.Size() > config.MaxFileSize {
-		return nil, fmt.Errorf("file %s is too large (%d bytes, max %d bytes)", filePath, info.Size(), config.MaxFileSize)
+	if info, statErr := os.Stat(filePath); statErr == nil && info.Size() > s.config.GetMaxFileSize() {
+		return nil, fmt.Errorf("file %s is too large (%d bytes, max %d bytes)", filePath, info.Size(), s.config.GetMaxFileSize())
 	}
 
 	file, err := os.Open(filePath)
@@ -261,7 +259,7 @@ func (s *ReportService) createReport(testSuites []domain.Suite, framework domain
 		Branch:      s.config.GetBranch(),
 		Commit:      s.config.GetCommit(),
 		Metadata: domain.Metadata{
-			Version:   version.Version,
+			Version:   s.config.GetCLIVersion(),
 			Timestamp: time.Now().UTC().Format(time.RFC3339),
 			CLIName:   "qf",
 		},
