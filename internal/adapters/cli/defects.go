@@ -8,14 +8,6 @@ import (
 )
 
 func (c *CLI) createDefectsCommand() *cobra.Command {
-	var (
-		page     int
-		severity []string
-		status   []string
-		sortBy   string
-		sortDesc bool
-	)
-
 	cmd := &cobra.Command{
 		Use:   "defects",
 		Short: "List defects",
@@ -30,26 +22,20 @@ func (c *CLI) createDefectsCommand() *cobra.Command {
   qf <id> defects list --status active`,
 	}
 
-	listCmd := &cobra.Command{
-		Use:   "list",
-		Short: "List defects",
-		RunE: func(cmd *cobra.Command, args []string) error {
-			params := url.Values{}
-			addPagination(params, page)
-			addSorting(params, sortBy, sortDesc, cmd.Flags().Changed("sort-desc"))
+	var severity, status []string
+	cmd.AddCommand(c.newListCommand(listSpec{
+		short:     "List defects",
+		paginated: true,
+		registerFilters: func(lc *cobra.Command) {
+			lc.Flags().StringSliceVar(&severity, "severity", nil, "Filter by severity (critical,high,medium,low)")
+			lc.Flags().StringSliceVar(&status, "status", nil, "Filter by status (active,closed,...)")
+		},
+		buildRequest: func(_ *cobra.Command, params url.Values) (string, error) {
 			addSliceParam(params, "severity[]", severity)
 			addSliceParam(params, "status[]", status)
-			return c.fetchAndPrint(apiV1+"/defects", params)
+			return apiV1 + "/defects", nil
 		},
-	}
-
-	listCmd.Flags().IntVar(&page, "page", 0, "Page number")
-	listCmd.Flags().StringSliceVar(&severity, "severity", nil, "Filter by severity (critical,high,medium,low)")
-	listCmd.Flags().StringSliceVar(&status, "status", nil, "Filter by status (active,closed,...)")
-	listCmd.Flags().StringVar(&sortBy, "sort-by", "", "Sort by field")
-	listCmd.Flags().BoolVar(&sortDesc, "sort-desc", false, "Sort in descending order")
-
-	cmd.AddCommand(listCmd)
+	}))
 	return cmd
 }
 

@@ -8,13 +8,6 @@ import (
 )
 
 func (c *CLI) createClustersCommand() *cobra.Command {
-	var (
-		page     int
-		severity []string
-		sortBy   string
-		sortDesc bool
-	)
-
 	cmd := &cobra.Command{
 		Use:   "clusters",
 		Short: "List failure clusters",
@@ -26,24 +19,18 @@ func (c *CLI) createClustersCommand() *cobra.Command {
   qf <id> clusters list --severity critical`,
 	}
 
-	listCmd := &cobra.Command{
-		Use:   "list",
-		Short: "List failure clusters",
-		RunE: func(cmd *cobra.Command, args []string) error {
-			params := url.Values{}
-			addPagination(params, page)
-			addSorting(params, sortBy, sortDesc, cmd.Flags().Changed("sort-desc"))
-			addSliceParam(params, "severity[]", severity)
-			return c.fetchAndPrint(apiV1+"/clusters", params)
+	var severity []string
+	cmd.AddCommand(c.newListCommand(listSpec{
+		short:     "List failure clusters",
+		paginated: true,
+		registerFilters: func(lc *cobra.Command) {
+			lc.Flags().StringSliceVar(&severity, "severity", nil, "Filter by severity (critical,high,medium,low)")
 		},
-	}
-
-	listCmd.Flags().IntVar(&page, "page", 0, "Page number")
-	listCmd.Flags().StringSliceVar(&severity, "severity", nil, "Filter by severity (critical,high,medium,low)")
-	listCmd.Flags().StringVar(&sortBy, "sort-by", "", "Sort by field")
-	listCmd.Flags().BoolVar(&sortDesc, "sort-desc", false, "Sort in descending order")
-
-	cmd.AddCommand(listCmd)
+		buildRequest: func(_ *cobra.Command, params url.Values) (string, error) {
+			addSliceParam(params, "severity[]", severity)
+			return apiV1 + "/clusters", nil
+		},
+	}))
 	return cmd
 }
 

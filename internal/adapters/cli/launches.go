@@ -9,14 +9,6 @@ import (
 )
 
 func (c *CLI) createLaunchesCommand() *cobra.Command {
-	var (
-		page         int
-		milestoneSeq int
-		environment  string
-		sortBy       string
-		sortDesc     bool
-	)
-
 	cmd := &cobra.Command{
 		Use:   "launches",
 		Short: "List test launches",
@@ -31,30 +23,27 @@ func (c *CLI) createLaunchesCommand() *cobra.Command {
   qf <id> launches list --environment prod`,
 	}
 
-	listCmd := &cobra.Command{
-		Use:   "list",
-		Short: "List test launches",
-		RunE: func(cmd *cobra.Command, args []string) error {
-			params := url.Values{}
-			addPagination(params, page)
-			addSorting(params, sortBy, sortDesc, cmd.Flags().Changed("sort-desc"))
+	var (
+		milestoneSeq int
+		environment  string
+	)
+	cmd.AddCommand(c.newListCommand(listSpec{
+		short:     "List test launches",
+		paginated: true,
+		registerFilters: func(lc *cobra.Command) {
+			lc.Flags().IntVar(&milestoneSeq, "milestone", 0, "Filter by milestone sequence number")
+			lc.Flags().StringVar(&environment, "environment", "", "Filter by environment UID")
+		},
+		buildRequest: func(_ *cobra.Command, params url.Values) (string, error) {
 			if milestoneSeq > 0 {
 				params.Set("milestone", strconv.Itoa(milestoneSeq))
 			}
 			if environment != "" {
 				params.Add("environments", environment)
 			}
-			return c.fetchAndPrint(apiV1+"/launches", params)
+			return apiV1 + "/launches", nil
 		},
-	}
-
-	listCmd.Flags().IntVar(&page, "page", 0, "Page number")
-	listCmd.Flags().IntVar(&milestoneSeq, "milestone", 0, "Filter by milestone sequence number")
-	listCmd.Flags().StringVar(&environment, "environment", "", "Filter by environment UID")
-	listCmd.Flags().StringVar(&sortBy, "sort-by", "", "Sort by field")
-	listCmd.Flags().BoolVar(&sortDesc, "sort-desc", false, "Sort in descending order")
-
-	cmd.AddCommand(listCmd)
+	}))
 	return cmd
 }
 
