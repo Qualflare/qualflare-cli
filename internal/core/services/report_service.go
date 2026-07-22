@@ -70,7 +70,7 @@ func (s *ReportService) ParseTestResults(ctx context.Context, files []string, fr
 	}
 
 	testSuites := make([]domain.Suite, 0, len(files))
-	var detectedFramework domain.Framework
+	detected := make(map[domain.Framework]struct{})
 
 	for _, filePath := range files {
 		select {
@@ -83,33 +83,40 @@ func (s *ReportService) ParseTestResults(ctx context.Context, files []string, fr
 
 		// Auto-detect framework if not specified
 		if currentParser == nil {
-			detectedFramework, err = s.detectFramework(filePath)
-			if err != nil {
-				return nil, fmt.Errorf("failed to detect framework for file %s: %w", filePath, err)
+			detectedFramework, detErr := s.detectFramework(filePath)
+			if detErr != nil {
+				return nil, fmt.Errorf("failed to detect framework for file %s: %w", filePath, detErr)
 			}
 
 			currentParser, err = s.parserFactory.GetParser(detectedFramework)
 			if err != nil {
 				return nil, fmt.Errorf("failed to get parser for detected framework %s: %w", detectedFramework, err)
 			}
+			detected[detectedFramework] = struct{}{}
 		}
 
-		suite, err := s.parseFile(filePath, currentParser)
-		if err != nil {
-			return nil, fmt.Errorf("failed to parse file %s: %w", filePath, err)
+		suite, parseErr := s.parseFile(filePath, currentParser)
+		if parseErr != nil {
+			return nil, fmt.Errorf("failed to parse file %s: %w", filePath, parseErr)
 		}
 
 		testSuites = append(testSuites, *suite)
-
-		// Use the detected framework if no explicit framework was provided
-		if framework == "" && detectedFramework != "" {
-			framework = detectedFramework
-		}
 	}
 
-	// Use the parser's framework if we had an explicit parser
-	if parser != nil {
+	// Resolve the launch-level framework label. An explicit --format wins. Otherwise,
+	// when every auto-detected file agreed, use that framework; when they disagree,
+	// label the launch "mixed" rather than tagging the whole upload with whichever file
+	// happened to be parsed first (BUG-41). The server stores framework as a free
+	// string (required,max=100), so "mixed" is a valid, honest label.
+	switch {
+	case parser != nil:
 		framework = parser.GetFramework()
+	case len(detected) == 1:
+		for f := range detected {
+			framework = f
+		}
+	case len(detected) > 1:
+		framework = domain.Framework("mixed")
 	}
 
 	return s.createReport(testSuites, framework), nil
