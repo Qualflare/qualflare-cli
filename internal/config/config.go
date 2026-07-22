@@ -91,19 +91,11 @@ func (c *Config) LoadFromEnv() {
 		}
 	}
 
-	// Git information: CI env vars first, then fall back to local git detection.
+	// Git information from CI env vars only. Local git-subprocess detection is
+	// deferred to DetectGit() so it runs once, for `collect` — not on every
+	// invocation (version/help/login/logout all forked two `git` processes) (BUG-39).
 	c.Branch = getFirstEnv("QF_BRANCH", "GIT_BRANCH", "GITHUB_REF_NAME", "CI_COMMIT_REF_NAME", "BITBUCKET_BRANCH")
 	c.Commit = getFirstEnv("QF_COMMIT", "GIT_COMMIT", "GITHUB_SHA", "CI_COMMIT_SHA", "BITBUCKET_COMMIT")
-	if c.Branch == "" || c.Commit == "" {
-		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-		defer cancel()
-		if c.Branch == "" {
-			c.Branch = git.DetectBranch(ctx)
-		}
-		if c.Commit == "" {
-			c.Commit = git.DetectCommit(ctx)
-		}
-	}
 
 	// Retry settings
 	if v := os.Getenv("QF_RETRY_MAX"); v != "" {
@@ -135,6 +127,23 @@ func (c *Config) LoadFromEnv() {
 	}
 	if v := os.Getenv("QF_QUIET"); v == "true" || v == "1" {
 		c.Quiet = true
+	}
+}
+
+// DetectGit fills Branch/Commit from the local git repo when CI env vars did not
+// already supply them. It shells out to `git`, so it is invoked explicitly by the
+// `collect` path rather than on every CLI invocation (BUG-39).
+func (c *Config) DetectGit() {
+	if c.Branch != "" && c.Commit != "" {
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	if c.Branch == "" {
+		c.Branch = git.DetectBranch(ctx)
+	}
+	if c.Commit == "" {
+		c.Commit = git.DetectCommit(ctx)
 	}
 }
 
