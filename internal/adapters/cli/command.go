@@ -58,7 +58,7 @@ Authentication:
   logout           Remove saved credentials
   projects         List locally saved project identifiers
 
-Project-scoped commands (run as `+"`qf <identifier> <command>`"+`):
+Project-scoped commands (run as ` + "`qf <identifier> <command>`" + `):
   collect          Collect test results and send to Qualflare
   validate         Validate test result files
   suites / suite         List and view test suites
@@ -546,4 +546,3 @@ func (c *CLI) printSuccess(format string, args ...interface{}) {
 func (c *CLI) printError(format string, args ...interface{}) {
 	fmt.Fprintf(os.Stderr, "ERR "+format+"\n", args...)
 }
-

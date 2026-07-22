@@ -10,12 +10,12 @@ import (
 // cannot inject query/fragment/path metacharacters into the request URL.
 func TestPathArg_EscapesMetacharacters(t *testing.T) {
 	cases := map[string]string{
-		"123":       "123",             // normal seq passes through
-		"a?admin=1": "a%3Fadmin=1",     // ? cannot start a query
-		"a#frag":    "a%23frag",        // # cannot start a fragment
-		"..":        "..",              // literal, but harmless — see path check below
-		"a/b":       "a%2Fb",           // / cannot add a path segment
-		"a b":       "a%20b",           // space escaped
+		"123":       "123",         // normal seq passes through
+		"a?admin=1": "a%3Fadmin=1", // ? cannot start a query
+		"a#frag":    "a%23frag",    // # cannot start a fragment
+		"..":        "..",          // literal, but harmless — see path check below
+		"a/b":       "a%2Fb",       // / cannot add a path segment
+		"a b":       "a%20b",       // space escaped
 	}
 	for in, want := range cases {
 		if got := pathArg(in); got != want {
