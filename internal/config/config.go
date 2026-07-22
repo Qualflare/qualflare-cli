@@ -45,6 +45,7 @@ type Config struct {
 	Verbose bool
 	Quiet   bool
 	DryRun  bool
+	Debug   bool
 }
 
 // DefaultConfig returns the default configuration
@@ -128,6 +129,9 @@ func (c *Config) LoadFromEnv() {
 	}
 	if v := os.Getenv("QF_QUIET"); v == "true" || v == "1" {
 		c.Quiet = true
+	}
+	if v := os.Getenv("QF_DEBUG"); v == "true" || v == "1" {
+		c.Debug = true
 	}
 }
 
@@ -289,6 +293,11 @@ func (c *Config) IsVerbose() bool {
 // IsQuiet returns whether quiet mode is enabled
 func (c *Config) IsQuiet() bool {
 	return c.Quiet
+}
+
+// IsDebug returns whether debug (full request/response logging) is enabled.
+func (c *Config) IsDebug() bool {
+	return c.Debug
 }
 
 // IsDryRun returns whether dry run mode is enabled

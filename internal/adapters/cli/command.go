@@ -96,6 +96,7 @@ Supported frameworks:
 	// value before any command runs (BUG-02).
 	cmd.PersistentFlags().BoolVarP(&c.config.Verbose, "verbose", "v", c.config.Verbose, "Enable verbose output")
 	cmd.PersistentFlags().BoolVarP(&c.config.Quiet, "quiet", "q", c.config.Quiet, "Suppress non-error output")
+	cmd.PersistentFlags().BoolVar(&c.config.Debug, "debug", c.config.Debug, "Log full HTTP request/response to stderr (token redacted)")
 
 	// Flat (auth-less) subcommands
 	cmd.AddCommand(c.createLoginCommand())
