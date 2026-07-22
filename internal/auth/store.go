@@ -68,6 +68,11 @@ func Load(path string) (*Store, error) {
 		}
 		return nil, fmt.Errorf("read %s: %w", path, err)
 	}
+	// Warn (don't fail — that would lock the user out) if the token file is
+	// group/world-accessible, so a 0644 file doesn't silently expose the token (SEC-05).
+	if info, statErr := os.Stat(path); statErr == nil && info.Mode().Perm()&0o077 != 0 {
+		fmt.Fprintf(os.Stderr, "warning: %s is group/world-accessible (mode %04o); run `chmod 600 %s` to protect your API token\n", path, info.Mode().Perm(), path)
+	}
 	if len(b) == 0 {
 		return s, nil
 	}
