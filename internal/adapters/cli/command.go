@@ -324,6 +324,18 @@ func (c *CLI) runCollect(ctx context.Context, files []string, opts collectOption
 		}
 	}
 
+	// Validate --output rather than silently ignoring it (API-01). It only affects
+	// dry runs and only supports "json"; previously "--output yaml" or "--output json"
+	// without --dry-run just uploaded as normal, giving no hint the flag did nothing.
+	if opts.output != "" {
+		if opts.output != "json" {
+			return fmt.Errorf("unsupported output format: %q (only 'json' is supported)", opts.output)
+		}
+		if !opts.dryRun {
+			return fmt.Errorf("--output only applies to --dry-run; add --dry-run to print the parsed report")
+		}
+	}
+
 	// Create context with timeout
 	ctx, cancel := context.WithTimeout(ctx, opts.timeout)
 	defer cancel()

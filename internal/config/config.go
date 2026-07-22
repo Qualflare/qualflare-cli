@@ -65,8 +65,12 @@ func DefaultConfig() *Config {
 		RetryMax:       3,
 		RetryBaseDelay: 1 * time.Second,
 		RetryMaxDelay:  30 * time.Second,
-		Timeout:        30 * time.Second,
-		Verbose:        false,
+		// 120s (not 30s): the server's own /collect DB budget is ~30s, so a 30s client
+		// deadline had zero headroom — a large upload that legitimately took ~30s
+		// server-side would trip the client timeout at the same moment, failing an
+		// upload the server was about to accept (BUG-27). 120s leaves room for retries.
+		Timeout:  120 * time.Second,
+		Verbose:  false,
 		Quiet:          false,
 		DryRun:         false,
 	}
@@ -331,7 +335,7 @@ func (c *Config) Validate() error {
 		c.RetryMax = maxRetryCount
 	}
 	if c.Timeout <= 0 {
-		c.Timeout = 30 * time.Second
+		c.Timeout = 120 * time.Second
 	}
 	if c.RetryBaseDelay <= 0 {
 		c.RetryBaseDelay = 1 * time.Second
