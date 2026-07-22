@@ -249,6 +249,9 @@ func dedupeFiles(files []string) []string {
 // createReport creates a Launch report from test suites
 func (s *ReportService) createReport(testSuites []domain.Suite, framework domain.Framework) *domain.Launch {
 	normalizeCasePriorities(testSuites)
+	if s.config.IsNoCaptureOutput() {
+		stripCapturedOutput(testSuites)
+	}
 	return &domain.Launch{
 		Framework:   string(framework),
 		Platform:    s.config.GetPlatform(),
@@ -276,6 +279,20 @@ func normalizeCasePriorities(suites []domain.Suite) {
 	for i := range suites {
 		for j := range suites[i].Cases {
 			suites[i].Cases[j].Priority = suites[i].Cases[j].Priority.ToCasePriority()
+		}
+	}
+}
+
+// stripCapturedOutput removes captured stdout/stderr (JUnit system-out/system-err)
+// from every case in place. Those streams routinely echo whatever an environment
+// printed during a run — including secrets — and --no-capture-output opts out of
+// uploading them. Test status, timing, and failure messages are left intact; only
+// the bulk captured output is dropped (SEC-04). delete on a nil map is a no-op.
+func stripCapturedOutput(suites []domain.Suite) {
+	for i := range suites {
+		for j := range suites[i].Cases {
+			delete(suites[i].Cases[j].Properties, "system-out")
+			delete(suites[i].Cases[j].Properties, "system-err")
 		}
 	}
 }

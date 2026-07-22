@@ -75,6 +75,9 @@ type ConfigProvider interface {
 	IsQuiet() bool
 	IsDryRun() bool
 	IsDebug() bool
+	// IsNoCaptureOutput reports whether captured stdout/stderr (system-out/
+	// system-err) must be stripped from the report before sending (SEC-04).
+	IsNoCaptureOutput() bool
 
 	// Validation
 	Validate() error
