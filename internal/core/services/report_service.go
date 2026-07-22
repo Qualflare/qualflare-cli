@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"path/filepath"
 	"qualflare-cli/internal/config"
 	"qualflare-cli/internal/core/domain"
 	"qualflare-cli/internal/core/ports"
@@ -53,6 +54,11 @@ func (s *ReportService) ParseTestResults(ctx context.Context, files []string, fr
 	if len(files) == 0 {
 		return nil, fmt.Errorf("no files provided")
 	}
+
+	// Dedupe by resolved absolute path: the same file passed twice (directly or
+	// via overlapping globs) was parsed twice and silently double-counted every
+	// result in it (BUG-40).
+	files = dedupeFiles(files)
 
 	var parser ports.Parser
 	var err error
@@ -213,6 +219,26 @@ func (s *ReportService) parseFile(filePath string, parser ports.Parser) (*domain
 	}
 
 	return suite, nil
+}
+
+// dedupeFiles removes duplicate file arguments, keying on the resolved absolute
+// path (so ./r.xml and r.xml collapse) while preserving order and the original
+// path strings. Paths that fail to resolve fall back to their literal value.
+func dedupeFiles(files []string) []string {
+	seen := make(map[string]struct{}, len(files))
+	out := make([]string, 0, len(files))
+	for _, f := range files {
+		key := f
+		if abs, err := filepath.Abs(f); err == nil {
+			key = abs
+		}
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
+		out = append(out, f)
+	}
+	return out
 }
 
 // createReport creates a Launch report from test suites
