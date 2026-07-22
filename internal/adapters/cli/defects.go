@@ -36,7 +36,7 @@ func (c *CLI) createDefectsCommand() *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			params := url.Values{}
 			addPagination(params, page)
-			addSorting(params, sortBy, sortDesc)
+			addSorting(params, sortBy, sortDesc, cmd.Flags().Changed("sort-desc"))
 			addSliceParam(params, "severity[]", severity)
 			addSliceParam(params, "status[]", status)
 			return c.fetchAndPrint(apiV1+"/defects", params)

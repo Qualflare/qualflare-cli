@@ -38,7 +38,7 @@ func (c *CLI) createCasesCommand() *cobra.Command {
 			}
 			params := url.Values{}
 			addPagination(params, page)
-			addSorting(params, sortBy, sortDesc)
+			addSorting(params, sortBy, sortDesc, cmd.Flags().Changed("sort-desc"))
 			if query != "" {
 				params.Set("q", query)
 			}

@@ -37,7 +37,7 @@ func (c *CLI) createLaunchesCommand() *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			params := url.Values{}
 			addPagination(params, page)
-			addSorting(params, sortBy, sortDesc)
+			addSorting(params, sortBy, sortDesc, cmd.Flags().Changed("sort-desc"))
 			if milestoneSeq > 0 {
 				params.Set("milestone", strconv.Itoa(milestoneSeq))
 			}
