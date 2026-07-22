@@ -128,8 +128,10 @@ func (p *Parser) convertAlert(alert Alert, site Site) domain.Case {
 	riskLevel := p.getRiskLevel(riskCode)
 
 	testCase := domain.Case{
-		ID:        alert.PluginID,
-		Name:      fmt.Sprintf("[%s] %s", riskLevel, alert.Name),
+		ID: alert.PluginID,
+		// Include the host: the same alert name across multiple scanned sites would
+		// otherwise collapse into one row (the server dedupes by Name) — SYNC-02.
+		Name:      fmt.Sprintf("[%s] %s (%s)", riskLevel, alert.Name, site.Host),
 		ClassName: site.Host,
 	}
 
