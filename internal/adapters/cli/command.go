@@ -97,6 +97,7 @@ Supported frameworks:
 	cmd.PersistentFlags().BoolVarP(&c.config.Verbose, "verbose", "v", c.config.Verbose, "Enable verbose output")
 	cmd.PersistentFlags().BoolVarP(&c.config.Quiet, "quiet", "q", c.config.Quiet, "Suppress non-error output")
 	cmd.PersistentFlags().BoolVar(&c.config.Debug, "debug", c.config.Debug, "Log full HTTP request/response to stderr (token redacted)")
+	cmd.PersistentFlags().BoolVar(&c.config.NoCaptureOutput, "no-capture-output", c.config.NoCaptureOutput, "Do not upload captured stdout/stderr (system-out/system-err) — keeps secrets printed during tests off the server")
 
 	// Flat (auth-less) subcommands
 	cmd.AddCommand(c.createLoginCommand())

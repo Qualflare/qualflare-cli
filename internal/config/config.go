@@ -46,6 +46,11 @@ type Config struct {
 	Quiet   bool
 	DryRun  bool
 	Debug   bool
+	// NoCaptureOutput suppresses uploading captured stdout/stderr (JUnit
+	// system-out/system-err) — the streams most likely to contain secrets an
+	// environment printed during a test run. Test status and failure messages are
+	// still uploaded; only the bulk captured output is dropped (SEC-04).
+	NoCaptureOutput bool
 }
 
 // DefaultConfig returns the default configuration
@@ -132,6 +137,9 @@ func (c *Config) LoadFromEnv() {
 	}
 	if v := os.Getenv("QF_DEBUG"); v == "true" || v == "1" {
 		c.Debug = true
+	}
+	if v := os.Getenv("QF_NO_CAPTURE_OUTPUT"); v == "true" || v == "1" {
+		c.NoCaptureOutput = true
 	}
 }
 
@@ -298,6 +306,12 @@ func (c *Config) IsQuiet() bool {
 // IsDebug returns whether debug (full request/response logging) is enabled.
 func (c *Config) IsDebug() bool {
 	return c.Debug
+}
+
+// IsNoCaptureOutput returns whether captured stdout/stderr (system-out/system-err)
+// must be dropped before the report is sent (SEC-04).
+func (c *Config) IsNoCaptureOutput() bool {
+	return c.NoCaptureOutput
 }
 
 // IsDryRun returns whether dry run mode is enabled
