@@ -1,6 +1,18 @@
 package config
 
-import "testing"
+import (
+	"testing"
+	"time"
+)
+
+// TestDefaultTimeoutHasServerHeadroom (BUG-27): the client collect timeout must exceed
+// the server's ~30s /collect DB budget, or a legitimately slow upload trips the client
+// deadline at the exact moment the server is finishing. 120s leaves room for retries.
+func TestDefaultTimeoutHasServerHeadroom(t *testing.T) {
+	if got := DefaultConfig().Timeout; got < 120*time.Second {
+		t.Fatalf("default Timeout = %v, want >= 120s (headroom over the server's 30s budget)", got)
+	}
+}
 
 // TestSetEnvironment_SkipsEmpty (CLI-H1) locks in the mechanism the fix relies
 // on: the collect command passes an empty --environment when the flag is unset,
