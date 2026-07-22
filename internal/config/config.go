@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"qualflare-cli/internal/git"
+	"qualflare-cli/internal/version"
 )
 
 const (
@@ -247,6 +248,17 @@ func (c *Config) GetPlatform() string {
 // GetMilestone returns the milestone sequence number (0 = none).
 func (c *Config) GetMilestone() int64 {
 	return c.Milestone
+}
+
+// GetMaxFileSize returns the per-file upload size cap. Exposed via the provider
+// so the core service does not import this concrete config package (ARCH-02).
+func (c *Config) GetMaxFileSize() int64 {
+	return MaxFileSize
+}
+
+// GetCLIVersion returns the build version string.
+func (c *Config) GetCLIVersion() string {
+	return version.Version
 }
 
 // GetBranch returns the git branch
