@@ -69,6 +69,14 @@ func NewHTTPClient(config ports.ConfigProvider, opts ...ClientOption) *Client {
 		return nil
 	})
 
+	// --debug logs the full request/response to stderr. The OnDebugLog callback
+	// runs BEFORE resty formats the output, so redacting the token header here
+	// guarantees the credential never appears in the log (OBS-06).
+	if config.IsDebug() {
+		rc.EnableDebug()
+		rc.OnDebugLog(redactDebugLog)
+	}
+
 	c := &Client{
 		resty:    rc,
 		config:   config,
@@ -156,6 +164,19 @@ func (c *Client) Get(ctx context.Context, path string, params url.Values) (json.
 	}
 
 	return nil, c.buildAPIError("get", resp)
+}
+
+// redactDebugLog strips the API token from a --debug log entry before resty
+// formats it. resty invokes this callback BEFORE the formatter, so the mutation
+// takes effect and the credential never reaches stderr (OBS-06).
+func redactDebugLog(dl *resty.DebugLog) {
+	if dl == nil || dl.Request == nil || dl.Request.Header == nil {
+		return
+	}
+	if dl.Request.Header.Get("QF_TOKEN") != "" {
+		dl.Request.Header.Set("QF_TOKEN", "***REDACTED***")
+	}
+	dl.Request.Header.Del("Authorization")
 }
 
 // buildAPIError creates an APIError from a non-success response

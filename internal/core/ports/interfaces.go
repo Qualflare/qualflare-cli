@@ -74,6 +74,7 @@ type ConfigProvider interface {
 	IsVerbose() bool
 	IsQuiet() bool
 	IsDryRun() bool
+	IsDebug() bool
 
 	// Validation
 	Validate() error
