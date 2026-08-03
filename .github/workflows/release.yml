@@ -82,12 +82,13 @@ jobs:
           node-version: '20'
           registry-url: 'https://registry.npmjs.org'
 
-      - name: Publish npm wrapper (@qualflare/cli)
+      # The main package pins its optionalDependencies to exact versions, so all seven
+      # packages ship together: platform packages first, @qualflare/cli last.
+      - name: Publish npm packages (@qualflare/cli + platform binaries)
         if: ${{ env.HAS_NPM == 'true' && !contains(github.ref_name, '-') }}
-        working-directory: npm
         run: |
           VERSION="${GITHUB_REF_NAME#v}"
-          npm version "$VERSION" --no-git-tag-version --allow-same-version
-          npm publish --access public
+          node scripts/build-npm-packages.mjs "$VERSION"
+          scripts/publish-npm-packages.sh "$VERSION"
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

@@ -1,0 +1,120 @@
+#!/usr/bin/env node
+'use strict';
+
+// Thin launcher: resolve the platform-native `qf` binary out of the matching
+// @qualflare/cli-<os>-<arch> optional dependency and exec it, forwarding args, stdio,
+// and the exit code.
+//
+// There is deliberately no install script here. The binary arrives as an ordinary npm
+// tarball that the resolver picks via the platform package's `os`/`cpu` fields, so
+// nothing is downloaded or executed at install time.
+
+const { spawnSync } = require('node:child_process');
+
+const PLATFORMS = {
+  darwin: {
+    arm64: '@qualflare/cli-darwin-arm64/bin/qf',
+    x64: '@qualflare/cli-darwin-x64/bin/qf',
+  },
+  linux: {
+    arm64: '@qualflare/cli-linux-arm64/bin/qf',
+    x64: '@qualflare/cli-linux-x64/bin/qf',
+  },
+  win32: {
+    arm64: '@qualflare/cli-win32-arm64/bin/qf.exe',
+    x64: '@qualflare/cli-win32-x64/bin/qf.exe',
+  },
+};
+
+const RELEASES = 'https://github.com/Qualflare/qualflare-cli/releases';
+
+function fail(lines) {
+  for (const line of lines) console.error(line);
+  process.exit(1);
+}
+
+// npm skips a failed optional dependency without reporting an error, so "the package
+// isn't there" has several very different causes. Tell them apart — a bare
+// MODULE_NOT_FOUND sends people down the wrong path.
+function diagnose(subpath) {
+  const wanted = subpath.split('/').slice(0, 2).join('/'); // @qualflare/cli-<os>-<arch>
+
+  // Did a *different* platform's package get installed? That means these node_modules
+  // were populated on another machine (Docker bind-mount, WSL share, Rosetta).
+  //
+  // Probe with require.resolve rather than reading the scope directory: the layout on
+  // disk differs between npm, pnpm, Yarn PnP, and global installs, but resolution works
+  // the same way in all of them.
+  const siblings = [];
+  for (const byArch of Object.values(PLATFORMS)) {
+    for (const other of Object.values(byArch)) {
+      const name = other.split('/').slice(0, 2).join('/');
+      if (name === wanted) continue;
+      try {
+        require.resolve(`${name}/package.json`);
+        siblings.push(name);
+      } catch {
+        // not installed — expected for every platform but the host's
+      }
+    }
+  }
+
+  if (siblings.length > 0) {
+    fail([
+      `[qualflare] "${wanted}" is missing, but ${siblings
+        .map((s) => `"${s}"`)
+        .join(', ')} is installed.`,
+      '',
+      "This node_modules was installed for a different platform than the one you're",
+      `running on (${process.platform}/${process.arch}) — commonly a Docker bind-mount,`,
+      'a WSL/Windows shared directory, or Rosetta.',
+      '',
+      'Reinstall on this machine:',
+      '  rm -rf node_modules package-lock.json && npm install',
+    ]);
+  }
+
+  fail([
+    `[qualflare] The package "${wanted}" could not be found, and is needed by @qualflare/cli.`,
+    '',
+    'If you installed with --omit=optional (or --no-optional), drop that flag —',
+    '@qualflare/cli uses optionalDependencies to install the right binary for your platform.',
+    '',
+    'Otherwise this is likely the known npm lockfile bug with platform-specific optional',
+    'dependencies (https://github.com/npm/cli/issues/4828). Reinstall from scratch:',
+    '  rm -rf node_modules package-lock.json && npm install',
+    '',
+    'You can also point at a binary yourself with QF_BINARY=/path/to/qf, or install from',
+    RELEASES,
+  ]);
+}
+
+const subpath = PLATFORMS[process.platform]?.[process.arch];
+if (!process.env.QF_BINARY && !subpath) {
+  fail([
+    `[qualflare] Unsupported platform: ${process.platform}/${process.arch}.`,
+    '',
+    'Prebuilt binaries are available for macOS, Linux, and Windows on arm64 and x64.',
+    `Install another way — Homebrew, Docker, or a direct download: ${RELEASES}`,
+  ]);
+}
+
+let bin = process.env.QF_BINARY;
+if (!bin) {
+  try {
+    bin = require.resolve(subpath);
+  } catch {
+    diagnose(subpath);
+  }
+}
+
+const res = spawnSync(bin, process.argv.slice(2), { shell: false, stdio: 'inherit' });
+
+if (res.error) {
+  fail([
+    `[qualflare] could not run qf: ${res.error.message}`,
+    '[qualflare] try reinstalling: npm install -g @qualflare/cli',
+  ]);
+}
+// A signal-terminated child reports status === null; surface that as a failure.
+process.exit(res.status === null ? 1 : res.status);

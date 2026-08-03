@@ -8,11 +8,12 @@ dist/
 *.so
 *.dylib
 
-# The npm wrapper's launcher is tracked (bin/ above would otherwise ignore it);
-# the binary it downloads at install time (npm/bin/qf) stays ignored.
+# The npm wrapper's launcher is tracked (bin/ above would otherwise ignore it).
+# Nothing else lands here — the platform binaries ship in the @qualflare/cli-<os>-<arch>
+# packages, which scripts/build-npm-packages.mjs assembles under dist/.
 !npm/bin/
 npm/bin/*
-!npm/bin/qf.js
+!npm/bin/qf
 
 # Test
 coverage.out

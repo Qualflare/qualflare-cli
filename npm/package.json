@@ -1,7 +1,7 @@
 {
   "name": "@qualflare/cli",
   "version": "0.0.0",
-  "description": "Qualflare CLI (qf) — upload test results to Qualflare from any CI or local machine. Installs the platform-native binary from the matching GitHub release.",
+  "description": "Qualflare CLI (qf) — upload test results to Qualflare from any CI or local machine. Ships the platform-native binary as an optional dependency; no install scripts.",
   "keywords": [
     "qualflare",
     "test",
@@ -24,25 +24,26 @@
   "license": "Apache-2.0",
   "author": "Qualflare",
   "bin": {
-    "qf": "bin/qf.js"
+    "qf": "bin/qf"
   },
   "files": [
-    "bin/qf.js",
-    "install.js"
+    "bin/qf",
+    "README.md",
+    "LICENSE"
   ],
-  "scripts": {
-    "postinstall": "node install.js"
-  },
   "engines": {
     "node": ">=16"
   },
-  "os": [
-    "darwin",
-    "linux",
-    "win32"
-  ],
-  "cpu": [
-    "x64",
-    "arm64"
-  ]
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
+  "optionalDependencies": {
+    "@qualflare/cli-darwin-arm64": "0.0.0",
+    "@qualflare/cli-darwin-x64": "0.0.0",
+    "@qualflare/cli-linux-arm64": "0.0.0",
+    "@qualflare/cli-linux-x64": "0.0.0",
+    "@qualflare/cli-win32-arm64": "0.0.0",
+    "@qualflare/cli-win32-x64": "0.0.0"
+  }
 }
