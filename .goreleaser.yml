@@ -66,6 +66,95 @@ signs:
     artifacts: checksum
     output: true
 
+# Container images: multi-arch (amd64 + arm64) built from the root Dockerfile via
+# buildx. GHCR always publishes (GITHUB_TOKEN + `packages: write`). Docker Hub only
+# publishes when DOCKERHUB_TOKEN is set — mirroring the homebrew skip pattern, so a
+# fork or a secret-less run still releases the binaries + GHCR image.
+dockers:
+  - id: ghcr-amd64
+    goos: linux
+    goarch: amd64
+    dockerfile: Dockerfile
+    use: buildx
+    image_templates:
+      - "ghcr.io/qualflare/qf:{{ .Version }}-amd64"
+    build_flag_templates:
+      - "--platform=linux/amd64"
+      - "--label=org.opencontainers.image.title=qf"
+      - "--label=org.opencontainers.image.description=CLI tool for collecting test results for Qualflare"
+      - "--label=org.opencontainers.image.source=https://github.com/Qualflare/qualflare-cli"
+      - "--label=org.opencontainers.image.version={{ .Version }}"
+      - "--label=org.opencontainers.image.revision={{ .FullCommit }}"
+      - "--label=org.opencontainers.image.licenses=Apache-2.0"
+  - id: ghcr-arm64
+    goos: linux
+    goarch: arm64
+    dockerfile: Dockerfile
+    use: buildx
+    image_templates:
+      - "ghcr.io/qualflare/qf:{{ .Version }}-arm64"
+    build_flag_templates:
+      - "--platform=linux/arm64"
+      - "--label=org.opencontainers.image.title=qf"
+      - "--label=org.opencontainers.image.description=CLI tool for collecting test results for Qualflare"
+      - "--label=org.opencontainers.image.source=https://github.com/Qualflare/qualflare-cli"
+      - "--label=org.opencontainers.image.version={{ .Version }}"
+      - "--label=org.opencontainers.image.revision={{ .FullCommit }}"
+      - "--label=org.opencontainers.image.licenses=Apache-2.0"
+  - id: dockerhub-amd64
+    goos: linux
+    goarch: amd64
+    dockerfile: Dockerfile
+    use: buildx
+    skip_push: "{{ if .Env.DOCKERHUB_TOKEN }}false{{ else }}true{{ end }}"
+    image_templates:
+      - "docker.io/qualflare/qf:{{ .Version }}-amd64"
+    build_flag_templates:
+      - "--platform=linux/amd64"
+      - "--label=org.opencontainers.image.title=qf"
+      - "--label=org.opencontainers.image.description=CLI tool for collecting test results for Qualflare"
+      - "--label=org.opencontainers.image.source=https://github.com/Qualflare/qualflare-cli"
+      - "--label=org.opencontainers.image.version={{ .Version }}"
+      - "--label=org.opencontainers.image.revision={{ .FullCommit }}"
+      - "--label=org.opencontainers.image.licenses=Apache-2.0"
+  - id: dockerhub-arm64
+    goos: linux
+    goarch: arm64
+    dockerfile: Dockerfile
+    use: buildx
+    skip_push: "{{ if .Env.DOCKERHUB_TOKEN }}false{{ else }}true{{ end }}"
+    image_templates:
+      - "docker.io/qualflare/qf:{{ .Version }}-arm64"
+    build_flag_templates:
+      - "--platform=linux/arm64"
+      - "--label=org.opencontainers.image.title=qf"
+      - "--label=org.opencontainers.image.description=CLI tool for collecting test results for Qualflare"
+      - "--label=org.opencontainers.image.source=https://github.com/Qualflare/qualflare-cli"
+      - "--label=org.opencontainers.image.version={{ .Version }}"
+      - "--label=org.opencontainers.image.revision={{ .FullCommit }}"
+      - "--label=org.opencontainers.image.licenses=Apache-2.0"
+
+docker_manifests:
+  - name_template: "ghcr.io/qualflare/qf:{{ .Version }}"
+    image_templates:
+      - "ghcr.io/qualflare/qf:{{ .Version }}-amd64"
+      - "ghcr.io/qualflare/qf:{{ .Version }}-arm64"
+  - name_template: "ghcr.io/qualflare/qf:latest"
+    skip_push: "{{ if .Prerelease }}true{{ else }}false{{ end }}"
+    image_templates:
+      - "ghcr.io/qualflare/qf:{{ .Version }}-amd64"
+      - "ghcr.io/qualflare/qf:{{ .Version }}-arm64"
+  - name_template: "docker.io/qualflare/qf:{{ .Version }}"
+    skip_push: "{{ if .Env.DOCKERHUB_TOKEN }}false{{ else }}true{{ end }}"
+    image_templates:
+      - "docker.io/qualflare/qf:{{ .Version }}-amd64"
+      - "docker.io/qualflare/qf:{{ .Version }}-arm64"
+  - name_template: "docker.io/qualflare/qf:latest"
+    skip_push: "{{ if and .Env.DOCKERHUB_TOKEN (not .Prerelease) }}false{{ else }}true{{ end }}"
+    image_templates:
+      - "docker.io/qualflare/qf:{{ .Version }}-amd64"
+      - "docker.io/qualflare/qf:{{ .Version }}-arm64"
+
 snapshot:
   version_template: "{{ incpatch .Version }}-next"
 
@@ -115,6 +204,16 @@ release:
     ### Homebrew (macOS/Linux)
     ```bash
     brew install qualflare/tap/qf
+    ```
+
+    ### npm (any OS, Node ≥ 16)
+    ```bash
+    npm install -g @qualflare/cli
+    ```
+
+    ### Docker
+    ```bash
+    docker run --rm ghcr.io/qualflare/qf version
     ```
 
     ### Binary Download
