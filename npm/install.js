@@ -94,10 +94,11 @@ function get(url) {
 
     // Extract just the binary. GNU tar handles tar.gz; bsdtar (macOS + Windows 10+)
     // handles both tar.gz and zip — so a single `tar -xf` covers every platform.
-    const tmp = path.join(os.tmpdir(), archive);
+    const workDir = fs.mkdtempSync(path.join(os.tmpdir(), 'qualflare-cli-'));
+    const tmp = path.join(workDir, archive);
     fs.writeFileSync(tmp, data);
     const r = spawnSync('tar', ['-xf', tmp, '-C', binDir, binName], { stdio: 'inherit' });
-    fs.unlinkSync(tmp);
+    fs.rmSync(workDir, { recursive: true, force: true });
     if (r.status !== 0) throw new Error(`extract failed (tar exit ${r.status})`);
 
     if (!isWin) fs.chmodSync(binPath, 0o755);
