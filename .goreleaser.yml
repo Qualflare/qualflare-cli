@@ -179,17 +179,23 @@ changelog:
     - title: Others
       order: 999
 
-homebrew_casks:
+# Homebrew Formula (not a Cask): the tap's live artifact is a hand-maintained
+# Formula, so goreleaser manages that same Formula/qf.rb in place — no Cask/Formula
+# collision, and `brew install qualflare/tap/qf` keeps working continuously. Uploads
+# only when HOMEBREW_TAP_TOKEN is set.
+brews:
   - name: qf
     repository:
       owner: qualflare
       name: homebrew-tap
       token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
-    directory: Casks
+    directory: Formula
     homepage: https://github.com/qualflare/qualflare-cli
     description: CLI tool for collecting test results for Qualflare
     license: Apache-2.0
     skip_upload: "{{ if .Env.HOMEBREW_TAP_TOKEN }}false{{ else }}true{{ end }}"
+    test: |
+      system "#{bin}/qf", "version"
 
 release:
   github:
