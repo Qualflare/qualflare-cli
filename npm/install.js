@@ -5,12 +5,12 @@
 // release, verify its sha256 against the release checksums.txt, and extract it into
 // ./bin. Dependency-free (uses Node core + the system `tar`).
 
-const fs = require('fs');
-const path = require('path');
-const os = require('os');
-const https = require('https');
-const crypto = require('crypto');
-const { spawnSync } = require('child_process');
+const fs = require('node:fs');
+const path = require('node:path');
+const os = require('node:os');
+const https = require('node:https');
+const crypto = require('node:crypto');
+const { spawnSync } = require('node:child_process');
 
 const REPO = 'Qualflare/qualflare-cli';
 const pkg = require('./package.json');
@@ -49,6 +49,18 @@ const binPath = path.join(binDir, binName);
 if (fs.existsSync(binPath)) process.exit(0);
 fs.mkdirSync(binDir, { recursive: true });
 
+// Resolve `tar` to a fixed absolute path rather than searching $PATH (a writable
+// $PATH entry could shadow the real binary). bsdtar (macOS, Windows 10+) reads both
+// tar.gz and zip; GNU tar (Linux) reads tar.gz — so one `tar -xf` covers every OS.
+function resolveTar() {
+  const candidates = isWin
+    ? ['C:\\Windows\\System32\\tar.exe']
+    : ['/usr/bin/tar', '/bin/tar'];
+  const found = candidates.find((p) => fs.existsSync(p));
+  if (!found) throw new Error(`no usable tar found (looked in: ${candidates.join(', ')})`);
+  return found;
+}
+
 function get(url) {
   return new Promise((resolve, reject) => {
     https
@@ -85,23 +97,22 @@ function get(url) {
       .toString('utf8')
       .split('\n')
       .find((l) => l.trim().endsWith(archive));
-    const expected = line && line.trim().split(/\s+/)[0];
+    const expected = line?.trim().split(/\s+/)[0];
     if (!expected) throw new Error(`no checksum entry for ${archive}`);
     const actual = crypto.createHash('sha256').update(data).digest('hex');
     if (expected !== actual) {
       throw new Error(`checksum mismatch for ${archive} (expected ${expected}, got ${actual})`);
     }
 
-    // Extract just the binary. GNU tar handles tar.gz; bsdtar (macOS + Windows 10+)
-    // handles both tar.gz and zip — so a single `tar -xf` covers every platform.
+    // Extract just the binary into ./bin. `tar` preserves the archived mode (0755),
+    // so the extracted qf is already executable — no chmod needed.
     const workDir = fs.mkdtempSync(path.join(os.tmpdir(), 'qualflare-cli-'));
     const tmp = path.join(workDir, archive);
     fs.writeFileSync(tmp, data);
-    const r = spawnSync('tar', ['-xf', tmp, '-C', binDir, binName], { stdio: 'inherit' });
+    const r = spawnSync(resolveTar(), ['-xf', tmp, '-C', binDir, binName], { stdio: 'inherit' });
     fs.rmSync(workDir, { recursive: true, force: true });
     if (r.status !== 0) throw new Error(`extract failed (tar exit ${r.status})`);
 
-    if (!isWin) fs.chmodSync(binPath, 0o755);
     console.log(`[qualflare] installed qf v${version} (${goOS}/${goArch}).`);
   } catch (err) {
     console.error(`[qualflare] failed to install the qf binary: ${err.message}`);

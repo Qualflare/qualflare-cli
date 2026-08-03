@@ -4,8 +4,8 @@
 // Thin launcher: exec the platform-native `qf` binary that install.js placed next to
 // this file, forwarding args, stdio, and the exit code.
 
-const path = require('path');
-const { spawnSync } = require('child_process');
+const path = require('node:path');
+const { spawnSync } = require('node:child_process');
 
 const bin = path.join(__dirname, process.platform === 'win32' ? 'qf.exe' : 'qf');
 const res = spawnSync(bin, process.argv.slice(2), { stdio: 'inherit' });
