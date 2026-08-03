@@ -72,6 +72,11 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          # Release the tag that triggered this run. Without this GoReleaser derives the
+          # version from `git describe`, which picks an arbitrary one when several tags
+          # share a commit (e.g. v1.2.3-rc.1 promoted to v1.2.3) and then tries to upload
+          # assets into the wrong, already-populated release.
+          GORELEASER_CURRENT_TAG: ${{ github.ref_name }}
           # Set (possibly empty) so the goreleaser skip_push template can read it —
           # Docker Hub images are pushed only when this is non-empty.
           DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
