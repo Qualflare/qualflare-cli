@@ -1,0 +1,51 @@
+name: Publish npm
+
+# Standalone publisher for the @qualflare/cli wrapper. The tag release workflow
+# publishes npm automatically; this exists to backfill or retry a single version
+# (e.g. after an NPM_TOKEN fix) without re-running goreleaser, which errors on an
+# already-published release.
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release version to publish, without the leading v (e.g. 0.1.10)'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  npm-publish:
+    name: Publish @qualflare/cli
+    runs-on: ubuntu-latest
+    steps:
+      - name: Validate version input
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          if ! printf '%s' "$VERSION" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$'; then
+            echo "invalid version: '$VERSION' (expected semver like 0.1.10 or 0.1.10-rc.1)" >&2
+            exit 1
+          fi
+
+      - name: Checkout the release tag
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          ref: v${{ inputs.version }}
+
+      - name: Set up Node (npm registry)
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '20'
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Publish
+        working-directory: npm
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          VERSION: ${{ inputs.version }}
+        run: |
+          npm version "$VERSION" --no-git-tag-version --allow-same-version
+          npm publish --access public
