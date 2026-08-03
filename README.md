@@ -2,6 +2,8 @@
 
 [![CI](https://github.com/qualflare/qualflare-cli/actions/workflows/ci.yml/badge.svg)](https://github.com/qualflare/qualflare-cli/actions/workflows/ci.yml)
 [![Release](https://img.shields.io/github/v/release/qualflare/qualflare-cli)](https://github.com/qualflare/qualflare-cli/releases/latest)
+[![npm](https://img.shields.io/npm/v/@qualflare/cli?logo=npm)](https://www.npmjs.com/package/@qualflare/cli)
+[![Docker](https://img.shields.io/docker/v/qualflare/qf?logo=docker&label=docker&sort=semver)](https://hub.docker.com/r/qualflare/qf)
 [![Go Report Card](https://goreportcard.com/badge/github.com/qualflare/qualflare-cli)](https://goreportcard.com/report/github.com/qualflare/qualflare-cli)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
 
@@ -18,18 +20,23 @@ brew install qualflare/tap/qf
 brew upgrade qualflare/tap/qf
 ```
 
-**npm** (any OS, Node ≥ 16) — installs the platform-native binary:
+**npm** (any OS, Node ≥ 16) — downloads the platform-native binary and puts `qf` on your `PATH`:
 
 ```bash
 npm install -g @qualflare/cli
 ```
 
-**Docker** — run without installing anything, ideal for CI:
+**Docker** — run without installing anything, ideal for CI. Multi-arch (amd64 + arm64), published to both GitHub Container Registry and Docker Hub:
 
 ```bash
+# GitHub Container Registry (no login needed to pull)
 docker run --rm ghcr.io/qualflare/qf version
-# also published to Docker Hub: docker.io/qualflare/qf
+
+# Also on Docker Hub — pin a version for reproducible CI
+docker run --rm docker.io/qualflare/qf:0.1.10 version
 ```
+
+To collect results from a pipeline, mount your workspace and pass your token — see [CI/CD](#cicd) for the full flow.
 
 **Binary download** — grab the latest release for your platform from the [Releases](https://github.com/qualflare/qualflare-cli/releases/latest) page and place `qf` on your `PATH`.
 
