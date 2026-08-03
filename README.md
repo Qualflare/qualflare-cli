@@ -18,6 +18,19 @@ brew install qualflare/tap/qf
 brew upgrade qualflare/tap/qf
 ```
 
+**npm** (any OS, Node ≥ 16) — installs the platform-native binary:
+
+```bash
+npm install -g @qualflare/cli
+```
+
+**Docker** — run without installing anything, ideal for CI:
+
+```bash
+docker run --rm ghcr.io/qualflare/qf version
+# also published to Docker Hub: docker.io/qualflare/qf
+```
+
 **Binary download** — grab the latest release for your platform from the [Releases](https://github.com/qualflare/qualflare-cli/releases/latest) page and place `qf` on your `PATH`.
 
 **Build from source** — requires Go 1.25+: `git clone` then `make build`. The binary lands in `build/qf`.

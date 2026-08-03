@@ -1,0 +1,48 @@
+{
+  "name": "@qualflare/cli",
+  "version": "0.0.0",
+  "description": "Qualflare CLI (qf) — upload test results to Qualflare from any CI or local machine. Installs the platform-native binary from the matching GitHub release.",
+  "keywords": [
+    "qualflare",
+    "test",
+    "testing",
+    "ci",
+    "test-results",
+    "flaky-tests",
+    "test-reporting",
+    "cli"
+  ],
+  "homepage": "https://qualflare.com",
+  "bugs": {
+    "url": "https://github.com/Qualflare/qualflare-cli/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Qualflare/qualflare-cli.git",
+    "directory": "npm"
+  },
+  "license": "Apache-2.0",
+  "author": "Qualflare",
+  "bin": {
+    "qf": "bin/qf.js"
+  },
+  "files": [
+    "bin/qf.js",
+    "install.js"
+  ],
+  "scripts": {
+    "postinstall": "node install.js"
+  },
+  "engines": {
+    "node": ">=16"
+  },
+  "os": [
+    "darwin",
+    "linux",
+    "win32"
+  ],
+  "cpu": [
+    "x64",
+    "arm64"
+  ]
+}

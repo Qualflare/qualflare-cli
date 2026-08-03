@@ -15,6 +15,13 @@ jobs:
     permissions:
       contents: write
       id-token: write # keyless cosign signing via Sigstore OIDC (SEC-02)
+      packages: write # push the container image to GHCR
+    env:
+      # Optional channels publish only when their secrets are configured (mirrors the
+      # homebrew skip pattern), so a fork or a not-yet-configured repo still releases
+      # the binaries + the GHCR image.
+      HAS_DOCKERHUB: ${{ secrets.DOCKERHUB_USERNAME != '' && secrets.DOCKERHUB_TOKEN != '' }}
+      HAS_NPM: ${{ secrets.NPM_TOKEN != '' }}
 
     steps:
       - name: Checkout code
@@ -36,6 +43,26 @@ jobs:
       - name: Install syft (SBOM generation)
         uses: anchore/sbom-action/download-syft@v0
 
+      - name: Set up QEMU (arm64 docker builds)
+        uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130 # v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Log in to Docker Hub
+        if: ${{ env.HAS_DOCKERHUB == 'true' }}
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
       - name: Run GoReleaser
         uses: goreleaser/goreleaser-action@e435ccd777264be153ace6237001ef4d979d3a7a # v6
         with:
@@ -45,3 +72,22 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          # Set (possibly empty) so the goreleaser skip_push template can read it —
+          # Docker Hub images are pushed only when this is non-empty.
+          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Set up Node (npm registry)
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '20'
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Publish npm wrapper (@qualflare/cli)
+        if: ${{ env.HAS_NPM == 'true' && !contains(github.ref_name, '-') }}
+        working-directory: npm
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          npm version "$VERSION" --no-git-tag-version --allow-same-version
+          npm publish --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
