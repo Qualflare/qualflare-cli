@@ -8,6 +8,12 @@ dist/
 *.so
 *.dylib
 
+# The npm wrapper's launcher is tracked (bin/ above would otherwise ignore it);
+# the binary it downloads at install time (npm/bin/qf) stays ignored.
+!npm/bin/
+npm/bin/*
+!npm/bin/qf.js
+
 # Test
 coverage.out
 coverage.html
