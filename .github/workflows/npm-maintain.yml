@@ -17,14 +17,15 @@ on:
         type: choice
         options:
           - remove-dist-tag
+          - set-dist-tag
           - deprecate
           - undeprecate
       version:
-        description: 'Version to (un)deprecate, without a leading v (e.g. 0.1.12-rc.1). Ignored for remove-dist-tag.'
+        description: 'Version to (un)deprecate or point a dist-tag at, without a leading v (e.g. 0.1.12).'
         required: false
         type: string
       tag:
-        description: 'Dist-tag to remove (e.g. next). Ignored unless action is remove-dist-tag.'
+        description: 'Dist-tag to remove or set (e.g. next). Ignored for deprecate/undeprecate.'
         required: false
         default: 'next'
         type: string
@@ -54,21 +55,25 @@ jobs:
           TAG: ${{ inputs.tag }}
         run: |
           case "$ACTION" in
-            deprecate|undeprecate)
+            deprecate|undeprecate|set-dist-tag)
               if ! printf '%s' "$VERSION" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$'; then
                 echo "invalid version: '$VERSION' (expected semver like 0.1.12-rc.1)" >&2
                 exit 1
               fi
               ;;
-            remove-dist-tag)
+          esac
+
+          case "$ACTION" in
+            remove-dist-tag|set-dist-tag)
               if [ -z "$TAG" ]; then
-                echo "tag is required for remove-dist-tag" >&2
+                echo "tag is required for $ACTION" >&2
                 exit 1
               fi
-              # `latest` is what a bare `npm install` resolves to; removing it would
-              # break installs for everyone.
+              # `latest` is what a bare `npm install` resolves to. Removing it breaks
+              # installs for everyone, and moving it is a release decision that belongs
+              # to the release workflow, not to ad-hoc maintenance.
               if [ "$TAG" = "latest" ]; then
-                echo "refusing to remove the 'latest' dist-tag" >&2
+                echo "refusing to $ACTION the 'latest' dist-tag" >&2
                 exit 1
               fi
               ;;
@@ -109,6 +114,13 @@ jobs:
                 else
                   echo "skip    $pkg (no $TAG tag)"
                 fi
+                ;;
+              set-dist-tag)
+                # Repointing is the fallback when the token may publish but not delete
+                # a dist-tag: moving `next` onto the current stable stops anyone
+                # installing @next from landing on a retired prerelease.
+                echo "pointing $TAG at $pkg@$VERSION"
+                npm dist-tag add "$pkg@$VERSION" "$TAG"
                 ;;
               deprecate)
                 echo "deprecating $pkg@$VERSION"
