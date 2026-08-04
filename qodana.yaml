@@ -50,7 +50,18 @@ exclude:
   # both carry dialect-only fields (file, line, assertions, class) that
   # junitxml.TestCase has no place for. Folding them together would read the message
   # from the wrong place — a behaviour change dressed up as deduplication.
-  - name: GoDuplicate
+  # Save() is exported and can be handed a Store built directly rather than via Load(),
+  # in which case these are the checks that stop it writing a file with no schema
+  # version or a nil map. Every Store in this codebase comes from Load(), which is why
+  # the analyser can prove them false — that proof does not survive the next caller.
+  - name: GoBoolExpressions
+    paths:
+      - internal/auth/store.go
+      # The two arms genuinely differ: cucumber resolves scenario status by precedence
+      # (failed > pending/skipped > passed), so both branches are reachable.
+      - internal/adapters/parsers/bdd/cucumber
+
+  - name: DuplicatedCode
     paths:
       - internal/adapters/parsers/unit/pytest
       - internal/adapters/parsers/unit/phpunit

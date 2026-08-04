@@ -98,8 +98,8 @@ func TestFrameworkGetCategory(t *testing.T) {
 		{FrameworkK6, CategoryAPI},
 		{FrameworkZAP, CategorySecurity},
 		{FrameworkSonarQube, CategorySecurity},
-		{Framework("nope"), CategoryUnitTest},
-		{Framework(""), CategoryUnitTest},
+		{"nope", CategoryUnitTest},
+		{"", CategoryUnitTest},
 	}
 	for _, tt := range tests {
 		if got := tt.in.GetCategory(); got != tt.want {
