@@ -14,11 +14,11 @@ type Parser struct{}
 
 // Python pytest-xml structures
 type TestSuite struct {
-	XMLName    xml.Name   `xml:"testsuite"`
-	Name       string     `xml:"name,attr"`
-	Tests      int        `xml:"tests,attr"`
-	Failures   int        `xml:"failures,attr"`
-	Errors     int        `xml:"errors,attr"`
+	XMLName  xml.Name `xml:"testsuite"`
+	Name     string   `xml:"name,attr"`
+	Tests    int      `xml:"tests,attr"`
+	Failures int      `xml:"failures,attr"`
+	Errors   int      `xml:"errors,attr"`
 	// BUG-38: pytest emits the header attribute `skipped`, not `skips`. Reading
 	// the nonexistent `skips` left this 0 and inflated the passed count. Counters
 	// are now derived from the cases (RecomputeCounts) instead of this header,
@@ -144,20 +144,21 @@ func (p *Parser) convertTestCase(tc TestCase) domain.Case {
 
 	// Determine status
 	var errMsg, stackTrace, errType string
-	if tc.Failure != nil {
+	switch {
+	case tc.Failure != nil:
 		testCase.Status = domain.StatusFailed
 		errMsg = tc.Failure.Message
 		stackTrace = tc.Failure.Text
 		errType = tc.Failure.Type
-	} else if tc.Error != nil {
+	case tc.Error != nil:
 		testCase.Status = domain.StatusError
 		errMsg = tc.Error.Message
 		stackTrace = tc.Error.Text
 		errType = tc.Error.Type
-	} else if tc.Skipped != nil {
+	case tc.Skipped != nil:
 		testCase.Status = domain.StatusSkipped
 		errMsg = tc.Skipped.Message
-	} else {
+	default:
 		testCase.Status = domain.StatusPassed
 	}
 

@@ -47,13 +47,13 @@ func (c *stubConfig) IsDebug() bool             { return c.debug }
 func (c *stubConfig) IsNoCaptureOutput() bool   { return false }
 func (c *stubConfig) Validate() error           { return nil }
 
-func newTestClient(t *testing.T, h http.HandlerFunc) (*Client, *httptest.Server) {
+func newTestClient(t *testing.T, h http.HandlerFunc) *Client {
 	t.Helper()
 	srv := httptest.NewServer(h)
 	t.Cleanup(srv.Close)
 	c := NewHTTPClient(&stubConfig{endpoint: srv.URL, apiKey: "qf_secret"})
 	t.Cleanup(c.Close)
-	return c, srv
+	return c
 }
 
 // TestNewHTTPClient_TrimsEndpointSlash: the endpoint is concatenated with a leading-slash
@@ -80,7 +80,7 @@ func TestNewHTTPClient_AppliesOptions(t *testing.T) {
 // double-create a launch.
 func TestSendReport_Success(t *testing.T) {
 	var gotToken, gotKey, gotPath string
-	c, _ := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
+	c := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
 		gotToken = r.Header.Get("QF_TOKEN")
 		gotKey = r.Header.Get("Idempotency-Key")
 		gotPath = r.URL.Path
@@ -102,7 +102,7 @@ func TestSendReport_Success(t *testing.T) {
 }
 
 func TestSendReport_APIError(t *testing.T) {
-	c, _ := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
+	c := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusUnauthorized)
 		_, _ = w.Write([]byte(`{"code":"auth.invalid_token","message":"token expired","request_id":"req-7"}`))
 	})
@@ -156,7 +156,7 @@ func TestSendReport_DoesNotFollowRedirects(t *testing.T) {
 	}))
 	defer elsewhere.Close()
 
-	c, _ := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
+	c := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, elsewhere.URL+"/steal", http.StatusTemporaryRedirect)
 	})
 
@@ -196,7 +196,7 @@ func TestSendReport_RetriesTransientStatus(t *testing.T) {
 
 func TestGet_SuccessWithParams(t *testing.T) {
 	var gotQuery url.Values
-	c, _ := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
+	c := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
 		gotQuery = r.URL.Query()
 		_, _ = w.Write([]byte(`{"items":[1,2]}`))
 	})
@@ -220,7 +220,7 @@ func TestGet_SuccessWithParams(t *testing.T) {
 }
 
 func TestGet_APIErrorWithoutJSONBody(t *testing.T) {
-	c, _ := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
+	c := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
 		_, _ = w.Write([]byte("<html>gateway exploded</html>"))
 	})
@@ -243,7 +243,7 @@ func TestGet_APIErrorWithoutJSONBody(t *testing.T) {
 }
 
 func TestGet_ContextCancelled(t *testing.T) {
-	c, _ := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
+	c := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	})
 	ctx, cancel := context.WithCancel(context.Background())

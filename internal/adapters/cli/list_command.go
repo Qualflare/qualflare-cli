@@ -38,7 +38,7 @@ func (c *CLI) newListCommand(spec listSpec) *cobra.Command {
 	listCmd := &cobra.Command{
 		Use:   "list",
 		Short: spec.short,
-		RunE: func(cmd *cobra.Command, args []string) error {
+		RunE: func(cmd *cobra.Command, _ []string) error {
 			params := url.Values{}
 			if spec.paginated {
 				addPagination(params, page)

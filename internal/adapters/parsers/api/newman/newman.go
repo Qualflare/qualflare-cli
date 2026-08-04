@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"strconv"
 	"time"
 
 	"qualflare-cli/internal/adapters/parsers/base"
@@ -202,7 +203,7 @@ func (p *Parser) convertExecution(exec Execution, failureMap map[string][]Failur
 	// Add properties
 	testCase.Properties = map[string]string{
 		"method":       exec.Request.Method,
-		"responseCode": fmt.Sprintf("%d", exec.Response.Code),
+		"responseCode": strconv.Itoa(exec.Response.Code),
 		"responseTime": fmt.Sprintf("%dms", exec.Response.ResponseTime),
 	}
 

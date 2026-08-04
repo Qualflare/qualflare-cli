@@ -2,8 +2,10 @@ package snyk
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
+	"strconv"
 	"time"
 
 	"qualflare-cli/internal/adapters/parsers/base"
@@ -119,7 +121,7 @@ func (p *Parser) Parse(reader io.Reader) (*domain.Suite, error) {
 	// vulnerabilities but still names the project. Missing both means we decoded
 	// the wrong schema — fail loudly instead of emitting an empty passing suite.
 	if len(report.Vulnerabilities) == 0 && report.ProjectName == "" {
-		return nil, fmt.Errorf("snyk: unrecognized report schema (no vulnerabilities and no projectName)")
+		return nil, errors.New("snyk: unrecognized report schema (no vulnerabilities and no projectName)")
 	}
 
 	suite := &domain.Suite{
@@ -144,8 +146,8 @@ func (p *Parser) Parse(reader io.Reader) (*domain.Suite, error) {
 	suite.Properties = map[string]string{
 		"projectName":     report.ProjectName,
 		"packageManager":  report.PackageManager,
-		"dependencyCount": fmt.Sprintf("%d", report.DependencyCount),
-		"uniqueCount":     fmt.Sprintf("%d", report.UniqueCount),
+		"dependencyCount": strconv.Itoa(report.DependencyCount),
+		"uniqueCount":     strconv.Itoa(report.UniqueCount),
 		"summary":         report.Summary,
 	}
 
@@ -202,8 +204,8 @@ func (p *Parser) convertVulnerability(vuln Vulnerability) domain.Case {
 		"version":        vuln.Version,
 		"severity":       vuln.Severity,
 		"cvssScore":      fmt.Sprintf("%.1f", vuln.CVSSScore),
-		"isPatchable":    fmt.Sprintf("%t", vuln.IsPatchable),
-		"isUpgradable":   fmt.Sprintf("%t", vuln.IsUpgradable),
+		"isPatchable":    strconv.FormatBool(vuln.IsPatchable),
+		"isUpgradable":   strconv.FormatBool(vuln.IsUpgradable),
 		"language":       vuln.Language,
 		"packageManager": vuln.PackageManager,
 	}

@@ -8,7 +8,8 @@ import (
 	"qualflare-cli/internal/core/domain"
 )
 
-func exec(id string, assertions ...Assertion) Execution {
+func exec(assertions ...Assertion) Execution {
+	const id = "a"
 	return Execution{
 		Item:       Item{ID: id, Name: "GET /" + id},
 		Request:    Request{Method: "GET"},
@@ -29,12 +30,12 @@ func TestConvertExecution_SkippedAssertions(t *testing.T) {
 	}{
 		{
 			"all assertions skipped is not a pass",
-			exec("a", Assertion{Assertion: "status is 200", Skipped: true}),
+			exec(Assertion{Assertion: "status is 200", Skipped: true}),
 			domain.StatusSkipped,
 		},
 		{
 			"every one of several skipped",
-			exec("a",
+			exec(
 				Assertion{Assertion: "one", Skipped: true},
 				Assertion{Assertion: "two", Skipped: true},
 			),
@@ -42,12 +43,12 @@ func TestConvertExecution_SkippedAssertions(t *testing.T) {
 		},
 		{
 			"no assertions at all still passes",
-			exec("a"),
+			exec(),
 			domain.StatusPassed,
 		},
 		{
 			"one ran and passed, one skipped",
-			exec("a",
+			exec(
 				Assertion{Assertion: "ran"},
 				Assertion{Assertion: "skipped", Skipped: true},
 			),
@@ -55,7 +56,7 @@ func TestConvertExecution_SkippedAssertions(t *testing.T) {
 		},
 		{
 			"a skipped assertion does not mask a real failure",
-			exec("a",
+			exec(
 				Assertion{Assertion: "skipped", Skipped: true},
 				Assertion{Assertion: "failed", Error: &Error{Message: "expected 200"}},
 			),
@@ -73,7 +74,7 @@ func TestConvertExecution_SkippedAssertions(t *testing.T) {
 
 func TestConvertExecution_AssertionErrors(t *testing.T) {
 	p := &Parser{}
-	got := p.convertExecution(exec("a",
+	got := p.convertExecution(exec(
 		Assertion{Assertion: "first", Error: &Error{Message: "first failed"}},
 		Assertion{Assertion: "second", Error: &Error{Message: "second failed"}},
 	), nil)
@@ -96,7 +97,7 @@ func TestConvertExecution_FailureMap(t *testing.T) {
 		failures := map[string][]Failure{
 			"a": {{Error: Error{Message: "run-level failure", Stack: "at assertion (line 3)"}}},
 		}
-		got := p.convertExecution(exec("a", Assertion{Assertion: "looked fine"}), failures)
+		got := p.convertExecution(exec(Assertion{Assertion: "looked fine"}), failures)
 
 		if got.Status != domain.StatusFailed {
 			t.Errorf("Status = %q, want failed", got.Status)
@@ -115,7 +116,7 @@ func TestConvertExecution_FailureMap(t *testing.T) {
 				{Error: Error{Message: "two", Stack: "second stack"}},
 			},
 		}
-		got := p.convertExecution(exec("a"), failures)
+		got := p.convertExecution(exec(), failures)
 		if !strings.Contains(got.Error, "first stack") || strings.Contains(got.Error, "second stack") {
 			t.Errorf("Error = %q, want only the first stack retained", got.Error)
 		}
@@ -123,7 +124,7 @@ func TestConvertExecution_FailureMap(t *testing.T) {
 
 	t.Run("a failure for another item is ignored", func(t *testing.T) {
 		failures := map[string][]Failure{"other": {{Error: Error{Message: "not ours"}}}}
-		got := p.convertExecution(exec("a", Assertion{Assertion: "fine"}), failures)
+		got := p.convertExecution(exec(Assertion{Assertion: "fine"}), failures)
 		if got.Status != domain.StatusPassed {
 			t.Errorf("Status = %q, want passed — the failure belongs to another item", got.Status)
 		}
@@ -133,7 +134,7 @@ func TestConvertExecution_FailureMap(t *testing.T) {
 		// The key being present is what marks the request as failed, so an empty
 		// slice must not silently pass.
 		failures := map[string][]Failure{"a": {}}
-		got := p.convertExecution(exec("a"), failures)
+		got := p.convertExecution(exec(), failures)
 		if got.Status != domain.StatusFailed {
 			t.Errorf("Status = %q, want failed when the item is keyed in the failure map", got.Status)
 		}

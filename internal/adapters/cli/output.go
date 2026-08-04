@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/url"
 	"os"
@@ -23,7 +24,7 @@ func (c *CLI) fetchAndPrint(path string, params url.Values) error {
 	defer cancel()
 
 	if c.config.GetAPIKey() == "" {
-		return fmt.Errorf("no token loaded; run 'qf login <identifier> <token>' first")
+		return errors.New("no token loaded; run 'qf login <identifier> <token>' first")
 	}
 
 	data, err := c.apiClient.Get(ctx, path, params)

@@ -1,0 +1,71 @@
+version: "2"
+
+# Beyond golangci-lint's five defaults (errcheck, govet, ineffassign, staticcheck,
+# unused), this enables the linters that catch problems this codebase can actually have:
+# it parses untrusted third-party report files, shells out, and talks to an HTTP API.
+#
+# Anything disabled below has a reason recorded next to it. A linter that is off for no
+# stated reason is just a linter nobody got round to fixing.
+
+linters:
+  default: standard
+  enable:
+    - bodyclose   # leaked HTTP response bodies — we have a resty client
+    - noctx       # HTTP requests built without a context
+    - errorlint   # == on errors breaks once anything wraps them, and we wrap a lot
+    - gosec       # this CLI reads user-supplied files and launches subprocesses
+    - gocritic
+    - misspell
+    - nilerr      # returning nil after checking a non-nil error
+    - perfsprint  # fmt.Sprintf where strconv is both faster and clearer
+    - prealloc
+    - revive
+    - unconvert
+    - unparam
+
+  settings:
+    revive:
+      rules:
+        # `exported` wants a doc comment on every exported identifier. Every package
+        # here lives under internal/, so none of it is importable outside this module —
+        # the module path is `qualflare-cli`, which is not even a fetchable URL. The
+        # rule would add ~40 comments that no external consumer can ever read.
+        - name: exported
+          disabled: true
+        - name: unused-parameter
+        - name: package-comments
+
+    gosec:
+      excludes:
+        # G304 (file inclusion via variable) is the CLI's entire purpose: `qf collect
+        # results.xml` opens the path the user names. There is nothing to harden — the
+        # size cap in parseFile is the real control, and it is tested.
+        - G304
+        # G204 (subprocess with a variable) covers the one `git` call, which resolves
+        # through exec.LookPath by design so a CLI honours the user's PATH. Hardcoding
+        # /usr/bin/git would break Homebrew, asdf, nix, and Windows.
+        - G204
+
+  exclusions:
+    generated: lax
+    presets:
+      - comments
+      - common-false-positives
+      - legacy
+      - std-error-handling
+    rules:
+      # Test fixtures write to t.TempDir(), so file-mode rules describe a directory the
+      # test framework deletes on exit, not anything shipped.
+      - path: _test\.go
+        linters:
+          - gosec
+      # Table-driven tests routinely take a parameter only some cases use.
+      - path: _test\.go
+        text: 'unused-parameter'
+        linters:
+          - revive
+
+formatters:
+  enable:
+    - gofmt
+    - goimports

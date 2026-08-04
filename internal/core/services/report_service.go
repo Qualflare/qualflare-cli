@@ -3,6 +3,7 @@ package services
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -50,7 +51,7 @@ func (s *ReportService) ProcessTestResults(ctx context.Context, files []string, 
 // ParseTestResults parses files and returns the parsed report without sending
 func (s *ReportService) ParseTestResults(ctx context.Context, files []string, framework domain.Framework) (*domain.Launch, error) {
 	if len(files) == 0 {
-		return nil, fmt.Errorf("no files provided")
+		return nil, errors.New("no files provided")
 	}
 
 	// Dedupe by resolved absolute path: the same file passed twice (directly or

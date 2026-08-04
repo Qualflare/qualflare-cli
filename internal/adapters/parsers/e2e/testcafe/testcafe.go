@@ -130,15 +130,15 @@ func (p *Parser) convertTest(test Test, fixture Fixture) domain.Case {
 	}
 
 	// Determine status
-	if test.Skipped {
+	switch {
+	case test.Skipped:
 		testCase.Status = domain.StatusSkipped
-	} else if len(test.Errs) > 0 {
+	case len(test.Errs) > 0:
 		testCase.Status = domain.StatusFailed
-		// Collect error messages
-		if len(test.Errs) > 0 {
-			testCase.Error = domain.FormatError(test.Errs[0].ErrMsg, test.Errs[0].Stack, test.Errs[0].Code)
-		}
-	} else {
+		// The first error is the one that failed the test; later entries are follow-on
+		// noise from the same assertion.
+		testCase.Error = domain.FormatError(test.Errs[0].ErrMsg, test.Errs[0].Stack, test.Errs[0].Code)
+	default:
 		testCase.Status = domain.StatusPassed
 	}
 

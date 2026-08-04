@@ -102,7 +102,7 @@ func TestParserFactory_DetectFramework_WeakTokenLegitimate(t *testing.T) {
 	}{
 		{"go-test-results.json", domain.FrameworkGolang},
 		{"app_go_test.json", domain.FrameworkGolang}, // underscore-delimited 'go' token
-		{"results.out", domain.FrameworkGolang},       // explicit .out extension
+		{"results.out", domain.FrameworkGolang},      // explicit .out extension
 		{"python-results.json", domain.FrameworkPython},
 		{"smoke.feature", domain.FrameworkCucumber},
 	}

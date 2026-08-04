@@ -221,13 +221,17 @@ func (p *Parser) convertTest(test Test, file string) domain.Case {
 		// and would flip a whole suite pending for one skipped test.
 		testCase.Status = domain.StatusSkipped
 	default:
-		if test.Skipped {
+		// No explicit state, so fall back to the boolean flags. Anything that matches
+		// none of them is skipped rather than passed — an unrecognised shape must not
+		// read as a green test.
+		switch {
+		case test.Skipped:
 			testCase.Status = domain.StatusSkipped
-		} else if test.Pass {
+		case test.Pass:
 			testCase.Status = domain.StatusPassed
-		} else if test.Fail {
+		case test.Fail:
 			testCase.Status = domain.StatusFailed
-		} else {
+		default:
 			testCase.Status = domain.StatusSkipped
 		}
 	}

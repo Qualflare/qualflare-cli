@@ -133,7 +133,7 @@ func (s *Store) List() []string {
 // (0700) if missing and writes the file with 0600 perms.
 func (s *Store) Save() error {
 	if s.path == "" {
-		return fmt.Errorf("store has no path")
+		return errors.New("store has no path")
 	}
 	dir := filepath.Dir(s.path)
 	if err := os.MkdirAll(dir, dirMode); err != nil {

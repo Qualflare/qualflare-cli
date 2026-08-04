@@ -11,7 +11,7 @@ func (c *CLI) createProjectsCommand() *cobra.Command {
 		Use:   "projects",
 		Short: "List locally saved project identifiers",
 		Args:  cobra.NoArgs,
-		RunE: func(cmd *cobra.Command, args []string) error {
+		RunE: func(_ *cobra.Command, _ []string) error {
 			ids := c.store.List()
 			if len(ids) == 0 {
 				fmt.Println("No projects configured. Run 'qf login <identifier> <token>' to get started.")

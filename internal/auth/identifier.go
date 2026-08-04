@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"errors"
 	"fmt"
 	"regexp"
 )
@@ -28,7 +29,7 @@ var identifierPattern = regexp.MustCompile(`^[a-z0-9][a-z0-9_-]{0,62}$`)
 // Validate reports whether id is acceptable as a saved project identifier.
 func Validate(id string) error {
 	if id == "" {
-		return fmt.Errorf("identifier cannot be empty")
+		return errors.New("identifier cannot be empty")
 	}
 	if _, ok := reservedNames[id]; ok {
 		return fmt.Errorf("identifier %q is reserved", id)
