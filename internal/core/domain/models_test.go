@@ -255,6 +255,52 @@ func TestFormatError(t *testing.T) {
 	}
 }
 
+// SeverityFromString is the single mapping behind every security parser, so its
+// fail-closed behaviour (CLI-H7) is asserted here rather than only through the parsers.
+func TestSeverityFromString(t *testing.T) {
+	tests := []struct {
+		in   string
+		want Severity
+	}{
+		// Trivy emits upper-case, Snyk lower-case; both must land the same way.
+		{"CRITICAL", SeverityCritical},
+		{"critical", SeverityCritical},
+		{"High", SeverityHigh},
+		{"MEDIUM", SeverityMedium},
+		{"low", SeverityLow},
+		{"  high  ", SeverityHigh},
+		// Anything unrankable becomes unknown rather than guessing a severity.
+		{"UNKNOWN", SeverityUnknown},
+		{"", SeverityUnknown},
+		{"catastrophic", SeverityUnknown},
+		// "info" is deliberately not mapped: neither parser handled it before, so
+		// folding it in here would silently start emitting a "low" priority.
+		{"info", SeverityUnknown},
+	}
+	for _, tt := range tests {
+		if got := SeverityFromString(tt.in); got != tt.want {
+			t.Errorf("SeverityFromString(%q) = %q, want %q", tt.in, got, tt.want)
+		}
+	}
+}
+
+// The composition the vulnerability parsers rely on: an unrankable severity must yield
+// an empty priority, because the API rejects anything outside its enum.
+func TestSeverityFromString_ToCasePriority(t *testing.T) {
+	for _, in := range []string{"UNKNOWN", "", "nonsense", "info"} {
+		if got := SeverityFromString(in).ToCasePriority(); got != "" {
+			t.Errorf("SeverityFromString(%q).ToCasePriority() = %q, want empty", in, got)
+		}
+	}
+	for _, tc := range []struct{ in, want string }{
+		{"CRITICAL", "critical"}, {"high", "high"}, {"Medium", "medium"}, {"LOW", "low"},
+	} {
+		if got := SeverityFromString(tc.in).ToCasePriority(); string(got) != tc.want {
+			t.Errorf("SeverityFromString(%q).ToCasePriority() = %q, want %q", tc.in, got, tc.want)
+		}
+	}
+}
+
 func TestPtrHelpers(t *testing.T) {
 	if got := IntPtr(0); got == nil || *got != 0 {
 		t.Errorf("IntPtr(0) = %v, want pointer to 0", got)

@@ -162,27 +162,11 @@ func (p *Parser) convertVulnerability(vuln Vulnerability) domain.Case {
 		ClassName: vuln.PackageName,
 	}
 
-	// Map severity to status and domain.Severity
-	switch vuln.Severity {
-	case "critical":
-		testCase.Status = domain.StatusFailed
-		testCase.Priority = domain.SeverityCritical
-	case "high":
-		testCase.Status = domain.StatusFailed
-		testCase.Priority = domain.SeverityHigh
-	case "medium":
-		testCase.Status = domain.StatusFailed
-		testCase.Priority = domain.SeverityMedium
-	case "low":
-		testCase.Status = domain.StatusFailed
-		testCase.Priority = domain.SeverityLow
-	default:
-		// CLI-H7: an unmapped severity is a finding we can't rank — fail closed
-		// (visible) rather than passing it, and omit the priority since it isn't
-		// one of the API's valid values.
-		testCase.Status = domain.StatusFailed
-		testCase.Priority = ""
-	}
+	// CLI-H7: a security finding is never a pass, whatever its severity — including
+	// one we cannot rank. An unmappable severity yields no priority rather than an
+	// invalid one, since the API rejects anything outside its enum.
+	testCase.Status = domain.StatusFailed
+	testCase.Priority = domain.SeverityFromString(vuln.Severity).ToCasePriority()
 
 	testCase.Error = domain.FormatError(vuln.Title, vuln.Description, "")
 

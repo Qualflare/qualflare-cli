@@ -341,6 +341,31 @@ const (
 	SeverityUnknown  Severity = "unknown"
 )
 
+// SeverityFromString maps a scanner's severity label onto a domain Severity,
+// case-insensitively — scanners disagree on casing (Trivy emits "HIGH", Snyk "high").
+// Anything unrecognised becomes SeverityUnknown, which ToCasePriority then coerces to
+// the empty priority the API accepts.
+//
+// "info" is deliberately folded into SeverityUnknown rather than SeverityInfo. Neither
+// scanner's own switch handled "info", so both already produced no priority for it;
+// mapping it through here would silently turn that into "low". Whether an info-severity
+// finding should carry a priority is a product decision, not a side effect of
+// deduplicating three switches.
+func SeverityFromString(s string) Severity {
+	switch Severity(strings.ToLower(strings.TrimSpace(s))) {
+	case SeverityCritical:
+		return SeverityCritical
+	case SeverityHigh:
+		return SeverityHigh
+	case SeverityMedium:
+		return SeverityMedium
+	case SeverityLow:
+		return SeverityLow
+	default:
+		return SeverityUnknown
+	}
+}
+
 // ToCasePriority maps a finding severity onto the API's case `priority` enum
 // (critical/high/medium/low). Security scanners emit "info" and "unknown",
 // which are not valid priorities: "info" becomes the lowest priority and
