@@ -386,23 +386,11 @@ func (c *CLI) runCollect(ctx context.Context, files []string, opts collectOption
 		c.printInfo("Processing %d test result file(s)...", len(files))
 	}
 
-	// For dry run with output, parse and display
+	// --dry-run --output json prints the parsed report instead of uploading it.
 	if opts.dryRun && opts.output == "json" {
-		report, err := c.reportService.ParseTestResults(ctx, files, framework)
-		if err != nil {
-			return fmt.Errorf("failed to parse test results: %w", err)
-		}
-
-		jsonData, err := json.MarshalIndent(report, "", "  ")
-		if err != nil {
-			return fmt.Errorf("failed to marshal report: %w", err)
-		}
-
-		fmt.Println(string(jsonData))
-		return nil
+		return c.printReportJSON(ctx, files, framework)
 	}
 
-	// Process test results
 	if err := c.reportService.ProcessTestResults(ctx, files, framework); err != nil {
 		return fmt.Errorf("failed to process test results: %w", err)
 	}
@@ -415,6 +403,24 @@ func (c *CLI) runCollect(ctx context.Context, files []string, opts collectOption
 		}
 	}
 
+	return nil
+}
+
+// printReportJSON parses the files and writes the report to stdout rather than uploading
+// it. Output goes to stdout specifically so it can be piped, while the diagnostics
+// elsewhere in collect go to stderr (BUG-04).
+func (c *CLI) printReportJSON(ctx context.Context, files []string, framework domain.Framework) error {
+	report, err := c.reportService.ParseTestResults(ctx, files, framework)
+	if err != nil {
+		return fmt.Errorf("failed to parse test results: %w", err)
+	}
+
+	jsonData, err := json.MarshalIndent(report, "", "  ")
+	if err != nil {
+		return fmt.Errorf("failed to marshal report: %w", err)
+	}
+
+	fmt.Println(string(jsonData))
 	return nil
 }
 
