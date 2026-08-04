@@ -235,10 +235,10 @@ func TestAccessorsReflectConfig(t *testing.T) {
 	if c.GetCLIVersion() == "" {
 		t.Error("GetCLIVersion() is empty")
 	}
-	max, base, maxDelay := c.GetRetryConfig()
-	if max != c.RetryMax || base != c.RetryBaseDelay || maxDelay != c.RetryMaxDelay {
+	retryMax, base, maxDelay := c.GetRetryConfig()
+	if retryMax != c.RetryMax || base != c.RetryBaseDelay || maxDelay != c.RetryMaxDelay {
 		t.Errorf("GetRetryConfig() = %v/%v/%v, want %v/%v/%v",
-			max, base, maxDelay, c.RetryMax, c.RetryBaseDelay, c.RetryMaxDelay)
+			retryMax, base, maxDelay, c.RetryMax, c.RetryBaseDelay, c.RetryMaxDelay)
 	}
 }
 

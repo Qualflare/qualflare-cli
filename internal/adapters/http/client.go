@@ -97,9 +97,9 @@ func (c *Client) Close() {
 
 // SendReport sends a report to the API
 func (c *Client) SendReport(ctx context.Context, report *domain.Launch) error {
-	url := c.endpoint + apiBasePath + "/collect"
+	reqURL := c.endpoint + apiBasePath + "/collect"
 	if c.config.IsVerbose() {
-		fmt.Fprintf(os.Stderr, "POST %s\n", url) // diagnostics on stderr (BUG-04)
+		fmt.Fprintf(os.Stderr, "POST %s\n", reqURL) // diagnostics on stderr (BUG-04)
 	}
 	req := c.resty.R().
 		SetContext(ctx).
@@ -110,7 +110,7 @@ func (c *Client) SendReport(ctx context.Context, report *domain.Launch) error {
 	if key := newIdempotencyKey(); key != "" {
 		req.SetHeader("Idempotency-Key", key)
 	}
-	resp, err := req.Post(url)
+	resp, err := req.Post(reqURL)
 	if err != nil {
 		return &APIError{Op: "send", Message: "failed to send request", Err: err}
 	}
@@ -160,7 +160,7 @@ func (c *Client) Get(ctx context.Context, path string, params url.Values) (json.
 	}
 
 	if resp.IsSuccess() {
-		return json.RawMessage(resp.Bytes()), nil
+		return resp.Bytes(), nil
 	}
 
 	return nil, c.buildAPIError("get", resp)

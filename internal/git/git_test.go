@@ -61,7 +61,9 @@ func TestDetect_outsideRepo(t *testing.T) {
 	// Use a temp dir that is not a git repo.
 	dir := t.TempDir()
 	// Write a sentinel file so dir is definitely not inside any parent repo.
-	os.WriteFile(filepath.Join(dir, ".git-no"), nil, 0o644) //nolint:errcheck
+	if err := os.WriteFile(filepath.Join(dir, ".git-no"), nil, 0o600); err != nil {
+		t.Fatal(err) // a silently failed setup write would make this test assert nothing
+	}
 
 	orig, _ := os.Getwd()
 	defer os.Chdir(orig) //nolint:errcheck

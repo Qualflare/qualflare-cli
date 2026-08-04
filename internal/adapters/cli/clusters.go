@@ -1,7 +1,6 @@
 package cli
 
 import (
-	"fmt"
 	"net/url"
 
 	"github.com/spf13/cobra"
@@ -43,14 +42,7 @@ func (c *CLI) createClusterCommand() *cobra.Command {
   qf <id> cluster get 15`,
 	}
 
-	getCmd := &cobra.Command{
-		Use:   "get <id>",
-		Short: "Get a failure cluster by ID",
-		Args:  cobra.ExactArgs(1),
-		RunE: func(_ *cobra.Command, args []string) error {
-			return c.fetchAndPrint(fmt.Sprintf(apiV1+"/cluster/%s", pathArg(args[0])), nil)
-		},
-	}
+	getCmd := c.newDetailCommand("get <id>", "Get a failure cluster by ID", apiV1+"/cluster/%s")
 
 	cmd.AddCommand(getCmd)
 	return cmd

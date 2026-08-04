@@ -345,7 +345,7 @@ func (f *ParserFactory) detectXMLFramework(content []byte) (domain.Framework, er
 	}
 
 	// Check for common root elements
-	if bytes.HasPrefix(content, []byte("<testsuites")) || bytes.HasPrefix(content, []byte("<testsuite")) {
+	if bytes.HasPrefix(content, []byte("<testsuite")) { // also matches <testsuites
 		// Could be JUnit, pytest, or PHPUnit - default to JUnit
 		// Check for pytest-specific attributes
 		if bytes.Contains(content, []byte("pytest")) {

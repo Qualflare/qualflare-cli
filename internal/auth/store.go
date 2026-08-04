@@ -19,10 +19,10 @@ const (
 	schemaVersion  = 1
 )
 
-var (
-	ErrNotFound      = errors.New("identifier not found")
-	ErrAlreadyExists = errors.New("identifier already exists")
-)
+// ErrNotFound is returned by Delete when the identifier is absent. There is no
+// "already exists" counterpart: the login path decides overwrites via Has(id) plus
+// --force rather than a sentinel.
+var ErrNotFound = errors.New("identifier not found")
 
 // Identifier holds the credentials saved for one project alias.
 type Identifier struct {
