@@ -169,27 +169,10 @@ func (p *Parser) convertExecution(exec Execution, failureMap map[string][]Failur
 		Duration: time.Duration(exec.Response.ResponseTime) * time.Millisecond,
 	}
 
-	// Determine status based on assertions.
-	// BUG-06: track whether any NON-skipped assertion actually executed. The old
-	// `anySkipped` flag was only ever set inside this loop, so the later
-	// `anySkipped && len(exec.Assertions) == 0` guard was dead (unreachable) and a
-	// request whose assertions were all skipped fell through to StatusPassed.
-	allPassed := true
-	anyRan := false
-	var errorMsgs []string
+	allPassed, anyRan, errorMsgs := evaluateAssertions(exec.Assertions)
 
-	for _, assertion := range exec.Assertions {
-		if assertion.Skipped {
-			continue
-		}
-		anyRan = true
-		if assertion.Error != nil {
-			allPassed = false
-			errorMsgs = append(errorMsgs, assertion.Error.Message)
-		}
-	}
-
-	// Check for failures in the failure map
+	// The run-level failure map is a second source of failures, keyed by item ID. The
+	// key being present is what marks the request failed, even with no messages.
 	var stackTrace string
 	if failures, ok := failureMap[exec.Item.ID]; ok {
 		allPassed = false
@@ -201,17 +184,18 @@ func (p *Parser) convertExecution(exec Execution, failureMap map[string][]Failur
 		}
 	}
 
-	if !allPassed {
+	switch {
+	case !allPassed:
 		testCase.Status = domain.StatusFailed
 		if len(errorMsgs) > 0 {
 			testCase.Error = domain.FormatError(errorMsgs[0], stackTrace, "")
 		}
-	} else if len(exec.Assertions) > 0 && !anyRan {
+	case len(exec.Assertions) > 0 && !anyRan:
 		// BUG-06: assertions were present but every one was skipped, so the request
 		// was never actually verified — mark it skipped instead of passing it. A
 		// request with genuinely zero assertions still falls through to passed.
 		testCase.Status = domain.StatusSkipped
-	} else {
+	default:
 		testCase.Status = domain.StatusPassed
 	}
 
@@ -223,6 +207,27 @@ func (p *Parser) convertExecution(exec Execution, failureMap map[string][]Failur
 	}
 
 	return testCase
+}
+
+// evaluateAssertions summarises a request's assertions: whether none failed, whether any
+// actually ran, and the messages the failures carried.
+//
+// BUG-06: anyRan tracks NON-skipped assertions specifically. The original flag was only
+// ever set inside this loop, which made the later "all skipped" guard unreachable and let
+// a request whose assertions were every one skipped fall through to passed.
+func evaluateAssertions(assertions []Assertion) (allPassed, anyRan bool, errorMsgs []string) {
+	allPassed = true
+	for _, assertion := range assertions {
+		if assertion.Skipped {
+			continue
+		}
+		anyRan = true
+		if assertion.Error != nil {
+			allPassed = false
+			errorMsgs = append(errorMsgs, assertion.Error.Message)
+		}
+	}
+	return allPassed, anyRan, errorMsgs
 }
 
 // GetFramework returns the framework type
