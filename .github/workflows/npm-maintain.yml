@@ -1,0 +1,124 @@
+name: Maintain npm
+
+# Post-publish housekeeping for the @qualflare/cli package set: retiring a prerelease
+# dist-tag and deprecating (or un-deprecating) a published version.
+#
+# npm versions cannot be unpublished after 72h, so promoting a prerelease leaves the
+# rc behind on the registry and its dist-tag still pointing at it. Both actions here are
+# reversible: `remove-dist-tag` can be re-added with `npm dist-tag add`, and `deprecate`
+# is undone by `undeprecate` (npm clears a deprecation when the message is empty).
+
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: 'What to do'
+        required: true
+        type: choice
+        options:
+          - remove-dist-tag
+          - deprecate
+          - undeprecate
+      version:
+        description: 'Version to (un)deprecate, without a leading v (e.g. 0.1.12-rc.1). Ignored for remove-dist-tag.'
+        required: false
+        type: string
+      tag:
+        description: 'Dist-tag to remove (e.g. next). Ignored unless action is remove-dist-tag.'
+        required: false
+        default: 'next'
+        type: string
+      message:
+        description: 'Deprecation message shown on install. Ignored unless action is deprecate.'
+        required: false
+        default: 'Prerelease; use the latest stable release instead.'
+        type: string
+      include_platform_packages:
+        description: 'Also apply to the six @qualflare/cli-<os>-<arch> packages'
+        required: false
+        default: true
+        type: boolean
+
+permissions:
+  contents: read
+
+jobs:
+  maintain:
+    name: ${{ inputs.action }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Validate inputs
+        env:
+          ACTION: ${{ inputs.action }}
+          VERSION: ${{ inputs.version }}
+          TAG: ${{ inputs.tag }}
+        run: |
+          case "$ACTION" in
+            deprecate|undeprecate)
+              if ! printf '%s' "$VERSION" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$'; then
+                echo "invalid version: '$VERSION' (expected semver like 0.1.12-rc.1)" >&2
+                exit 1
+              fi
+              ;;
+            remove-dist-tag)
+              if [ -z "$TAG" ]; then
+                echo "tag is required for remove-dist-tag" >&2
+                exit 1
+              fi
+              # `latest` is what a bare `npm install` resolves to; removing it would
+              # break installs for everyone.
+              if [ "$TAG" = "latest" ]; then
+                echo "refusing to remove the 'latest' dist-tag" >&2
+                exit 1
+              fi
+              ;;
+          esac
+
+      - name: Set up Node (npm registry)
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '20'
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Apply
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          ACTION: ${{ inputs.action }}
+          VERSION: ${{ inputs.version }}
+          TAG: ${{ inputs.tag }}
+          MESSAGE: ${{ inputs.message }}
+          INCLUDE_PLATFORM: ${{ inputs.include_platform_packages }}
+        run: |
+          set -euo pipefail
+
+          PACKAGES=("@qualflare/cli")
+          if [ "$INCLUDE_PLATFORM" = "true" ]; then
+            for p in darwin-arm64 darwin-x64 linux-arm64 linux-x64 win32-arm64 win32-x64; do
+              PACKAGES+=("@qualflare/cli-$p")
+            done
+          fi
+
+          for pkg in "${PACKAGES[@]}"; do
+            case "$ACTION" in
+              remove-dist-tag)
+                # Tolerate a package that never carried the tag, so one missing entry
+                # does not abort the rest of the set.
+                if npm dist-tag ls "$pkg" | grep -q "^$TAG:"; then
+                  echo "removing $TAG from $pkg"
+                  npm dist-tag rm "$pkg" "$TAG"
+                else
+                  echo "skip    $pkg (no $TAG tag)"
+                fi
+                ;;
+              deprecate)
+                echo "deprecating $pkg@$VERSION"
+                npm deprecate "$pkg@$VERSION" "$MESSAGE"
+                ;;
+              undeprecate)
+                echo "un-deprecating $pkg@$VERSION"
+                npm deprecate "$pkg@$VERSION" ""
+                ;;
+            esac
+          done
+
+          echo "done."
