@@ -1,6 +1,8 @@
 # Qualflare CLI
 
 [![CI](https://github.com/qualflare/qualflare-cli/actions/workflows/ci.yml/badge.svg)](https://github.com/qualflare/qualflare-cli/actions/workflows/ci.yml)
+[![Quality Gate](https://sonarcloud.io/api/project_badges/measure?project=Qualflare_qualflare-cli&metric=alert_status)](https://sonarcloud.io/summary/new_code?id=Qualflare_qualflare-cli)
+[![Coverage](https://sonarcloud.io/api/project_badges/measure?project=Qualflare_qualflare-cli&metric=coverage)](https://sonarcloud.io/component_measures?id=Qualflare_qualflare-cli&metric=coverage)
 [![Release](https://img.shields.io/github/v/release/qualflare/qualflare-cli)](https://github.com/qualflare/qualflare-cli/releases/latest)
 [![npm](https://img.shields.io/npm/v/@qualflare/cli?logo=npm)](https://www.npmjs.com/package/@qualflare/cli)
 [![Docker](https://img.shields.io/docker/v/qualflare/qf?logo=docker&label=docker&sort=semver)](https://hub.docker.com/r/qualflare/qf)
