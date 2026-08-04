@@ -81,17 +81,13 @@ func (s *ReportService) ParseTestResults(ctx context.Context, files []string, fr
 
 		currentParser := parser
 
-		// Auto-detect framework if not specified
+		// Auto-detect the framework when --format was not given.
 		if currentParser == nil {
-			detectedFramework, detErr := s.detectFramework(filePath)
-			if detErr != nil {
-				return nil, fmt.Errorf("failed to detect framework for file %s: %w", filePath, detErr)
+			p, detectedFramework, perr := s.parserForFile(filePath)
+			if perr != nil {
+				return nil, perr
 			}
-
-			currentParser, err = s.parserFactory.GetParser(detectedFramework)
-			if err != nil {
-				return nil, fmt.Errorf("failed to get parser for detected framework %s: %w", detectedFramework, err)
-			}
+			currentParser = p
 			detected[detectedFramework] = struct{}{}
 		}
 
@@ -103,23 +99,43 @@ func (s *ReportService) ParseTestResults(ctx context.Context, files []string, fr
 		testSuites = append(testSuites, *suite)
 	}
 
-	// Resolve the launch-level framework label. An explicit --format wins. Otherwise,
-	// when every auto-detected file agreed, use that framework; when they disagree,
-	// label the launch "mixed" rather than tagging the whole upload with whichever file
-	// happened to be parsed first (BUG-41). The server stores framework as a free
-	// string (required,max=100), so "mixed" is a valid, honest label.
-	switch {
-	case parser != nil:
-		framework = parser.GetFramework()
-	case len(detected) == 1:
-		for f := range detected {
-			framework = f
-		}
-	case len(detected) > 1:
-		framework = domain.Framework("mixed")
-	}
+	framework = resolveLaunchFramework(parser, detected, framework)
 
 	return s.createReport(testSuites, framework), nil
+}
+
+// parserForFile detects a file's framework and returns the parser for it, reporting
+// which framework was detected so the caller can track agreement across files.
+func (s *ReportService) parserForFile(filePath string) (ports.Parser, domain.Framework, error) {
+	detectedFramework, err := s.detectFramework(filePath)
+	if err != nil {
+		return nil, "", fmt.Errorf("failed to detect framework for file %s: %w", filePath, err)
+	}
+
+	parser, err := s.parserFactory.GetParser(detectedFramework)
+	if err != nil {
+		return nil, "", fmt.Errorf("failed to get parser for detected framework %s: %w", detectedFramework, err)
+	}
+	return parser, detectedFramework, nil
+}
+
+// resolveLaunchFramework picks the label for the launch as a whole. An explicit --format
+// wins. Otherwise, when every auto-detected file agreed, that framework is used; when
+// they disagree the launch is labelled "mixed" rather than tagged with whichever file
+// happened to be parsed first (BUG-41). The server stores framework as a free string
+// (required,max=100), so "mixed" is a valid, honest label.
+func resolveLaunchFramework(parser ports.Parser, detected map[domain.Framework]struct{}, current domain.Framework) domain.Framework {
+	switch {
+	case parser != nil:
+		return parser.GetFramework()
+	case len(detected) > 1:
+		return domain.Framework("mixed")
+	case len(detected) == 1:
+		for f := range detected {
+			return f
+		}
+	}
+	return current
 }
 
 // ValidateFiles validates that files can be parsed
