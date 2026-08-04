@@ -17,3 +17,46 @@ exclude:
       - build
       - examples
       - npm/bin
+
+  # Every entry below is a decision with a reason, matching how .golangci.yml is
+  # written. A rule switched off without a stated reason is just one nobody got round
+  # to fixing.
+
+  # Section-header comments sit above package-level types and interface members
+  # ("// Trivy JSON structures" over `type Report struct`), which Go's comment rules
+  # then treat as doc comments. Same argument as the revive `exported` rule already
+  # disabled in .golangci.yml: every package is internal/, and the module path
+  # (qualflare-cli) is not a fetchable URL, so no external consumer can ever read them.
+  - name: GoCommentStart
+
+  # Diagnostics written to stderr with fmt.Fprintf, and deliberate `_ =` on best-effort
+  # Close/Remove calls. golangci-lint's errcheck excludes the fmt family by default for
+  # the same reason: there is no meaningful recovery from a failed write to stderr. The
+  # one instance that did matter — an unchecked setup write in git_test.go — is fixed
+  # rather than excluded.
+  - name: GoUnhandledErrorResult
+
+  # cmd/main_test.go asserts pointer identity: rewriteUnknownCommandError must return
+  # the very same error value it was handed. errors.Is would also accept a wrapped
+  # error, which is precisely the case the test exists to reject. Already carries
+  # //nolint:errorlint with the same reasoning.
+  - name: GoDirectComparisonOfErrors
+    paths:
+      - cmd/main_test.go
+
+  # pytest and phpunit repeat junitxml's outcome switch, but their types are not
+  # interchangeable: phpunit reads the failure message from the element body
+  # (`xml:",chardata"`) where junitxml reads an attribute (`xml:"message,attr"`), and
+  # both carry dialect-only fields (file, line, assertions, class) that
+  # junitxml.TestCase has no place for. Folding them together would read the message
+  # from the wrong place — a behaviour change dressed up as deduplication.
+  - name: GoDuplicate
+    paths:
+      - internal/adapters/parsers/unit/pytest
+      - internal/adapters/parsers/unit/phpunit
+      # xctest, maestro and espresso are three 26-line files that each delegate to
+      # junitxml.Parse. That is the cheapest honest expression of "three frameworks
+      # that emit JUnit XML"; collapsing it trades 60 obvious lines for one clever one.
+      - internal/adapters/parsers/e2e/xctest
+      - internal/adapters/parsers/e2e/maestro
+      - internal/adapters/parsers/e2e/espresso
