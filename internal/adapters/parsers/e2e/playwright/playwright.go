@@ -35,13 +35,13 @@ type Suite struct {
 }
 
 type Spec struct {
-	Title  string `json:"title"`
-	OK     bool   `json:"ok"`
+	Title  string   `json:"title"`
+	OK     bool     `json:"ok"`
 	Tags   []string `json:"tags"`
 	Tests  []Test   `json:"tests"`
-	File   string `json:"file"`
-	Line   int    `json:"line"`
-	Column int    `json:"column"`
+	File   string   `json:"file"`
+	Line   int      `json:"line"`
+	Column int      `json:"column"`
 }
 
 type Test struct {
@@ -163,27 +163,26 @@ func (p *Parser) processSuites(suites []Suite, domainSuite *domain.Suite, prefix
 			currentPrefix = prefix + " > " + s.Title
 		}
 
-		// Process specs in this suite
 		for _, spec := range s.Specs {
-			for _, test := range spec.Tests {
-				testCase := p.convertTest(spec, test, s.File, currentPrefix)
-				domainSuite.Cases = append(domainSuite.Cases, testCase)
-
-				// Collect browser from project name
-				if test.ProjectName != "" {
-					browsers[test.ProjectName] = true
-				}
-
-				// Track retries (each result beyond the first is a retry)
-				if len(test.Results) > 1 {
-					domainSuite.Retries += len(test.Results) - 1
-				}
-			}
+			p.collectSpecCases(spec, s.File, currentPrefix, domainSuite, browsers)
 		}
 
-		// Process nested suites
-		if len(s.Suites) > 0 {
-			p.processSuites(s.Suites, domainSuite, currentPrefix, browsers)
+		// Recursing on an empty slice is a no-op, so no length guard is needed.
+		p.processSuites(s.Suites, domainSuite, currentPrefix, browsers)
+	}
+}
+
+// collectSpecCases appends one case per test in spec, collecting the browser each ran
+// under and accumulating the retry count (every result beyond the first is a retry).
+func (p *Parser) collectSpecCases(spec Spec, file, prefix string, dst *domain.Suite, browsers map[string]bool) {
+	for _, test := range spec.Tests {
+		dst.Cases = append(dst.Cases, p.convertTest(spec, test, file, prefix))
+
+		if test.ProjectName != "" {
+			browsers[test.ProjectName] = true
+		}
+		if len(test.Results) > 1 {
+			dst.Retries += len(test.Results) - 1
 		}
 	}
 }
@@ -202,37 +201,17 @@ func (p *Parser) convertTest(spec Spec, test Test, file string, prefix string) d
 		Tags:      spec.Tags,
 	}
 
-	// Get the last result (after retries)
+	// The last result is authoritative: it is the outcome after any retries.
 	if len(test.Results) > 0 {
 		lastResult := test.Results[len(test.Results)-1]
 		testCase.Duration = time.Duration(lastResult.Duration) * time.Millisecond
 
-		// Calculate retry count and flaky status
+		// A test that eventually passed after at least one retry is flaky.
 		retryCount := len(test.Results) - 1
 		testCase.RetryCount = domain.IntPtr(retryCount)
-		testCase.IsFlaky = domain.BoolPtr(retryCount > 0 &&
-			lastResult.Status == "passed" &&
-			len(test.Results) > 1)
+		testCase.IsFlaky = domain.BoolPtr(retryCount > 0 && lastResult.Status == "passed")
 
-		// Determine status
-		switch lastResult.Status {
-		case "passed":
-			testCase.Status = domain.StatusPassed
-		case "failed", "timedOut":
-			testCase.Status = domain.StatusFailed
-			if lastResult.Error != nil {
-				testCase.Error = domain.FormatError(lastResult.Error.Message, lastResult.Error.Stack, "")
-			}
-		case "skipped":
-			testCase.Status = domain.StatusSkipped
-		case "interrupted":
-			// CLI-H4: emitted on --max-failures / SIGINT — an aborted test, not a
-			// pass. Fail-visible.
-			testCase.Status = domain.StatusError
-		default:
-			// CLI-H4: an unknown Playwright status must never roll up green.
-			testCase.Status = domain.StatusError
-		}
+		testCase.Status, testCase.Error = statusFromResult(lastResult)
 
 		// BUG-09: test.fail() marks a test as an expected failure via
 		// ExpectedStatus. When the observed result matches the expected status the
@@ -243,30 +222,9 @@ func (p *Parser) convertTest(spec Spec, test Test, file string, prefix string) d
 			testCase.Status = domain.StatusPassed
 		}
 
-		// Convert attachments
-		if len(lastResult.Attachments) > 0 {
-			testCase.Attachments = make([]domain.Attachment, 0, len(lastResult.Attachments))
-			for _, att := range lastResult.Attachments {
-				testCase.Attachments = append(testCase.Attachments, domain.Attachment{
-					Name:     att.Name,
-					Path:     att.Path,
-					MimeType: att.ContentType,
-				})
-			}
-		}
+		testCase.Attachments = convertAttachments(lastResult.Attachments)
 	} else {
-		// No results - use test level status
-		switch test.Status {
-		case "expected":
-			testCase.Status = domain.StatusPassed
-		case "unexpected":
-			testCase.Status = domain.StatusFailed
-		case "skipped":
-			testCase.Status = domain.StatusSkipped
-		default:
-			// CLI-H4: an unknown test-level status must never roll up green.
-			testCase.Status = domain.StatusError
-		}
+		testCase.Status = statusFromTestLevel(test.Status)
 	}
 
 	// Add properties
@@ -283,6 +241,59 @@ func (p *Parser) convertTest(spec Spec, test Test, file string, prefix string) d
 	}
 
 	return testCase
+}
+
+// statusFromResult maps a Playwright result status to a domain status, returning the
+// formatted error alongside it. CLI-H4: "interrupted" (emitted on --max-failures or
+// SIGINT) is an aborted test rather than a pass, and any status this build does not
+// recognise must land fail-visible too — neither may ever roll up green.
+func statusFromResult(r Result) (domain.Status, string) {
+	switch r.Status {
+	case "passed":
+		return domain.StatusPassed, ""
+	case "failed", "timedOut":
+		var msg string
+		if r.Error != nil {
+			msg = domain.FormatError(r.Error.Message, r.Error.Stack, "")
+		}
+		return domain.StatusFailed, msg
+	case "skipped":
+		return domain.StatusSkipped, ""
+	default:
+		return domain.StatusError, ""
+	}
+}
+
+// statusFromTestLevel maps the test-level status used when a test produced no results
+// at all. Same CLI-H4 rule: an unrecognised status is an error, not a pass.
+func statusFromTestLevel(status string) domain.Status {
+	switch status {
+	case "expected":
+		return domain.StatusPassed
+	case "unexpected":
+		return domain.StatusFailed
+	case "skipped":
+		return domain.StatusSkipped
+	default:
+		return domain.StatusError
+	}
+}
+
+// convertAttachments maps Playwright's contentType onto the domain's MimeType. Returns
+// nil rather than an empty slice when there are none.
+func convertAttachments(atts []Attachment) []domain.Attachment {
+	if len(atts) == 0 {
+		return nil
+	}
+	out := make([]domain.Attachment, 0, len(atts))
+	for _, att := range atts {
+		out = append(out, domain.Attachment{
+			Name:     att.Name,
+			Path:     att.Path,
+			MimeType: att.ContentType,
+		})
+	}
+	return out
 }
 
 // GetFramework returns the framework type
