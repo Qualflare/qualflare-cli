@@ -68,9 +68,15 @@ func (p *Parser) Parse(reader io.Reader) (*domain.Suite, error) {
 
 	var totalDuration time.Duration
 
+	// The first named report supplies the suite name. Tracked with an explicit flag
+	// rather than comparing against the default string, which would let a report
+	// legitimately named "Karate Test Results" be overwritten by the next one.
+	nameSet := false
+
 	for _, report := range reports {
-		if report.Name != "" && suite.Name == "Karate Test Results" {
+		if report.Name != "" && !nameSet {
 			suite.Name = report.Name
+			nameSet = true
 		}
 
 		totalDuration += time.Duration(report.DurationMillis) * time.Millisecond

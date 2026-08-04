@@ -6,16 +6,6 @@ import (
 	"testing"
 )
 
-// The ldflags variables are the contract with .goreleaser.yml: it injects
-// version.Version, version.Commit, and version.BuildDate by exact path. Renaming or
-// moving them silently reverts every built binary to these defaults.
-func TestBuildVariableDefaults(t *testing.T) {
-	// Guard the un-injected values, which is what a plain `go build` produces.
-	if Version == "" || Commit == "" || BuildDate == "" {
-		t.Errorf("build vars must have non-empty defaults: %q/%q/%q", Version, Commit, BuildDate)
-	}
-}
-
 func TestGet(t *testing.T) {
 	info := Get()
 

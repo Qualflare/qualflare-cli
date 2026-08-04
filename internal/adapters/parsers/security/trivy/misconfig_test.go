@@ -70,8 +70,14 @@ func TestConvertMisconfig_SeverityMapping(t *testing.T) {
 		{"LOW", domain.SeverityLow},
 		{"UNKNOWN", domain.SeverityUnknown},
 		{"", domain.SeverityUnknown},
-		// Trivy emits upper-case; anything else must not silently become critical.
-		{"high", domain.SeverityUnknown},
+		// Matching is case-insensitive, because Trivy emits upper-case and Snyk
+		// lower-case through the same shared mapping. A differently-cased label is
+		// ranked rather than discarded — that can only add information, never promote
+		// a finding to a higher severity than it claimed.
+		{"high", domain.SeverityHigh},
+		{"Medium", domain.SeverityMedium},
+		// Still nothing unrecognised sneaks through as a real severity.
+		{"catastrophic", domain.SeverityUnknown},
 	}
 	for _, tt := range tests {
 		t.Run(tt.in, func(t *testing.T) {

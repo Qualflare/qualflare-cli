@@ -1,7 +1,6 @@
 package cli
 
 import (
-	"fmt"
 	"net/url"
 	"strconv"
 
@@ -56,14 +55,7 @@ func (c *CLI) createLaunchCommand() *cobra.Command {
   qf <id> launch get 10`,
 	}
 
-	getCmd := &cobra.Command{
-		Use:   "get <seq>",
-		Short: "Get a launch by sequence number",
-		Args:  cobra.ExactArgs(1),
-		RunE: func(_ *cobra.Command, args []string) error {
-			return c.fetchAndPrint(fmt.Sprintf(apiV1+"/launch/%s", pathArg(args[0])), nil)
-		},
-	}
+	getCmd := c.newDetailCommand("get <seq>", "Get a launch by sequence number", apiV1+"/launch/%s")
 
 	cmd.AddCommand(getCmd)
 	return cmd

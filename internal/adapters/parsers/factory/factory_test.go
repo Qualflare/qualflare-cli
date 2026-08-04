@@ -24,7 +24,7 @@ func TestParserFactory_GetParser_KnownFramework(t *testing.T) {
 func TestParserFactory_GetParser_UnknownFramework(t *testing.T) {
 	f := NewParserFactory()
 
-	_, err := f.GetParser(domain.Framework("nonexistent"))
+	_, err := f.GetParser("nonexistent")
 	if err == nil {
 		t.Error("expected error for unknown framework")
 	}

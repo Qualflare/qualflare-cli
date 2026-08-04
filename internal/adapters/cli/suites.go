@@ -1,7 +1,6 @@
 package cli
 
 import (
-	"fmt"
 	"net/url"
 
 	"github.com/spf13/cobra"
@@ -48,14 +47,7 @@ func (c *CLI) createSuiteCommand() *cobra.Command {
   qf <id> suite get 42`,
 	}
 
-	getCmd := &cobra.Command{
-		Use:   "get <seq>",
-		Short: "Get a test suite by sequence number",
-		Args:  cobra.ExactArgs(1),
-		RunE: func(_ *cobra.Command, args []string) error {
-			return c.fetchAndPrint(fmt.Sprintf(apiV1+"/suite/%s", pathArg(args[0])), nil)
-		},
-	}
+	getCmd := c.newDetailCommand("get <seq>", "Get a test suite by sequence number", apiV1+"/suite/%s")
 
 	cmd.AddCommand(getCmd)
 	return cmd

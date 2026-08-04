@@ -33,7 +33,7 @@ func TestCreateReport_NoCaptureOutput_StripsStreams(t *testing.T) {
 	cfg.NoCaptureOutput = true
 	s := NewReportService(nil, nil, cfg)
 
-	report := s.createReport(suitesWithCapturedOutput(), domain.Framework("pytest"))
+	report := s.createReport(suitesWithCapturedOutput(), "pytest")
 	props := report.Suites[0].Cases[0].Properties
 
 	if _, ok := props["system-out"]; ok {
@@ -55,7 +55,7 @@ func TestCreateReport_DefaultKeepsCapturedOutput(t *testing.T) {
 	cfg := config.DefaultConfig() // NoCaptureOutput defaults false
 	s := NewReportService(nil, nil, cfg)
 
-	report := s.createReport(suitesWithCapturedOutput(), domain.Framework("pytest"))
+	report := s.createReport(suitesWithCapturedOutput(), "pytest")
 	props := report.Suites[0].Cases[0].Properties
 
 	if props["system-out"] == "" {

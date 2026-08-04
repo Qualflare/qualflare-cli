@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"fmt"
 	"net/url"
 
 	"github.com/spf13/cobra"
@@ -62,4 +63,23 @@ func (c *CLI) newListCommand(spec listSpec) *cobra.Command {
 	}
 
 	return listCmd
+}
+
+// newDetailCommand builds a subcommand that fetches one resource by its user-supplied
+// identifier, e.g. `qf <id> plan get 5` or `qf <id> case steps 123`.
+//
+// pathFmt is a single-verb format string for the endpoint (".../test-plan/%s/cases").
+// The argument is always escaped with pathArg before interpolation — that is the point
+// of this helper. The same block was copy-pasted across seven files, and one copy had
+// lost the escaping, letting `plan get ../../x` alter the request path (SEC-03). Routing
+// every detail command through here makes that class of drift impossible.
+func (c *CLI) newDetailCommand(use, short, pathFmt string) *cobra.Command {
+	return &cobra.Command{
+		Use:   use,
+		Short: short,
+		Args:  cobra.ExactArgs(1),
+		RunE: func(_ *cobra.Command, args []string) error {
+			return c.fetchAndPrint(fmt.Sprintf(pathFmt, pathArg(args[0])), nil)
+		},
+	}
 }

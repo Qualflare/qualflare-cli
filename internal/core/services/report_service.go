@@ -130,7 +130,7 @@ func resolveLaunchFramework(parser ports.Parser, detected map[domain.Framework]s
 	case parser != nil:
 		return parser.GetFramework()
 	case len(detected) > 1:
-		return domain.Framework("mixed")
+		return "mixed"
 	case len(detected) == 1:
 		for f := range detected {
 			return f

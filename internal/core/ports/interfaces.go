@@ -65,7 +65,7 @@ type ConfigProvider interface {
 	GetCommit() string
 
 	// Retry settings
-	GetRetryConfig() (max int, baseDelay, maxDelay time.Duration)
+	GetRetryConfig() (retryMax int, baseDelay, maxDelay time.Duration)
 
 	// Request settings
 	GetTimeout() time.Duration

@@ -299,7 +299,7 @@ func (c *Config) GetCommit() string {
 }
 
 // GetRetryConfig returns retry configuration
-func (c *Config) GetRetryConfig() (max int, baseDelay, maxDelay time.Duration) {
+func (c *Config) GetRetryConfig() (retryMax int, baseDelay, maxDelay time.Duration) {
 	return c.RetryMax, c.RetryBaseDelay, c.RetryMaxDelay
 }
 

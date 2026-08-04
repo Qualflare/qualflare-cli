@@ -160,25 +160,10 @@ func (p *Parser) convertVulnerability(vuln Vulnerability, target string) domain.
 		ClassName: target,
 	}
 
-	// Map severity to status and domain.Severity
-	switch vuln.Severity {
-	case "CRITICAL":
-		testCase.Status = domain.StatusFailed
-		testCase.Priority = domain.SeverityCritical
-	case "HIGH":
-		testCase.Status = domain.StatusFailed
-		testCase.Priority = domain.SeverityHigh
-	case "MEDIUM":
-		testCase.Status = domain.StatusFailed
-		testCase.Priority = domain.SeverityMedium
-	case "LOW":
-		testCase.Status = domain.StatusFailed
-		testCase.Priority = domain.SeverityLow
-	default:
-		// CLI-H7: Trivy legitimately emits "UNKNOWN". A security finding is never a
-		// pass — fail closed. Priority is left empty (no valid severity to map).
-		testCase.Status = domain.StatusFailed
-	}
+	// CLI-H7: a security finding is never a pass. Trivy legitimately emits "UNKNOWN",
+	// which yields no priority rather than an invalid one.
+	testCase.Status = domain.StatusFailed
+	testCase.Priority = domain.SeverityFromString(vuln.Severity).ToCasePriority()
 
 	testCase.Error = domain.FormatError(vuln.Title, vuln.Description, "")
 
@@ -224,18 +209,9 @@ func (p *Parser) convertMisconfig(misconf Misconfig, target string) domain.Case 
 	}
 
 	// Map severity
-	switch misconf.Severity {
-	case "CRITICAL":
-		testCase.Priority = domain.SeverityCritical
-	case "HIGH":
-		testCase.Priority = domain.SeverityHigh
-	case "MEDIUM":
-		testCase.Priority = domain.SeverityMedium
-	case "LOW":
-		testCase.Priority = domain.SeverityLow
-	default:
-		testCase.Priority = domain.SeverityUnknown
-	}
+	// Unlike a vulnerability, a misconfiguration keeps SeverityUnknown rather than
+	// dropping to an empty priority — the status here comes from misconf.Status.
+	testCase.Priority = domain.SeverityFromString(misconf.Severity)
 
 	testCase.Tags = []string{
 		"misconfiguration",
