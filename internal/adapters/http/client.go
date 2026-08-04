@@ -43,10 +43,10 @@ func NewHTTPClient(config ports.ConfigProvider, opts ...ClientOption) *Client {
 		// primary job — a single transient 429/503 fails the upload (CLI-H2).
 		// Safe here because SendReport sends a stable Idempotency-Key that the
 		// server resolves to the existing launch, so a retry cannot double-create.
-		SetAllowNonIdempotentRetry(true).
+		SetRetryAllowNonIdempotent(true).
 		// Do not follow redirects: the auth middleware re-runs on every hop, so
 		// a redirect to a different host would forward QF_TOKEN to that host.
-		SetRedirectPolicy(resty.NoRedirectPolicy()).
+		SetRedirectPolicy(resty.RedirectNoPolicy()).
 		SetHeader("User-Agent", version.UserAgent()).
 		SetHeader("Accept", "application/json").
 		AddRetryConditions(func(resp *resty.Response, err error) bool {
@@ -73,7 +73,7 @@ func NewHTTPClient(config ports.ConfigProvider, opts ...ClientOption) *Client {
 	// runs BEFORE resty formats the output, so redacting the token header here
 	// guarantees the credential never appears in the log (OBS-06).
 	if config.IsDebug() {
-		rc.EnableDebug()
+		rc.SetDebug(true)
 		rc.OnDebugLog(redactDebugLog)
 	}
 
@@ -115,7 +115,7 @@ func (c *Client) SendReport(ctx context.Context, report *domain.Launch) error {
 		return &APIError{Op: "send", Message: "failed to send request", Err: err}
 	}
 
-	if resp.IsSuccess() {
+	if resp.IsStatusSuccess() {
 		return nil
 	}
 
@@ -159,7 +159,7 @@ func (c *Client) Get(ctx context.Context, path string, params url.Values) (json.
 		return nil, &APIError{Op: "get", Message: "failed to send request", Err: err}
 	}
 
-	if resp.IsSuccess() {
+	if resp.IsStatusSuccess() {
 		return resp.Bytes(), nil
 	}
 
