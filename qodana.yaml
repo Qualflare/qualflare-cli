@@ -1,0 +1,19 @@
+version: "1.0"
+
+# Go linter, pinned to the same release train as the qodana-action in
+# .github/workflows/qodana.yml — mixing versions across the two is the usual cause of a
+# scan that silently analyses nothing.
+linter: jetbrains/qodana-go:2026.2
+
+profile:
+  name: qodana.recommended
+
+exclude:
+  # Generated or vendored output, plus the local build/release directories. Nothing here
+  # is source we can act on, and scanning it only produces findings nobody will fix.
+  - name: All
+    paths:
+      - dist
+      - build
+      - examples
+      - npm/bin
