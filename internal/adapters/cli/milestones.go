@@ -1,7 +1,6 @@
 package cli
 
 import (
-	"fmt"
 	"net/url"
 
 	"github.com/spf13/cobra"
@@ -45,14 +44,7 @@ func (c *CLI) createMilestoneCommand() *cobra.Command {
   qf <id> milestone get 3`,
 	}
 
-	getCmd := &cobra.Command{
-		Use:   "get <seq>",
-		Short: "Get a milestone by sequence number",
-		Args:  cobra.ExactArgs(1),
-		RunE: func(_ *cobra.Command, args []string) error {
-			return c.fetchAndPrint(fmt.Sprintf(apiV1+"/milestone/%s", pathArg(args[0])), nil)
-		},
-	}
+	getCmd := c.newDetailCommand("get <seq>", "Get a milestone by sequence number", apiV1+"/milestone/%s")
 
 	cmd.AddCommand(getCmd)
 	return cmd

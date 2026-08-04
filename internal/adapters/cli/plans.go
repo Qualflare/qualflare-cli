@@ -1,7 +1,6 @@
 package cli
 
 import (
-	"fmt"
 	"net/url"
 
 	"github.com/spf13/cobra"
@@ -48,23 +47,9 @@ func (c *CLI) createPlanCommand() *cobra.Command {
   qf <id> plan cases 5`,
 	}
 
-	getCmd := &cobra.Command{
-		Use:   "get <seq>",
-		Short: "Get a test plan by sequence number",
-		Args:  cobra.ExactArgs(1),
-		RunE: func(_ *cobra.Command, args []string) error {
-			return c.fetchAndPrint(fmt.Sprintf(apiV1+"/test-plan/%s", pathArg(args[0])), nil)
-		},
-	}
+	getCmd := c.newDetailCommand("get <seq>", "Get a test plan by sequence number", apiV1+"/test-plan/%s")
 
-	casesCmd := &cobra.Command{
-		Use:   "cases <seq>",
-		Short: "Get cases in a test plan",
-		Args:  cobra.ExactArgs(1),
-		RunE: func(_ *cobra.Command, args []string) error {
-			return c.fetchAndPrint(fmt.Sprintf(apiV1+"/test-plan/%s/cases", pathArg(args[0])), nil)
-		},
-	}
+	casesCmd := c.newDetailCommand("cases <seq>", "Get cases in a test plan", apiV1+"/test-plan/%s/cases")
 
 	cmd.AddCommand(getCmd)
 	cmd.AddCommand(casesCmd)
