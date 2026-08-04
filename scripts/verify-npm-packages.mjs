@@ -36,6 +36,28 @@ const root = path.resolve(import.meta.dirname, '..');
 const outRoot = path.join(root, dist, 'npm');
 const mainDir = path.join(outRoot, '@qualflare/cli');
 
+// Resolve npm to an absolute path once, rather than letting execFileSync re-search
+// $PATH at every call site. Node has no exec.LookPath equivalent, so walk PATH here and
+// fail loudly if it isn't found — a build script must still use the developer's npm.
+function resolveBin(name) {
+  const exts = process.platform === 'win32' ? (process.env.PATHEXT || '.EXE;.CMD;.BAT').split(';') : [''];
+  for (const dir of (process.env.PATH || '').split(path.delimiter)) {
+    if (!dir) continue;
+    for (const ext of exts) {
+      const candidate = path.join(dir, name + ext);
+      try {
+        fs.accessSync(candidate, fs.constants.X_OK);
+        return candidate;
+      } catch {
+        // keep looking
+      }
+    }
+  }
+  throw new Error(`could not find "${name}" on PATH`);
+}
+
+const NPM = resolveBin('npm');
+
 let failures = 0;
 const check = (ok, label, detail) => {
   console.log(`${ok ? 'ok  ' : 'FAIL'}  ${label}`);
@@ -68,7 +90,7 @@ check(main.bin?.qf === 'bin/qf', 'main package bin is bin/qf (extensionless)', `
 
 // `npm pack --dry-run --json` reports exactly what would be published.
 const packed = JSON.parse(
-  execFileSync('npm', ['pack', mainDir, '--dry-run', '--json'], { encoding: 'utf8', cwd: root }),
+  execFileSync(NPM, ['pack', mainDir, '--dry-run', '--json'], { encoding: 'utf8', cwd: root }),
 );
 const files = packed[0].files.map((f) => f.path);
 const jsFiles = files.filter((f) => /\.(js|cjs|mjs)$/.test(f));
@@ -119,7 +141,7 @@ if (!fs.existsSync(nativeDir)) {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'qf-npm-verify-'));
   try {
     fs.writeFileSync(path.join(tmp, 'package.json'), '{"name":"verify","private":true}\n');
-    const npm = (a) => execFileSync('npm', a, { cwd: tmp, encoding: 'utf8', stdio: 'pipe' });
+    const npm = (a) => execFileSync(NPM, a, { cwd: tmp, encoding: 'utf8', stdio: 'pipe' });
 
     const tgz = (dir) => {
       const out = JSON.parse(npm(['pack', dir, '--json', '--pack-destination', tmp]));

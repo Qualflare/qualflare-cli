@@ -18,7 +18,7 @@ DRY_RUN="${2:-}"
 DIST="${DIST:-dist}"
 OUT="$DIST/npm"
 
-if [ ! -d "$OUT" ]; then
+if [[ ! -d "$OUT" ]]; then
   echo "error: $OUT not found — run scripts/build-npm-packages.mjs $VERSION first" >&2
   exit 1
 fi

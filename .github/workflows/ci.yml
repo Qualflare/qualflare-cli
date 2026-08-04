@@ -10,10 +10,18 @@ jobs:
   test:
     name: Test
     runs-on: ubuntu-latest
+    env:
+      # Mirrors the HAS_NPM pattern in release.yml — the scan is skipped on forks and
+      # on a not-yet-configured repo rather than failing the build.
+      HAS_SONAR: ${{ secrets.SONAR_TOKEN != '' }}
 
     steps:
       - name: Checkout code
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          # Sonar needs full history for blame-based new-code detection; a shallow
+          # clone silently degrades the "new code" period.
+          fetch-depth: 0
 
       - name: Set up Go
         uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
@@ -29,6 +37,14 @@ jobs:
           name: coverage
           path: coverage.out
           retention-days: 7
+
+      # Must run after the coverage profile exists, in this same job, so the scanner
+      # can read coverage.out. Skipped on forks, where SONAR_TOKEN is unavailable.
+      - name: SonarQube scan
+        if: ${{ env.HAS_SONAR == 'true' }}
+        uses: SonarSource/sonarqube-scan-action@22918119ff8e1ca75a623e15c8296b6ea4fbe28f # v8.2.1
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
 
   lint:
     name: Lint
@@ -90,9 +106,12 @@ jobs:
         with:
           go-version: '1.25'
 
+      # Install without an @version so the build is reproducible: the version comes from
+      # tools/go.mod and is verified against tools/go.sum. That module is separate from
+      # the CLI's own go.mod so pinning a linter never perturbs the shipped dependencies.
       - name: Run govulncheck
         run: |
-          go install golang.org/x/vuln/cmd/govulncheck@v1.3.0
+          go -C tools install golang.org/x/vuln/cmd/govulncheck
           govulncheck ./...
 
   npm-package:

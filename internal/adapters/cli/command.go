@@ -273,29 +273,86 @@ func expandGlobs(patterns []string) ([]string, error) {
 	return out, nil
 }
 
-func (c *CLI) runCollect(ctx context.Context, files []string, opts collectOptions) error {
-	warnLegacyAPIKey()
-	// Validate an explicit --platform before it reaches the server (fail fast with
-	// a clear message instead of a 400 on the whole upload).
-	if opts.platform != "" {
-		if _, ok := validPlatforms[opts.platform]; !ok {
-			return fmt.Errorf("invalid --platform %q: must be one of android, ios, desktop, web, api", opts.platform)
+// validatePlatform checks an explicit --platform before it reaches the server, so a
+// typo fails fast with a clear message instead of a 400 on the whole upload. An empty
+// value means "not set" and is left to the server's default.
+func validatePlatform(platform string) error {
+	if platform == "" {
+		return nil
+	}
+	if _, ok := validPlatforms[platform]; !ok {
+		return fmt.Errorf("invalid --platform %q: must be one of android, ios, desktop, web, api", platform)
+	}
+	return nil
+}
+
+// applyCollectOptions folds the command-line overrides into the config. The setters
+// ignore empty/zero values, so an unset flag leaves whatever env detection supplied.
+func applyCollectOptions(cfg *config.Config, opts collectOptions) {
+	cfg.SetEnvironment(opts.environment)
+	cfg.SetLanguage(opts.language)
+	cfg.SetPlatform(opts.platform)
+	cfg.SetMilestone(opts.milestone)
+	cfg.SetBranch(opts.branch)
+	cfg.SetCommit(opts.commit)
+	cfg.SetTimeout(opts.timeout)
+	cfg.SetDryRun(opts.dryRun)
+}
+
+// verifyFilesExist fails on the first missing path rather than uploading a partial set.
+func verifyFilesExist(files []string) error {
+	for _, file := range files {
+		if _, err := os.Stat(file); os.IsNotExist(err) {
+			return fmt.Errorf("file does not exist: %s", file)
 		}
 	}
-	// Apply command line overrides
-	c.config.SetEnvironment(opts.environment)
-	c.config.SetLanguage(opts.language)
-	c.config.SetPlatform(opts.platform)
-	c.config.SetMilestone(opts.milestone)
-	c.config.SetBranch(opts.branch)
-	c.config.SetCommit(opts.commit)
-	c.config.SetTimeout(opts.timeout)
-	c.config.SetDryRun(opts.dryRun)
+	return nil
+}
+
+// resolveFramework converts an explicit --format into a domain.Framework. An empty
+// format returns the zero value, which tells the service to auto-detect per file.
+func resolveFramework(format string) (domain.Framework, error) {
+	if format == "" {
+		return "", nil
+	}
+	framework := domain.Framework(strings.ToLower(format))
+	if !framework.IsValid() {
+		return "", fmt.Errorf("unsupported format: %s. Use 'qf list-formats' to see supported formats", format)
+	}
+	return framework, nil
+}
+
+// validateOutputOption rejects --output rather than silently ignoring it (API-01). It
+// only affects dry runs and only supports "json"; previously "--output yaml", or
+// "--output json" without --dry-run, just uploaded as normal with no hint that the flag
+// did nothing.
+func validateOutputOption(opts collectOptions) error {
+	if opts.output == "" {
+		return nil
+	}
+	if opts.output != "json" {
+		return fmt.Errorf("unsupported output format: %q (only 'json' is supported)", opts.output)
+	}
+	if !opts.dryRun {
+		return fmt.Errorf("--output only applies to --dry-run; add --dry-run to print the parsed report")
+	}
+	return nil
+}
+
+func (c *CLI) runCollect(ctx context.Context, files []string, opts collectOptions) error {
+	warnLegacyAPIKey()
+
+	// Order matters: --platform is checked before the config is mutated, and the file
+	// checks come before --format/--output so a bad path still reports as a bad path.
+	if err := validatePlatform(opts.platform); err != nil {
+		return err
+	}
+
+	applyCollectOptions(c.config, opts)
 	// Fill branch/commit from local git only now (collect is the sole consumer),
 	// after explicit flags/CI env vars have had their say (BUG-39).
 	c.config.DetectGit()
 
-	// Validate configuration
 	if err := c.config.Validate(); err != nil {
 		return err
 	}
@@ -308,32 +365,17 @@ func (c *CLI) runCollect(ctx context.Context, files []string, opts collectOption
 		return err
 	}
 
-	// Validate files exist
-	for _, file := range files {
-		if _, err := os.Stat(file); os.IsNotExist(err) {
-			return fmt.Errorf("file does not exist: %s", file)
-		}
+	if err := verifyFilesExist(files); err != nil {
+		return err
 	}
 
-	// Convert format string to framework
-	var framework domain.Framework
-	if opts.format != "" {
-		framework = domain.Framework(strings.ToLower(opts.format))
-		if !framework.IsValid() {
-			return fmt.Errorf("unsupported format: %s. Use 'qf list-formats' to see supported formats", opts.format)
-		}
+	framework, err := resolveFramework(opts.format)
+	if err != nil {
+		return err
 	}
 
-	// Validate --output rather than silently ignoring it (API-01). It only affects
-	// dry runs and only supports "json"; previously "--output yaml" or "--output json"
-	// without --dry-run just uploaded as normal, giving no hint the flag did nothing.
-	if opts.output != "" {
-		if opts.output != "json" {
-			return fmt.Errorf("unsupported output format: %q (only 'json' is supported)", opts.output)
-		}
-		if !opts.dryRun {
-			return fmt.Errorf("--output only applies to --dry-run; add --dry-run to print the parsed report")
-		}
+	if err := validateOutputOption(opts); err != nil {
+		return err
 	}
 
 	// Create context with timeout
