@@ -149,18 +149,19 @@ func (p *Parser) convertTestCase(tc TestCase) domain.Case {
 
 	// Determine status
 	var errMsg, errType string
-	if tc.Failure != nil {
+	switch {
+	case tc.Failure != nil:
 		testCase.Status = domain.StatusFailed
 		errMsg = tc.Failure.Message
 		errType = tc.Failure.Type
-	} else if tc.Error != nil {
+	case tc.Error != nil:
 		testCase.Status = domain.StatusError
 		errMsg = tc.Error.Message
 		errType = tc.Error.Type
-	} else if tc.Skipped != nil {
+	case tc.Skipped != nil:
 		testCase.Status = domain.StatusSkipped
 		errMsg = tc.Skipped.Message
-	} else {
+	default:
 		testCase.Status = domain.StatusPassed
 	}
 

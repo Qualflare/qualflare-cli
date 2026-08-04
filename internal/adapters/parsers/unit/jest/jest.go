@@ -13,12 +13,12 @@ type Parser struct{}
 
 // Jest JSON structures
 type Report struct {
-	NumTotalTests      int          `json:"numTotalTests"`
-	NumPassedTests     int          `json:"numPassedTests"`
-	NumFailedTests     int          `json:"numFailedTests"`
-	NumPendingTests    int          `json:"numPendingTests"`
-	NumTodoTests       int          `json:"numTodoTests"`
-	NumTotalTestSuites int          `json:"numTotalTestSuites"`
+	NumTotalTests      int `json:"numTotalTests"`
+	NumPassedTests     int `json:"numPassedTests"`
+	NumFailedTests     int `json:"numFailedTests"`
+	NumPendingTests    int `json:"numPendingTests"`
+	NumTodoTests       int `json:"numTodoTests"`
+	NumTotalTestSuites int `json:"numTotalTestSuites"`
 	// NumRuntimeErrorTestSuites counts suites that threw at import/collection
 	// time (CLI-H9) — these produce a testResult with no assertionResults.
 	NumRuntimeErrorTestSuites int          `json:"numRuntimeErrorTestSuites"`

@@ -1,7 +1,6 @@
 package cli
 
 import (
-	"fmt"
 	"strings"
 	"testing"
 )
@@ -24,7 +23,7 @@ func TestPathArg_EscapesMetacharacters(t *testing.T) {
 	}
 
 	// The escaped segment must not introduce a new path separator into the URL.
-	url := fmt.Sprintf("/api/v1/suite/%s", pathArg("../../admin"))
+	url := "/api/v1/suite/" + pathArg("../../admin")
 	if strings.Contains(url, "/admin") {
 		t.Fatalf("path traversal reached the URL: %q", url)
 	}

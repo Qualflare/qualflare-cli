@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"strconv"
 	"time"
 
 	"qualflare-cli/internal/adapters/parsers/base"
@@ -15,10 +16,10 @@ type Parser struct{}
 
 // k6 JSON structures
 type Report struct {
-	RootGroup Group              `json:"root_group"`
-	Options   Options            `json:"options"`
-	State     State              `json:"state"`
-	Metrics   map[string]Metric  `json:"metrics"`
+	RootGroup Group             `json:"root_group"`
+	Options   Options           `json:"options"`
+	State     State             `json:"state"`
+	Metrics   map[string]Metric `json:"metrics"`
 }
 
 type Group struct {
@@ -155,20 +156,21 @@ func (p *Parser) convertCheck(check Check, groupPath string) domain.Case {
 		passRate = float64(check.Passes) / float64(total) * 100
 	}
 
-	if check.Fails == 0 {
+	switch {
+	case check.Fails == 0:
 		testCase.Status = domain.StatusPassed
-	} else if check.Passes == 0 {
+	case check.Passes == 0:
 		testCase.Status = domain.StatusFailed
 		testCase.Error = fmt.Sprintf("All %d checks failed", check.Fails)
-	} else {
+	default:
 		testCase.Status = domain.StatusFailed
 		testCase.Error = fmt.Sprintf("%.1f%% pass rate (%d passed, %d failed)", passRate, check.Passes, check.Fails)
 	}
 
 	testCase.Properties = map[string]string{
 		"path":     check.Path,
-		"passes":   fmt.Sprintf("%d", check.Passes),
-		"fails":    fmt.Sprintf("%d", check.Fails),
+		"passes":   strconv.FormatInt(check.Passes, 10),
+		"fails":    strconv.FormatInt(check.Fails, 10),
 		"passRate": fmt.Sprintf("%.1f%%", passRate),
 		"group":    groupPath,
 	}

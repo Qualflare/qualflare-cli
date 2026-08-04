@@ -4,6 +4,7 @@ package cli
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -124,7 +125,7 @@ func (c *CLI) createIdentifierCommand(identifier, token string) *cobra.Command {
 		Short:         "Commands scoped to project " + identifier,
 		SilenceUsage:  true,
 		SilenceErrors: true,
-		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+		PersistentPreRunE: func(_ *cobra.Command, _ []string) error {
 			c.config.SetAPIKey(token)
 			return nil
 		},
@@ -334,7 +335,7 @@ func validateOutputOption(opts collectOptions) error {
 		return fmt.Errorf("unsupported output format: %q (only 'json' is supported)", opts.output)
 	}
 	if !opts.dryRun {
-		return fmt.Errorf("--output only applies to --dry-run; add --dry-run to print the parsed report")
+		return errors.New("--output only applies to --dry-run; add --dry-run to print the parsed report")
 	}
 	return nil
 }
@@ -478,7 +479,7 @@ func (c *CLI) runValidate(ctx context.Context, files []string, formatStr string)
 	}
 
 	if hasErrors {
-		return fmt.Errorf("one or more files failed validation")
+		return errors.New("one or more files failed validation")
 	}
 
 	return nil
@@ -491,7 +492,7 @@ func (c *CLI) createVersionCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "version",
 		Short: "Print version information",
-		Run: func(cmd *cobra.Command, args []string) {
+		Run: func(_ *cobra.Command, _ []string) {
 			info := version.Get()
 			if short {
 				fmt.Println(info.Short())
@@ -514,7 +515,7 @@ func (c *CLI) createListFormatsCommand() *cobra.Command {
 		Use:     "list-formats",
 		Aliases: []string{"formats", "lf"},
 		Short:   "List supported test result formats",
-		Run: func(cmd *cobra.Command, args []string) {
+		Run: func(_ *cobra.Command, _ []string) {
 			c.printFormats(category)
 		},
 	}
