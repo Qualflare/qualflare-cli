@@ -13,7 +13,7 @@ func (c *CLI) createLogoutCommand() *cobra.Command {
 		Use:   "logout <identifier>",
 		Short: "Remove saved credentials for an identifier",
 		Args:  cobra.ExactArgs(1),
-		RunE: func(cmd *cobra.Command, args []string) error {
+		RunE: func(_ *cobra.Command, args []string) error {
 			id := args[0]
 			if err := c.store.Delete(id); err != nil {
 				if errors.Is(err, auth.ErrNotFound) {

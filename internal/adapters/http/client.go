@@ -62,7 +62,7 @@ func NewHTTPClient(config ports.ConfigProvider, opts ...ClientOption) *Client {
 		})
 
 	// Add auth header middleware
-	rc.AddRequestMiddleware(func(c *resty.Client, req *resty.Request) error {
+	rc.AddRequestMiddleware(func(_ *resty.Client, req *resty.Request) error {
 		if apiKey := config.GetAPIKey(); apiKey != "" {
 			req.SetHeader("QF_TOKEN", apiKey)
 		}

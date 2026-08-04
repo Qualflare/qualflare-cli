@@ -4,6 +4,7 @@ package factory
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"path/filepath"
 	"strings"
@@ -263,7 +264,7 @@ func (f *ParserFactory) detectJSONFramework(content []byte) (domain.Framework, e
 		return f.detectJSONObjectFramework(v, false)
 	}
 
-	return "", fmt.Errorf("unable to detect framework from JSON content")
+	return "", errors.New("unable to detect framework from JSON content")
 }
 
 func hasKey(obj map[string]interface{}, key string) bool {
@@ -305,7 +306,9 @@ var jsonDetectors = []jsonDetector{
 	{func(obj map[string]interface{}, _ bool) bool { return hasKeys(obj, "issues", "paging") }, domain.FrameworkSonarQube, false},
 	{func(obj map[string]interface{}, _ bool) bool { return hasKeys(obj, "Action", "Package") }, domain.FrameworkGolang, false},
 	{func(obj map[string]interface{}, _ bool) bool { return hasKey(obj, "examples") }, domain.FrameworkRSpec, false},
-	{func(obj map[string]interface{}, isArray bool) bool { return isArray && hasKeys(obj, "elements", "keyword") }, domain.FrameworkCucumber, true},
+	{func(obj map[string]interface{}, isArray bool) bool {
+		return isArray && hasKeys(obj, "elements", "keyword")
+	}, domain.FrameworkCucumber, true},
 	{func(obj map[string]interface{}, isArray bool) bool { return isArray && hasKey(obj, "scenarioResults") }, domain.FrameworkKarate, true},
 	{func(obj map[string]interface{}, _ bool) bool { return hasKey(obj, "fixtures") }, domain.FrameworkTestCafe, false},
 	{func(obj map[string]interface{}, _ bool) bool { return hasKeys(obj, "stats", "tests") }, domain.FrameworkMocha, false},
@@ -325,7 +328,7 @@ func (f *ParserFactory) detectJSONObjectFramework(obj map[string]interface{}, is
 			return d.framework, nil
 		}
 	}
-	return "", fmt.Errorf("unable to detect framework from JSON object")
+	return "", errors.New("unable to detect framework from JSON object")
 }
 
 // detectXMLFramework detects the framework from XML content
@@ -356,5 +359,5 @@ func (f *ParserFactory) detectXMLFramework(content []byte) (domain.Framework, er
 		return domain.FrameworkZAP, nil
 	}
 
-	return "", fmt.Errorf("unable to detect framework from XML content")
+	return "", errors.New("unable to detect framework from XML content")
 }

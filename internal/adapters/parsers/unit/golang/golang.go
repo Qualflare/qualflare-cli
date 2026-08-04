@@ -3,6 +3,7 @@ package golang
 import (
 	"bufio"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"strings"
@@ -78,7 +79,7 @@ func (p *Parser) Parse(reader io.Reader) (*domain.Suite, error) {
 	}
 
 	if len(tests) == 0 && len(pkgFailed) == 0 {
-		return nil, fmt.Errorf("no valid Go test JSON events found")
+		return nil, errors.New("no valid Go test JSON events found")
 	}
 
 	// Convert tests map to cases, then surface any package-level failure that no

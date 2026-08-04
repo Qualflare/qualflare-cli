@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"strconv"
 	"time"
 
 	"qualflare-cli/internal/adapters/parsers/base"
@@ -157,8 +158,8 @@ func (p *Parser) Parse(reader io.Reader) (*domain.Suite, error) {
 
 	// Add paging info
 	suite.Properties = map[string]string{
-		"total":       fmt.Sprintf("%d", report.Paging.Total),
-		"effortTotal": fmt.Sprintf("%d", report.EffortTotal),
+		"total":       strconv.Itoa(report.Paging.Total),
+		"effortTotal": strconv.Itoa(report.EffortTotal),
 	}
 
 	return suite, nil
@@ -179,7 +180,7 @@ func (p *Parser) convertIssue(issue Issue, components map[string]Component, rule
 	}
 
 	testCase := domain.Case{
-		ID:        issue.Key,
+		ID: issue.Key,
 		// Include component:line: the same rule message (e.g. "Remove this unused
 		// variable") recurs across many files/lines, and the server dedupes by
 		// Name within a suite — so without a location they collapse into one row
@@ -239,7 +240,7 @@ func (p *Parser) convertIssue(issue Issue, components map[string]Component, rule
 	}
 
 	if issue.Line > 0 {
-		testCase.Properties["line"] = fmt.Sprintf("%d", issue.Line)
+		testCase.Properties["line"] = strconv.Itoa(issue.Line)
 	}
 
 	if issue.Assignee != "" {

@@ -2,6 +2,7 @@ package trivy
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"time"
@@ -15,11 +16,11 @@ type Parser struct{}
 
 // Trivy JSON structures
 type Report struct {
-	SchemaVersion int       `json:"SchemaVersion"`
-	ArtifactName  string    `json:"ArtifactName"`
-	ArtifactType  string    `json:"ArtifactType"`
-	Metadata      Metadata  `json:"Metadata"`
-	Results       []Result  `json:"Results"`
+	SchemaVersion int      `json:"SchemaVersion"`
+	ArtifactName  string   `json:"ArtifactName"`
+	ArtifactType  string   `json:"ArtifactType"`
+	Metadata      Metadata `json:"Metadata"`
+	Results       []Result `json:"Results"`
 }
 
 type Metadata struct {
@@ -43,22 +44,22 @@ type Result struct {
 }
 
 type Vulnerability struct {
-	VulnerabilityID  string           `json:"VulnerabilityID"`
-	PkgID            string           `json:"PkgID"`
-	PkgName          string           `json:"PkgName"`
-	InstalledVersion string           `json:"InstalledVersion"`
-	FixedVersion     string           `json:"FixedVersion"`
-	Layer            *Layer           `json:"Layer,omitempty"`
-	SeveritySource   string           `json:"SeveritySource"`
-	PrimaryURL       string           `json:"PrimaryURL"`
-	Title            string           `json:"Title"`
-	Description      string           `json:"Description"`
-	Severity         string           `json:"Severity"`
-	CweIDs           []string         `json:"CweIDs"`
-	CVSS             map[string]CVSS  `json:"CVSS"`
-	References       []string         `json:"References"`
-	PublishedDate    string           `json:"PublishedDate"`
-	LastModifiedDate string           `json:"LastModifiedDate"`
+	VulnerabilityID  string          `json:"VulnerabilityID"`
+	PkgID            string          `json:"PkgID"`
+	PkgName          string          `json:"PkgName"`
+	InstalledVersion string          `json:"InstalledVersion"`
+	FixedVersion     string          `json:"FixedVersion"`
+	Layer            *Layer          `json:"Layer,omitempty"`
+	SeveritySource   string          `json:"SeveritySource"`
+	PrimaryURL       string          `json:"PrimaryURL"`
+	Title            string          `json:"Title"`
+	Description      string          `json:"Description"`
+	Severity         string          `json:"Severity"`
+	CweIDs           []string        `json:"CweIDs"`
+	CVSS             map[string]CVSS `json:"CVSS"`
+	References       []string        `json:"References"`
+	PublishedDate    string          `json:"PublishedDate"`
+	LastModifiedDate string          `json:"LastModifiedDate"`
 }
 
 type Layer struct {
@@ -110,7 +111,7 @@ func (p *Parser) Parse(reader io.Reader) (*domain.Suite, error) {
 	// nor any Results — treat that as unparseable rather than an empty passing
 	// suite, so a scan that never ran against this tool can't roll up green.
 	if report.SchemaVersion == 0 && len(report.Results) == 0 {
-		return nil, fmt.Errorf("trivy: not a Trivy report (no SchemaVersion and no Results)")
+		return nil, errors.New("trivy: not a Trivy report (no SchemaVersion and no Results)")
 	}
 
 	suite := &domain.Suite{
@@ -151,7 +152,7 @@ func (p *Parser) Parse(reader io.Reader) (*domain.Suite, error) {
 // convertVulnerability converts a Trivy vulnerability to domain.Case
 func (p *Parser) convertVulnerability(vuln Vulnerability, target string) domain.Case {
 	testCase := domain.Case{
-		ID:        vuln.VulnerabilityID,
+		ID: vuln.VulnerabilityID,
 		// Include the target: the server dedupes cases by Name within a suite, so
 		// the same CVE+package across two scan targets would otherwise collapse
 		// into one row (SYNC-02).
