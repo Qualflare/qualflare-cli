@@ -160,7 +160,7 @@ func (c *Client) Get(ctx context.Context, path string, params url.Values) (json.
 	}
 
 	if resp.IsSuccess() {
-		return json.RawMessage(resp.Bytes()), nil
+		return resp.Bytes(), nil
 	}
 
 	return nil, c.buildAPIError("get", resp)

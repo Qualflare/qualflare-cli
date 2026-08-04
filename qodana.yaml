@@ -50,24 +50,20 @@ exclude:
   # both carry dialect-only fields (file, line, assertions, class) that
   # junitxml.TestCase has no place for. Folding them together would read the message
   # from the wrong place — a behaviour change dressed up as deduplication.
-  # Save() is exported and can be handed a Store built directly rather than via Load(),
-  # in which case these are the checks that stop it writing a file with no schema
-  # version or a nil map. Every Store in this codebase comes from Load(), which is why
-  # the analyser can prove them false — that proof does not survive the next caller.
-  - name: GoBoolExpressions
-    paths:
-      - internal/auth/store.go
-      # The two arms genuinely differ: cucumber resolves scenario status by precedence
-      # (failed > pending/skipped > passed), so both branches are reachable.
-      - internal/adapters/parsers/bdd/cucumber
-
+  # Two shapes of duplication, both deliberate.
+  #
+  # In tests: table-driven parser tests necessarily look alike — same fixture-then-assert
+  # shape across a dozen packages. Factoring them into shared helpers makes a failure
+  # harder to localise, which is the same reason go:S3776 is excluded for tests in
+  # .golangci.yml.
+  #
+  # In sources: pytest and phpunit repeat junitxml's outcome switch, but their types are
+  # not interchangeable — phpunit reads the failure message from the element body
+  # (`xml:",chardata"`) where junitxml reads an attribute (`xml:"message,attr"`), and both
+  # carry dialect-only fields junitxml.TestCase has no place for. Folding them would read
+  # the message from the wrong place. xctest/maestro/espresso are three 26-line files that
+  # each delegate to junitxml.Parse; collapsing them trades 60 obvious lines for one
+  # clever one.
   - name: DuplicatedCode
     paths:
-      - internal/adapters/parsers/unit/pytest
-      - internal/adapters/parsers/unit/phpunit
-      # xctest, maestro and espresso are three 26-line files that each delegate to
-      # junitxml.Parse. That is the cheapest honest expression of "three frameworks
-      # that emit JUnit XML"; collapsing it trades 60 obvious lines for one clever one.
-      - internal/adapters/parsers/e2e/xctest
-      - internal/adapters/parsers/e2e/maestro
-      - internal/adapters/parsers/e2e/espresso
+      - internal/adapters/parsers
