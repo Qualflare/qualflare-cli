@@ -22,10 +22,15 @@ func DetectCommit(ctx context.Context) string {
 }
 
 func run(ctx context.Context, args ...string) string {
-	if _, err := exec.LookPath("git"); err != nil {
+	// Launch via the absolute path LookPath resolved rather than the bare name, so the
+	// binary is located once instead of being re-resolved against $PATH by exec. A CLI
+	// must still honour the user's PATH here — hardcoding /usr/bin/git would break
+	// Homebrew, asdf, nix, and Windows.
+	gitPath, err := exec.LookPath("git")
+	if err != nil {
 		return ""
 	}
-	out, err := exec.CommandContext(ctx, "git", args...).Output()
+	out, err := exec.CommandContext(ctx, gitPath, args...).Output()
 	if err != nil {
 		return ""
 	}
