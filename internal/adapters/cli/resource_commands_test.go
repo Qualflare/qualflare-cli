@@ -204,3 +204,110 @@ func TestFetchAndPrint_ToloeratesNonJSONBody(t *testing.T) {
 		t.Fatalf("fetchAndPrint with a non-JSON body = %v, want nil", err)
 	}
 }
+
+// The remaining list commands share newListCommand but each builds its own path and
+// filter set. This sweeps all of them so a wrong endpoint or a dropped filter is caught
+// — including the bracketed param names (severity[], status[]) the API expects, which
+// are easy to "tidy" into the unbracketed form by accident.
+func TestResourceListCommands_PathsAndFilters(t *testing.T) {
+	tests := []struct {
+		name       string
+		cmd        func(c *CLI) *cobra.Command
+		args       []string
+		wantPath   string
+		wantParams map[string]string // param -> expected value ("" = just must be present)
+	}{
+		{
+			"clusters", (*CLI).createClustersCommand,
+			[]string{"list", "--severity", "critical,high"},
+			apiV1 + "/clusters",
+			map[string]string{"severity[]": ""},
+		},
+		{
+			"defects", (*CLI).createDefectsCommand,
+			[]string{"list", "--severity", "high", "--status", "active"},
+			apiV1 + "/defects",
+			map[string]string{"severity[]": "", "status[]": ""},
+		},
+		{
+			"milestones", (*CLI).createMilestonesCommand,
+			[]string{"list", "--query", "q1"},
+			apiV1 + "/milestones",
+			map[string]string{"q": "q1"},
+		},
+		{
+			"suites", (*CLI).createSuitesCommand,
+			[]string{"list", "--query", "smoke"},
+			apiV1 + "/suites",
+			map[string]string{"q": "smoke"},
+		},
+		{
+			"launches", (*CLI).createLaunchesCommand,
+			[]string{"list", "--milestone", "3", "--environment", "prod"},
+			apiV1 + "/launches",
+			map[string]string{"milestone": "3", "environments": "prod"},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c, api := newAPICLI(t)
+			if err := run(t, tt.cmd(c), tt.args...); err != nil {
+				t.Fatalf("%s = %v", tt.name, err)
+			}
+			if api.path != tt.wantPath {
+				t.Errorf("path = %q, want %q", api.path, tt.wantPath)
+			}
+			for k, want := range tt.wantParams {
+				got := api.params.Get(k)
+				if got == "" {
+					t.Errorf("param %q was dropped", k)
+					continue
+				}
+				if want != "" && got != want {
+					t.Errorf("param %q = %q, want %q", k, got, want)
+				}
+			}
+			// All five are paginated, unlike cases — but page is sent only when the
+			// user asked for one, so the server's own default can apply (API-02).
+			if api.params.Get("page") != "" {
+				t.Errorf("%s sent page=%q without --page; it must be omitted so the server defaults",
+					tt.name, api.params.Get("page"))
+			}
+			c2, api2 := newAPICLI(t)
+			if err := run(t, tt.cmd(c2), append(tt.args, "--page", "2")...); err != nil {
+				t.Fatalf("%s with --page = %v", tt.name, err)
+			}
+			if api2.params.Get("page") != "2" {
+				t.Errorf("%s with --page 2 sent page=%q, want 2", tt.name, api2.params.Get("page"))
+			}
+		})
+	}
+}
+
+// The singular detail commands are a separate family: one required positional arg,
+// path-escaped into the URL.
+func TestResourceDetailCommands_Paths(t *testing.T) {
+	tests := []struct {
+		name     string
+		cmd      func(c *CLI) *cobra.Command
+		arg      string
+		wantPath string
+	}{
+		{"cluster", (*CLI).createClusterCommand, "abc", apiV1 + "/cluster/abc"},
+		{"defect", (*CLI).createDefectCommand, "12", apiV1 + "/defect/12"},
+		{"milestone", (*CLI).createMilestoneCommand, "3", apiV1 + "/milestone/3"},
+		{"suite", (*CLI).createSuiteCommand, "7", apiV1 + "/suite/7"},
+		{"launch", (*CLI).createLaunchCommand, "10", apiV1 + "/launch/10"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c, api := newAPICLI(t)
+			if err := run(t, tt.cmd(c), "get", tt.arg); err != nil {
+				t.Fatalf("%s get = %v", tt.name, err)
+			}
+			if api.path != tt.wantPath {
+				t.Errorf("path = %q, want %q", api.path, tt.wantPath)
+			}
+		})
+	}
+}
