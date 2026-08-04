@@ -8,6 +8,15 @@ linter: jetbrains/qodana-go:2026.2
 profile:
   name: qodana.recommended
 
+# Fail the scan on any finding. Everything Qodana reported has been either fixed or
+# excluded below with a stated reason, so a non-zero count now means something new — and
+# a check that cannot fail is one people stop reading.
+#
+# This lives here rather than as a workflow input: qodana-action v2026.2 has no
+# fail-threshold input (it warns "Unexpected input(s)" and carries on passing), so
+# setting it there looks like a gate while being a no-op.
+failThreshold: 0
+
 exclude:
   # Generated or vendored output, plus the local build/release directories. Nothing here
   # is source we can act on, and scanning it only produces findings nobody will fix.
