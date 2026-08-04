@@ -135,17 +135,6 @@ const (
 	StatusPending Status = "pending"
 )
 
-// TestStatus is an alias for backward compatibility
-type TestStatus = Status
-
-const (
-	TestStatusPassed  = StatusPassed
-	TestStatusFailed  = StatusFailed
-	TestStatusSkipped = StatusSkipped
-	TestStatusError   = StatusError
-	TestStatusPending = StatusPending
-)
-
 // Launch represents the complete test launch/run
 type Launch struct {
 	Framework string `json:"framework"`
