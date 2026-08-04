@@ -76,10 +76,10 @@ func (f *stubFactory) RegisterParser(ports.Parser)                {}
 // guard can be exercised without writing a 100 MB fixture.
 type cappedConfig struct {
 	*config.Config
-	max int64
+	limit int64
 }
 
-func (c *cappedConfig) GetMaxFileSize() int64 { return c.max }
+func (c *cappedConfig) GetMaxFileSize() int64 { return c.limit }
 
 type stubSender struct {
 	sent int
@@ -186,7 +186,7 @@ func TestParseTestResults_LaunchFrameworkLabel(t *testing.T) {
 		want  domain.Framework
 	}{
 		{"all agree", map[string]string{"a.xml": "junit", "b.xml": "junit"}, domain.FrameworkJUnit},
-		{"disagree becomes mixed", map[string]string{"a.xml": "junit", "b.json": "golang"}, domain.Framework("mixed")},
+		{"disagree becomes mixed", map[string]string{"a.xml": "junit", "b.json": "golang"}, "mixed"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -224,7 +224,7 @@ func TestParseTestResults_Errors(t *testing.T) {
 
 	t.Run("unknown explicit framework", func(t *testing.T) {
 		s := NewReportService(&stubFactory{}, &stubSender{}, config.DefaultConfig())
-		_, err := s.ParseTestResults(context.Background(), []string{good}, domain.Framework("nope"))
+		_, err := s.ParseTestResults(context.Background(), []string{good}, "nope")
 		if err == nil || !strings.Contains(err.Error(), "failed to get parser for framework") {
 			t.Fatalf("err = %v, want a get-parser failure", err)
 		}
@@ -269,7 +269,7 @@ func TestParseTestResults_RejectsOversizedFile(t *testing.T) {
 
 	// config.MaxFileSize is a package constant (100 MB), so shrink the cap by
 	// overriding just that method on top of the real config.
-	cfg := &cappedConfig{Config: config.DefaultConfig(), max: 10}
+	cfg := &cappedConfig{Config: config.DefaultConfig(), limit: 10}
 
 	parser := &stubParser{framework: domain.FrameworkJUnit, suite: onePassing(domain.FrameworkJUnit)}
 	fac := &stubFactory{parsers: map[domain.Framework]ports.Parser{domain.FrameworkJUnit: parser}}

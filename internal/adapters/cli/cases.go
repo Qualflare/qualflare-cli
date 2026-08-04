@@ -63,23 +63,9 @@ func (c *CLI) createCaseCommand() *cobra.Command {
   qf <id> case steps 123`,
 	}
 
-	getCmd := &cobra.Command{
-		Use:   "get <seq>",
-		Short: "Get a test case by sequence number",
-		Args:  cobra.ExactArgs(1),
-		RunE: func(_ *cobra.Command, args []string) error {
-			return c.fetchAndPrint(fmt.Sprintf(apiV1+"/case/%s", pathArg(args[0])), nil)
-		},
-	}
+	getCmd := c.newDetailCommand("get <seq>", "Get a test case by sequence number", apiV1+"/case/%s")
 
-	stepsCmd := &cobra.Command{
-		Use:   "steps <seq>",
-		Short: "Get steps for a test case",
-		Args:  cobra.ExactArgs(1),
-		RunE: func(_ *cobra.Command, args []string) error {
-			return c.fetchAndPrint(fmt.Sprintf(apiV1+"/case/%s/steps", pathArg(args[0])), nil)
-		},
-	}
+	stepsCmd := c.newDetailCommand("steps <seq>", "Get steps for a test case", apiV1+"/case/%s/steps")
 
 	cmd.AddCommand(getCmd)
 	cmd.AddCommand(stepsCmd)
