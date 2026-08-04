@@ -6,7 +6,6 @@
 [![Release](https://img.shields.io/github/v/release/qualflare/qualflare-cli)](https://github.com/qualflare/qualflare-cli/releases/latest)
 [![npm](https://img.shields.io/npm/v/@qualflare/cli?logo=npm)](https://www.npmjs.com/package/@qualflare/cli)
 [![Docker](https://img.shields.io/docker/v/qualflare/qf?logo=docker&label=docker&sort=semver)](https://hub.docker.com/r/qualflare/qf)
-[![Go Report Card](https://goreportcard.com/badge/github.com/qualflare/qualflare-cli)](https://goreportcard.com/report/github.com/qualflare/qualflare-cli)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
 
 Upload test results to [Qualflare](https://qualflare.com) from any CI pipeline or local machine. Supports 23 testing frameworks with automatic format detection.
