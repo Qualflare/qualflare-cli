@@ -2,6 +2,7 @@ package cli
 
 import (
 	"bufio"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -54,7 +55,7 @@ func (c *CLI) runLogin(args []string, force bool) error {
 		return err
 	}
 	if strings.TrimSpace(token) == "" {
-		return fmt.Errorf("token cannot be empty")
+		return errors.New("token cannot be empty")
 	}
 
 	if c.store.Has(id) && !force {
@@ -81,8 +82,10 @@ func (c *CLI) runLogin(args []string, force bool) error {
 // explicit argv (back-compat) → QF_TOKEN → hidden interactive prompt on a TTY →
 // piped stdin.
 func resolveLoginToken(args []string) (string, error) {
+	// cobra.RangeArgs(1, 2) already bounds this, and the length check makes the index
+	// safe regardless; gosec's analysis cannot see through either.
 	if len(args) == 2 {
-		return args[1], nil
+		return args[1], nil //nolint:gosec // G602: guarded by the length check above
 	}
 	if t := os.Getenv("QF_TOKEN"); t != "" {
 		return t, nil

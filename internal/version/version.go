@@ -46,7 +46,7 @@ func (i Info) String() string {
 
 // Short returns a short version string
 func (i Info) Short() string {
-	return fmt.Sprintf("qf %s", i.Version)
+	return "qf " + i.Version
 }
 
 // shortCommit returns the first 7 characters of a commit hash

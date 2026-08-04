@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"io"
 	"strconv"
+	"strings"
 	"time"
 
 	"qualflare-cli/internal/core/domain"
@@ -118,9 +119,11 @@ func (p *Parser) convertExample(example Example) domain.Case {
 			stackTrace := ""
 			if len(example.Exception.Backtrace) > 0 {
 				stackTrace = example.Exception.Backtrace[0]
+				var stackTraceSb121 strings.Builder
 				for i := 1; i < len(example.Exception.Backtrace) && i < 10; i++ {
-					stackTrace += "\n" + example.Exception.Backtrace[i]
+					stackTraceSb121.WriteString("\n" + example.Exception.Backtrace[i])
 				}
+				stackTrace += stackTraceSb121.String()
 			}
 			testCase.Error = domain.FormatError(example.Exception.Message, stackTrace, example.Exception.Class)
 		}

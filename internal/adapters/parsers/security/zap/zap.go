@@ -182,7 +182,7 @@ func (p *Parser) convertAlert(alert Alert, site Site) domain.Case {
 
 	// Add instance count
 	if count, err := strconv.Atoi(alert.Count); err == nil {
-		testCase.Properties["instanceCount"] = fmt.Sprintf("%d", count)
+		testCase.Properties["instanceCount"] = strconv.Itoa(count)
 	}
 
 	// Add first instance URL if available

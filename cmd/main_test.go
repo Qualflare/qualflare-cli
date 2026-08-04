@@ -54,17 +54,21 @@ func TestRewriteUnknownCommandError(t *testing.T) {
 		}
 	})
 
+	// Both cases below compare identity on purpose. The assertion is that the error is
+	// returned *untouched*, which is stricter than errors.Is — that would also accept a
+	// wrapped error, and wrapping here would still lose the original message the user
+	// needs to see.
 	t.Run("passes through non-identifier candidates", func(t *testing.T) {
 		// Uppercase is not a legal identifier, so this is a real typo, not a login slip.
 		in := errors.New(`unknown command "COLLECT" for "qf"`)
-		if got := rewriteUnknownCommandError(in); got != in {
+		if got := rewriteUnknownCommandError(in); got != in { //nolint:errorlint // identity is the assertion
 			t.Errorf("expected the original error, got %v", got)
 		}
 	})
 
 	t.Run("passes through unrelated errors", func(t *testing.T) {
 		in := errors.New("some other failure")
-		if got := rewriteUnknownCommandError(in); got != in {
+		if got := rewriteUnknownCommandError(in); got != in { //nolint:errorlint // identity is the assertion
 			t.Errorf("expected the original error, got %v", got)
 		}
 	})

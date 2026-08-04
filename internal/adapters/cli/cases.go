@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"errors"
 	"fmt"
 	"net/url"
 
@@ -37,7 +38,7 @@ func (c *CLI) createCasesCommand() *cobra.Command {
 		},
 		buildRequest: func(_ *cobra.Command, params url.Values) (string, error) {
 			if suiteSeq <= 0 {
-				return "", fmt.Errorf("--suite flag is required")
+				return "", errors.New("--suite flag is required")
 			}
 			if query != "" {
 				params.Set("q", query)
@@ -66,7 +67,7 @@ func (c *CLI) createCaseCommand() *cobra.Command {
 		Use:   "get <seq>",
 		Short: "Get a test case by sequence number",
 		Args:  cobra.ExactArgs(1),
-		RunE: func(cmd *cobra.Command, args []string) error {
+		RunE: func(_ *cobra.Command, args []string) error {
 			return c.fetchAndPrint(fmt.Sprintf(apiV1+"/case/%s", pathArg(args[0])), nil)
 		},
 	}
@@ -75,7 +76,7 @@ func (c *CLI) createCaseCommand() *cobra.Command {
 		Use:   "steps <seq>",
 		Short: "Get steps for a test case",
 		Args:  cobra.ExactArgs(1),
-		RunE: func(cmd *cobra.Command, args []string) error {
+		RunE: func(_ *cobra.Command, args []string) error {
 			return c.fetchAndPrint(fmt.Sprintf(apiV1+"/case/%s/steps", pathArg(args[0])), nil)
 		},
 	}
