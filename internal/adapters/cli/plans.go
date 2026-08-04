@@ -53,7 +53,7 @@ func (c *CLI) createPlanCommand() *cobra.Command {
 		Short: "Get a test plan by sequence number",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(_ *cobra.Command, args []string) error {
-			return c.fetchAndPrint(fmt.Sprintf(apiV1+"/test-plan/%s", args[0]), nil)
+			return c.fetchAndPrint(fmt.Sprintf(apiV1+"/test-plan/%s", pathArg(args[0])), nil)
 		},
 	}
 
@@ -62,7 +62,7 @@ func (c *CLI) createPlanCommand() *cobra.Command {
 		Short: "Get cases in a test plan",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(_ *cobra.Command, args []string) error {
-			return c.fetchAndPrint(fmt.Sprintf(apiV1+"/test-plan/%s/cases", args[0]), nil)
+			return c.fetchAndPrint(fmt.Sprintf(apiV1+"/test-plan/%s/cases", pathArg(args[0])), nil)
 		},
 	}
 
