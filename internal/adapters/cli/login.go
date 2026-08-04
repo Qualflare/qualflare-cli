@@ -32,43 +32,48 @@ Examples:
   echo qf_xxx | qf login myapp   # piped stdin
   qf login myapp qf_xxx --force  # explicit arg (discouraged)`,
 		Args: cobra.RangeArgs(1, 2),
-		RunE: func(cmd *cobra.Command, args []string) error {
-			id := args[0]
-			if err := auth.Validate(id); err != nil {
-				return err
-			}
-			token, err := resolveLoginToken(args)
-			if err != nil {
-				return err
-			}
-			if strings.TrimSpace(token) == "" {
-				return fmt.Errorf("token cannot be empty")
-			}
-
-			if c.store.Has(id) {
-				if !force {
-					ok, err := confirmOverwrite(id)
-					if err != nil {
-						return err
-					}
-					if !ok {
-						c.printInfo("Aborted; identifier %q unchanged.", id)
-						return nil
-					}
-				}
-			}
-
-			c.store.Set(id, token)
-			if err := c.store.Save(); err != nil {
-				return fmt.Errorf("save credentials: %w", err)
-			}
-			c.printSuccess("Saved identifier %q. Use it as the first arg, e.g. `qf %s cases`.", id, id)
-			return nil
+		RunE: func(_ *cobra.Command, args []string) error {
+			return c.runLogin(args, force)
 		},
 	}
 
 	cmd.Flags().BoolVar(&force, "force", false, "Overwrite an existing identifier without confirmation")
 	return cmd
+}
+
+// runLogin validates the identifier, resolves the token, and persists the pair. An
+// existing identifier is only replaced with --force or an interactive confirmation, so a
+// re-login can't silently discard a working token.
+func (c *CLI) runLogin(args []string, force bool) error {
+	id := args[0]
+	if err := auth.Validate(id); err != nil {
+		return err
+	}
+	token, err := resolveLoginToken(args)
+	if err != nil {
+		return err
+	}
+	if strings.TrimSpace(token) == "" {
+		return fmt.Errorf("token cannot be empty")
+	}
+
+	if c.store.Has(id) && !force {
+		ok, err := confirmOverwrite(id)
+		if err != nil {
+			return err
+		}
+		if !ok {
+			c.printInfo("Aborted; identifier %q unchanged.", id)
+			return nil
+		}
+	}
+
+	c.store.Set(id, token)
+	if err := c.store.Save(); err != nil {
+		return fmt.Errorf("save credentials: %w", err)
+	}
+	c.printSuccess("Saved identifier %q. Use it as the first arg, e.g. `qf %s cases`.", id, id)
+	return nil
 }
 
 // resolveLoginToken resolves the API token WITHOUT requiring it on the command

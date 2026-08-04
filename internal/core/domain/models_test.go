@@ -134,7 +134,7 @@ func TestAllFrameworksAreValidAndCategorised(t *testing.T) {
 		// Every listed framework should be deliberately categorised. Only the unit-test
 		// frameworks may legitimately return CategoryUnitTest, so a non-unit framework
 		// landing there means it fell through the switch.
-		if got := f.GetCategory(); got == "" {
+		if f.GetCategory() == "" {
 			t.Errorf("Framework(%q).GetCategory() returned empty", f)
 		}
 	}

@@ -63,27 +63,9 @@ func (p *Parser) Parse(reader io.Reader) (*domain.Suite, error) {
 			continue
 		}
 
-		// Process package-level events
+		// An event with no Test field is package-level, not test-level.
 		if event.Test == "" {
-			switch event.Action {
-			case "pass", "fail":
-				// BUG-16: accumulate each package's elapsed time. A `go test ./...`
-				// run emits one pass/fail per package, so assigning kept only the
-				// last package's duration.
-				totalDuration += base.ParseDurationMs(event.Elapsed * 1000)
-				if event.Action == "fail" {
-					pkgFailed[event.Package] = true
-				}
-			case "output":
-				if event.Output != "" {
-					b := pkgOutputs[event.Package]
-					if b == nil {
-						b = &strings.Builder{}
-						pkgOutputs[event.Package] = b
-					}
-					b.WriteString(event.Output)
-				}
-			}
+			totalDuration += processPackageEvent(event, pkgOutputs, pkgFailed)
 			continue
 		}
 
@@ -112,6 +94,33 @@ func (p *Parser) Parse(reader io.Reader) (*domain.Suite, error) {
 	suite.RecomputeCounts()
 
 	return suite, nil
+}
+
+// processPackageEvent handles an event with no Test field — a package-level pass, fail,
+// or output line. It records package failures and accumulates package output, returning
+// the elapsed time the caller should add to the suite total.
+//
+// Counterpart to processEvent, which handles the test-level events.
+func processPackageEvent(event TestEvent, pkgOutputs map[string]*strings.Builder, pkgFailed map[string]bool) time.Duration {
+	switch event.Action {
+	case "pass", "fail":
+		if event.Action == "fail" {
+			pkgFailed[event.Package] = true
+		}
+		// BUG-16: accumulate each package's elapsed time. A `go test ./...` run emits
+		// one pass/fail per package, so assigning kept only the last package's duration.
+		return base.ParseDurationMs(event.Elapsed * 1000)
+	case "output":
+		if event.Output != "" {
+			b := pkgOutputs[event.Package]
+			if b == nil {
+				b = &strings.Builder{}
+				pkgOutputs[event.Package] = b
+			}
+			b.WriteString(event.Output)
+		}
+	}
+	return 0
 }
 
 // buildCasesFromTests converts the tests map into domain cases.

@@ -69,10 +69,10 @@ func DefaultConfig() *Config {
 		// deadline had zero headroom — a large upload that legitimately took ~30s
 		// server-side would trip the client timeout at the same moment, failing an
 		// upload the server was about to accept (BUG-27). 120s leaves room for retries.
-		Timeout:  120 * time.Second,
-		Verbose:  false,
-		Quiet:          false,
-		DryRun:         false,
+		Timeout: 120 * time.Second,
+		Verbose: false,
+		Quiet:   false,
+		DryRun:  false,
 	}
 }
 
@@ -87,20 +87,11 @@ func NewConfig() *Config {
 // Note: QF_API_KEY is intentionally NOT read here — tokens come from the
 // auth store via `qf login <identifier> <token>`.
 func (c *Config) LoadFromEnv() {
-	if v := os.Getenv("QF_ENVIRONMENT"); v != "" {
-		c.Environment = v
-	}
-	if v := os.Getenv("QF_LANGUAGE"); v != "" {
-		c.Language = v
-	}
-	if v := os.Getenv("QF_PLATFORM"); v != "" {
-		c.Platform = v
-	}
-	if v := os.Getenv("QF_MILESTONE"); v != "" {
-		if n, err := strconv.ParseInt(v, 10, 64); err == nil && n > 0 {
-			c.Milestone = n
-		}
-	}
+	envString(&c.Environment, "QF_ENVIRONMENT")
+	envString(&c.Language, "QF_LANGUAGE")
+	envString(&c.Platform, "QF_PLATFORM")
+	// A milestone sequence number is 1-based, so 0 and negatives are rejected.
+	envInt64(&c.Milestone, "QF_MILESTONE", 1)
 
 	// Git information from CI env vars only. Local git-subprocess detection is
 	// deferred to DetectGit() so it runs once, for `collect` — not on every
@@ -108,42 +99,62 @@ func (c *Config) LoadFromEnv() {
 	c.Branch = getFirstEnv("QF_BRANCH", "GIT_BRANCH", "GITHUB_REF_NAME", "CI_COMMIT_REF_NAME", "BITBUCKET_BRANCH")
 	c.Commit = getFirstEnv("QF_COMMIT", "GIT_COMMIT", "GITHUB_SHA", "CI_COMMIT_SHA", "BITBUCKET_COMMIT")
 
-	// Retry settings
-	if v := os.Getenv("QF_RETRY_MAX"); v != "" {
-		if n, err := strconv.Atoi(v); err == nil && n >= 0 {
-			c.RetryMax = n
-		}
-	}
-	if v := os.Getenv("QF_RETRY_DELAY"); v != "" {
-		if d, err := time.ParseDuration(v); err == nil {
-			c.RetryBaseDelay = d
-		}
-	}
-	if v := os.Getenv("QF_RETRY_MAX_DELAY"); v != "" {
-		if d, err := time.ParseDuration(v); err == nil {
-			c.RetryMaxDelay = d
-		}
-	}
+	// Retry settings. 0 retries is a legitimate choice, unlike a 0 milestone.
+	envInt(&c.RetryMax, "QF_RETRY_MAX", 0)
+	envDuration(&c.RetryBaseDelay, "QF_RETRY_DELAY")
+	envDuration(&c.RetryMaxDelay, "QF_RETRY_MAX_DELAY")
 
 	// Request settings
-	if v := os.Getenv("QF_TIMEOUT"); v != "" {
-		if d, err := time.ParseDuration(v); err == nil {
-			c.Timeout = d
-		}
-	}
+	envDuration(&c.Timeout, "QF_TIMEOUT")
 
 	// Output settings
-	if v := os.Getenv("QF_VERBOSE"); v == "true" || v == "1" {
-		c.Verbose = true
+	envBool(&c.Verbose, "QF_VERBOSE")
+	envBool(&c.Quiet, "QF_QUIET")
+	envBool(&c.Debug, "QF_DEBUG")
+	envBool(&c.NoCaptureOutput, "QF_NO_CAPTURE_OUTPUT")
+}
+
+// The env* helpers share one rule: an unset, empty, or unparseable variable leaves the
+// destination alone, so a bad value degrades to the existing default rather than
+// zeroing a setting or failing the whole invocation.
+
+func envString(dst *string, key string) {
+	if v := os.Getenv(key); v != "" {
+		*dst = v
 	}
-	if v := os.Getenv("QF_QUIET"); v == "true" || v == "1" {
-		c.Quiet = true
+}
+
+// envInt64 assigns only when the value parses and is at least minValue.
+func envInt64(dst *int64, key string, minValue int64) {
+	if v := os.Getenv(key); v != "" {
+		if n, err := strconv.ParseInt(v, 10, 64); err == nil && n >= minValue {
+			*dst = n
+		}
 	}
-	if v := os.Getenv("QF_DEBUG"); v == "true" || v == "1" {
-		c.Debug = true
+}
+
+// envInt assigns only when the value parses and is at least minValue.
+func envInt(dst *int, key string, minValue int) {
+	if v := os.Getenv(key); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n >= minValue {
+			*dst = n
+		}
 	}
-	if v := os.Getenv("QF_NO_CAPTURE_OUTPUT"); v == "true" || v == "1" {
-		c.NoCaptureOutput = true
+}
+
+func envDuration(dst *time.Duration, key string) {
+	if v := os.Getenv(key); v != "" {
+		if d, err := time.ParseDuration(v); err == nil {
+			*dst = d
+		}
+	}
+}
+
+// envBool only ever turns a flag on: these mirror boolean CLI flags that default to
+// false, so an absent or falsey variable must not clear a value set elsewhere.
+func envBool(dst *bool, key string) {
+	if v := os.Getenv(key); v == "true" || v == "1" {
+		*dst = true
 	}
 }
 
