@@ -155,26 +155,13 @@ func mergeSuites(testSuites TestSuites, framework domain.Framework) *domain.Suit
 // <testsuite> children — into dst. Without the recursion, tests inside nested
 // suites (and their failures) are silently dropped (CLI-H8).
 func collectSuite(js *TestSuite, dst *domain.Suite, totalDuration *time.Duration, ts *time.Time) {
-	// Prefer the suite-level time attribute; fall back to the sum of this
-	// suite's own case durations when it is absent or unparseable (BUG-13).
-	if d, err := base.ParseDuration(js.Time); err == nil && d > 0 {
-		*totalDuration += d
-	} else {
-		for _, tc := range js.TestCases {
-			if cd, cerr := base.ParseDuration(tc.Time); cerr == nil {
-				*totalDuration += cd
-			}
-		}
-	}
+	*totalDuration += suiteDuration(js)
 
 	// First non-empty report timestamp wins, instead of stamping upload
 	// wall-clock time onto every suite (BUG-14).
 	if ts.IsZero() && js.Timestamp != "" {
-		for _, layout := range []string{"2006-01-02T15:04:05", time.RFC3339, "2006-01-02T15:04:05.999999999"} {
-			if parsed, err := time.Parse(layout, js.Timestamp); err == nil {
-				*ts = parsed
-				break
-			}
+		if parsed, ok := parseSuiteTimestamp(js.Timestamp); ok {
+			*ts = parsed
 		}
 	}
 
@@ -184,6 +171,34 @@ func collectSuite(js *TestSuite, dst *domain.Suite, totalDuration *time.Duration
 	for i := range js.TestSuites {
 		collectSuite(&js.TestSuites[i], dst, totalDuration, ts)
 	}
+}
+
+// suiteDuration prefers the suite-level time attribute, falling back to the sum of this
+// suite's own case durations when it is absent, unparseable, or zero (BUG-13) — without
+// the fallback a whole suite reports as 0s.
+func suiteDuration(js *TestSuite) time.Duration {
+	if d, err := base.ParseDuration(js.Time); err == nil && d > 0 {
+		return d
+	}
+	var sum time.Duration
+	for _, tc := range js.TestCases {
+		if cd, cerr := base.ParseDuration(tc.Time); cerr == nil {
+			sum += cd
+		}
+	}
+	return sum
+}
+
+// parseSuiteTimestamp tries the layouts JUnit-family writers actually emit. Reports
+// whether any matched, so the caller can leave the timestamp unset rather than storing
+// a zero time.
+func parseSuiteTimestamp(s string) (time.Time, bool) {
+	for _, layout := range []string{"2006-01-02T15:04:05", time.RFC3339, "2006-01-02T15:04:05.999999999"} {
+		if parsed, err := time.Parse(layout, s); err == nil {
+			return parsed, true
+		}
+	}
+	return time.Time{}, false
 }
 
 func convertTestCase(tc TestCase) domain.Case {
@@ -197,49 +212,72 @@ func convertTestCase(tc TestCase) domain.Case {
 		testCase.Duration = duration
 	}
 
-	var retryCount int
-	for _, prop := range tc.Properties {
-		if prop.Name == "retries" || prop.Name == "retryCount" {
-			if _, err := fmt.Sscanf(prop.Value, "%d", &retryCount); err == nil {
-				testCase.RetryCount = domain.IntPtr(retryCount)
-			}
-		}
-	}
+	testCase.RetryCount = extractRetryCount(tc.Properties)
 
-	var errMsg, stackTrace, errType string
-	if tc.Failure != nil {
-		testCase.Status = domain.StatusFailed
-		errMsg = tc.Failure.Message
-		stackTrace = tc.Failure.Text
-		errType = tc.Failure.Type
-	} else if tc.Error != nil {
-		testCase.Status = domain.StatusError
-		errMsg = tc.Error.Message
-		stackTrace = tc.Error.Text
-		errType = tc.Error.Type
-	} else if tc.Skipped != nil {
-		testCase.Status = domain.StatusSkipped
-		errMsg = tc.Skipped.Message
-	} else {
-		testCase.Status = domain.StatusPassed
-		if testCase.RetryCount != nil {
-			testCase.IsFlaky = domain.BoolPtr(retryCount > 0)
-		}
+	status, errMsg, stackTrace, errType := caseOutcome(tc)
+	testCase.Status = status
+	// Only a case that eventually went green is flaky; a still-failing one is just
+	// failing, however many times it was retried.
+	if status == domain.StatusPassed && testCase.RetryCount != nil {
+		testCase.IsFlaky = domain.BoolPtr(*testCase.RetryCount > 0)
 	}
 
 	if errMsg != "" || stackTrace != "" || errType != "" {
 		testCase.Error = domain.FormatError(errMsg, stackTrace, errType)
 	}
 
-	if tc.SystemOut != "" || tc.SystemErr != "" {
-		testCase.Properties = make(map[string]string)
-		if tc.SystemOut != "" {
-			testCase.Properties["system-out"] = tc.SystemOut
-		}
-		if tc.SystemErr != "" {
-			testCase.Properties["system-err"] = tc.SystemErr
-		}
-	}
+	testCase.Properties = capturedOutput(tc)
 
 	return testCase
+}
+
+// extractRetryCount reads the retry count from the runner-specific property names.
+// Returns nil when absent or unparseable, so "no retry information" stays
+// distinguishable from "zero retries". The last parseable entry wins, matching how a
+// report that repeats the property is resolved.
+func extractRetryCount(props []Property) *int {
+	var out *int
+	for _, prop := range props {
+		if prop.Name != "retries" && prop.Name != "retryCount" {
+			continue
+		}
+		var n int
+		if _, err := fmt.Sscanf(prop.Value, "%d", &n); err == nil {
+			out = domain.IntPtr(n)
+		}
+	}
+	return out
+}
+
+// caseOutcome resolves the status and the error detail that goes with it. The order is
+// the contract: a case carrying several outcome elements is reported by the most severe,
+// so a report claiming both "failed" and "skipped" never rolls up as skipped.
+func caseOutcome(tc TestCase) (status domain.Status, message, stackTrace, errType string) {
+	switch {
+	case tc.Failure != nil:
+		return domain.StatusFailed, tc.Failure.Message, tc.Failure.Text, tc.Failure.Type
+	case tc.Error != nil:
+		return domain.StatusError, tc.Error.Message, tc.Error.Text, tc.Error.Type
+	case tc.Skipped != nil:
+		return domain.StatusSkipped, tc.Skipped.Message, "", ""
+	default:
+		return domain.StatusPassed, "", "", ""
+	}
+}
+
+// capturedOutput returns the captured streams, or nil when there are none — a nil map
+// keeps "nothing captured" distinct from "captured an empty string", and is what SEC-04
+// strips when --no-capture-output is set.
+func capturedOutput(tc TestCase) map[string]string {
+	if tc.SystemOut == "" && tc.SystemErr == "" {
+		return nil
+	}
+	props := make(map[string]string, 2)
+	if tc.SystemOut != "" {
+		props["system-out"] = tc.SystemOut
+	}
+	if tc.SystemErr != "" {
+		props["system-err"] = tc.SystemErr
+	}
+	return props
 }
