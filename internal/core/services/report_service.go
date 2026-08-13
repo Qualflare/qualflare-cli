@@ -315,6 +315,10 @@ func normalizeCasePriorities(suites []domain.Suite) {
 // printed during a run — including secrets — and --no-capture-output opts out of
 // uploading them. Test status, timing, and failure messages are left intact; only
 // the bulk captured output is dropped (SEC-04). delete on a nil map is a no-op.
+// This only ever deletes the two captured-output keys: it does not strip other,
+// arbitrary user-declared <property> values a report may carry (e.g. a "shard"
+// property, or any other custom metadata) — those are not captured output and are
+// left in Properties untouched.
 func stripCapturedOutput(suites []domain.Suite) {
 	for i := range suites {
 		for j := range suites[i].Cases {
@@ -341,7 +345,17 @@ func stripCapturedOutput(suites []domain.Suite) {
 // per-file WorkerIndex is only locally unique within that one shard/machine
 // and would otherwise collide once merged with another file's WorkerIndex
 // values (e.g. two Playwright shard files each have their own worker 0).
+//
+// With fewer than 2 suites (i.e. a single input file, post-dedupe), --shard
+// is a no-op: there is nothing to number relative to another shard, and
+// blindly stamping shard_index = 0 would silently clobber a real per-worker
+// index a file's own parser already set (native WorkerIndex, or the
+// shard-property fallback). This matches the flag's documented behavior
+// ("requires 2+ files. Does not apply to a single file.").
 func tagShardsByFile(suites []domain.Suite) {
+	if len(suites) < 2 {
+		return
+	}
 	for i := range suites {
 		for j := range suites[i].Cases {
 			suites[i].Cases[j].ShardIndex = domain.IntPtr(i)
