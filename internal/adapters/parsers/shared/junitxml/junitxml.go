@@ -7,6 +7,8 @@ import (
 	"encoding/xml"
 	"fmt"
 	"io"
+	"strconv"
+	"strings"
 	"time"
 
 	"golang.org/x/net/html/charset"
@@ -226,9 +228,50 @@ func convertTestCase(tc TestCase) domain.Case {
 		testCase.Error = domain.FormatError(errMsg, stackTrace, errType)
 	}
 
-	testCase.Properties = capturedOutput(tc)
+	testCase.Properties = mergeCaseProperties(tc)
+	// Fallback shard mechanism (mechanism C): a JUnit-family runner that can't emit
+	// Playwright's native workerIndex (mechanism A) can still report which shard ran a
+	// case via a plain <property name="shard" value="..."/> — e.g. pytest's
+	// record_property. Only applied when mechanism A hasn't already set ShardIndex, so a
+	// more specific/native signal always wins over this generic one.
+	if testCase.ShardIndex == nil {
+		if v, ok := testCase.Properties["shard"]; ok {
+			if n, err := strconv.Atoi(strings.TrimSpace(v)); err == nil {
+				testCase.ShardIndex = domain.IntPtr(n)
+			}
+		}
+	}
 
 	return testCase
+}
+
+// mergeCaseProperties combines every <properties><property> pair with captured
+// stdout/stderr into one map, so generic JUnit properties (pytest's
+// record_property, or any other runner's custom <property> extension) reach
+// domain.Case.Properties instead of being silently dropped — the same
+// passthrough Suite.Properties already gets. The well-known capture keys
+// always win over a same-named <property>, so a rogue property can't spoof
+// captured output.
+func mergeCaseProperties(tc TestCase) map[string]string {
+	var out map[string]string
+	for _, p := range tc.Properties {
+		if p.Name == "" {
+			continue
+		}
+		if out == nil {
+			out = make(map[string]string, len(tc.Properties))
+		}
+		out[p.Name] = p.Value
+	}
+	if captured := capturedOutput(tc); captured != nil {
+		if out == nil {
+			out = make(map[string]string, len(captured))
+		}
+		for k, v := range captured {
+			out[k] = v
+		}
+	}
+	return out
 }
 
 // extractRetryCount reads the retry count from the runner-specific property names.
