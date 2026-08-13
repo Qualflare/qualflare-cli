@@ -3,6 +3,8 @@ package pytest
 import (
 	"encoding/xml"
 	"io"
+	"strconv"
+	"strings"
 	"time"
 
 	"qualflare-cli/internal/adapters/parsers/base"
@@ -132,6 +134,15 @@ func (p *Parser) convertTestCase(tc TestCase) domain.Case {
 	// Add test case properties
 	for _, prop := range tc.Properties {
 		testCase.Properties[prop.Name] = prop.Value
+	}
+
+	// Fallback shard mechanism (mechanism C): pytest-xdist can't emit Playwright's
+	// native workerIndex (mechanism A), but a conftest using record_property("shard", ...)
+	// can still report which shard ran a case via a plain <property name="shard" value="..."/>.
+	if v, ok := testCase.Properties["shard"]; ok {
+		if n, err := strconv.Atoi(strings.TrimSpace(v)); err == nil {
+			testCase.ShardIndex = domain.IntPtr(n)
+		}
 	}
 
 	// Add file and line info
