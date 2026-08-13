@@ -223,6 +223,13 @@ func (p *Parser) convertTest(spec Spec, test Test, file string, prefix string) d
 		}
 
 		testCase.Attachments = convertAttachments(lastResult.Attachments)
+
+		testCase.ShardIndex = domain.IntPtr(lastResult.WorkerIndex)
+		if lastResult.StartTime != "" {
+			if t, err := time.Parse(time.RFC3339, lastResult.StartTime); err == nil {
+				testCase.StartedAt = &t
+			}
+		}
 	} else {
 		testCase.Status = statusFromTestLevel(test.Status)
 	}

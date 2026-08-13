@@ -151,8 +151,8 @@ func TestConvertTest_RetriesAndFlaky(t *testing.T) {
 func TestConvertTest_UsesLastResult(t *testing.T) {
 	p := &Parser{}
 	got := p.convertTest(Spec{Title: "spec"}, Test{Results: []Result{
-		{Status: "failed", Duration: 100},
-		{Status: "passed", Duration: 250},
+		{Status: "failed", Duration: 100, WorkerIndex: 0},
+		{Status: "passed", Duration: 250, WorkerIndex: 3},
 	}}, "a.spec.ts", "")
 
 	if got.Duration != 250*time.Millisecond {
@@ -161,6 +161,49 @@ func TestConvertTest_UsesLastResult(t *testing.T) {
 	if got.Status != domain.StatusPassed {
 		t.Errorf("Status = %q, want the last result's status", got.Status)
 	}
+	// WorkerIndex, like Duration/Status, comes from the last (post-retry) result.
+	if got.ShardIndex == nil || *got.ShardIndex != 3 {
+		t.Errorf("ShardIndex = %v, want 3 from the last result's WorkerIndex", got.ShardIndex)
+	}
+}
+
+// A valid RFC3339 StartTime on the last result flows into StartedAt.
+func TestConvertTest_StartedAt(t *testing.T) {
+	p := &Parser{}
+
+	t.Run("valid RFC3339 StartTime is parsed", func(t *testing.T) {
+		got := p.convertTest(Spec{Title: "spec"}, testWithResult(Result{
+			Status:    "passed",
+			StartTime: "2026-01-15T10:30:00.000Z",
+		}), "a.spec.ts", "")
+
+		want := time.Date(2026, 1, 15, 10, 30, 0, 0, time.UTC)
+		if got.StartedAt == nil || !got.StartedAt.Equal(want) {
+			t.Errorf("StartedAt = %v, want %v", got.StartedAt, want)
+		}
+	})
+
+	t.Run("missing StartTime leaves StartedAt nil", func(t *testing.T) {
+		got := p.convertTest(Spec{Title: "spec"}, testWithResult(Result{Status: "passed"}), "a.spec.ts", "")
+		if got.StartedAt != nil {
+			t.Errorf("StartedAt = %v, want nil when StartTime is missing", got.StartedAt)
+		}
+	})
+
+	t.Run("malformed StartTime leaves StartedAt nil without erroring", func(t *testing.T) {
+		got := p.convertTest(Spec{Title: "spec"}, testWithResult(Result{
+			Status:    "passed",
+			StartTime: "not-a-timestamp",
+		}), "a.spec.ts", "")
+		if got.StartedAt != nil {
+			t.Errorf("StartedAt = %v, want nil for a malformed StartTime", got.StartedAt)
+		}
+		// The rest of the case must still convert normally — a bad StartTime must not
+		// error the whole parse.
+		if got.Status != domain.StatusPassed {
+			t.Errorf("Status = %q, want passed even though StartTime was malformed", got.Status)
+		}
+	})
 }
 
 func TestConvertTest_NamingAndMetadata(t *testing.T) {
