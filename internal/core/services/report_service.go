@@ -276,6 +276,9 @@ func (s *ReportService) createReport(testSuites []domain.Suite, framework domain
 	if s.config.IsNoCaptureOutput() {
 		stripCapturedOutput(testSuites)
 	}
+	if s.config.IsShard() {
+		tagShardsByFile(testSuites)
+	}
 	return &domain.Launch{
 		Framework:   string(framework),
 		Platform:    s.config.GetPlatform(),
@@ -317,6 +320,31 @@ func stripCapturedOutput(suites []domain.Suite) {
 		for j := range suites[i].Cases {
 			delete(suites[i].Cases[j].Properties, "system-out")
 			delete(suites[i].Cases[j].Properties, "system-err")
+		}
+	}
+}
+
+// tagShardsByFile is mechanism B. testSuites[i] is exactly the i-th input
+// file's parsed Suite, in the same order ParseTestResults processed the
+// (globbed, deduped) files — i.e. post-glob-expansion (matches expand in
+// filepath.Glob's lexical order via expandGlobs, non-glob args pass through
+// literally, both in original argument order) and post-dedupeFiles (the
+// same path given twice, directly or via overlapping globs, collapses to
+// ONE file and gets exactly one shard slot, not two).
+//
+// Every case in file i gets shard_index = i (0-based), UNCONDITIONALLY
+// overwriting whatever mechanism A or C already set: --shard is an
+// explicit, per-invocation user statement that these files are separate
+// shards/machines, and it must win even over a file's own native worker
+// index. This is exactly the scenario --shard exists for — merging
+// multiple already-parallel shards' own report files — where a native
+// per-file WorkerIndex is only locally unique within that one shard/machine
+// and would otherwise collide once merged with another file's WorkerIndex
+// values (e.g. two Playwright shard files each have their own worker 0).
+func tagShardsByFile(suites []domain.Suite) {
+	for i := range suites {
+		for j := range suites[i].Cases {
+			suites[i].Cases[j].ShardIndex = domain.IntPtr(i)
 		}
 	}
 }

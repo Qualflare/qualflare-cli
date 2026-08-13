@@ -53,6 +53,7 @@ func TestApplyCollectOptions(t *testing.T) {
 			commit:      "cafe123",
 			timeout:     42 * time.Second,
 			dryRun:      true,
+			shard:       true,
 		})
 		if cfg.GetEnvironment() != "staging" || cfg.GetLanguage() != "en-GB" {
 			t.Errorf("environment/language = %q/%q", cfg.GetEnvironment(), cfg.GetLanguage())
@@ -62,6 +63,9 @@ func TestApplyCollectOptions(t *testing.T) {
 		}
 		if cfg.GetTimeout() != 42*time.Second || !cfg.IsDryRun() {
 			t.Errorf("timeout/dryRun = %v/%v", cfg.GetTimeout(), cfg.IsDryRun())
+		}
+		if !cfg.IsShard() {
+			t.Error("shard = false, want true")
 		}
 	})
 
@@ -80,6 +84,9 @@ func TestApplyCollectOptions(t *testing.T) {
 		}
 		if cfg.GetTimeout() != before {
 			t.Errorf("timeout = %v, want the default %v preserved", cfg.GetTimeout(), before)
+		}
+		if cfg.IsShard() {
+			t.Error("shard = true, want false (unset flag)")
 		}
 	})
 }

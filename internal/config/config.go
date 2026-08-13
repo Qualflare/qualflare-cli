@@ -46,6 +46,10 @@ type Config struct {
 	Quiet   bool
 	DryRun  bool
 	Debug   bool
+	// Shard is mechanism B (opt-in, explicit) for populating Case.ShardIndex:
+	// when set with 2+ input files, every case from file i is tagged
+	// shard_index = i (0-based), overwriting any value another mechanism set.
+	Shard bool
 	// NoCaptureOutput suppresses uploading captured stdout/stderr (JUnit
 	// system-out/system-err) — the streams most likely to contain secrets an
 	// environment printed during a test run. Test status and failure messages are
@@ -247,6 +251,11 @@ func (c *Config) SetDryRun(dryRun bool) {
 	c.DryRun = dryRun
 }
 
+// SetShard sets shard mode
+func (c *Config) SetShard(shard bool) {
+	c.Shard = shard
+}
+
 // GetAPIKey returns the API key
 func (c *Config) GetAPIKey() string {
 	return c.APIKey
@@ -332,6 +341,11 @@ func (c *Config) IsNoCaptureOutput() bool {
 // IsDryRun returns whether dry run mode is enabled
 func (c *Config) IsDryRun() bool {
 	return c.DryRun
+}
+
+// IsShard returns whether shard mode is enabled
+func (c *Config) IsShard() bool {
+	return c.Shard
 }
 
 // Validate validates the configuration
