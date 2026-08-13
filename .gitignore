@@ -40,3 +40,6 @@ Thumbs.db
 
 # AI assistant config
 CLAUDE.md
+
+# Git worktrees
+.worktrees/
