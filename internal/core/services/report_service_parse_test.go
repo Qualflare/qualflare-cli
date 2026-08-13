@@ -264,8 +264,10 @@ func TestParseTestResults_ShardFlag_DedupeInteraction(t *testing.T) {
 	cfg.SetShard(true)
 	s := NewReportService(fac, &stubSender{}, cfg)
 
-	// The same file listed twice must dedupe to one shard slot (index 0), not spill
-	// into a second slot at index 1.
+	// The same file listed twice must dedupe to one file, and with only one file
+	// left after dedupe, --shard becomes a no-op (fewer than 2 suites): the case's
+	// ShardIndex is left exactly as the parser produced it (nil here — onePassing
+	// sets none), not stamped to 0.
 	report, err := s.ParseTestResults(context.Background(), []string{f, f}, domain.FrameworkJUnit)
 	if err != nil {
 		t.Fatalf("ParseTestResults() = %v", err)
@@ -274,8 +276,41 @@ func TestParseTestResults_ShardFlag_DedupeInteraction(t *testing.T) {
 		t.Fatalf("Suites = %d, want 1 (deduped)", len(report.Suites))
 	}
 	for _, c := range report.Suites[0].Cases {
-		if c.ShardIndex == nil || *c.ShardIndex != 0 {
-			t.Errorf("ShardIndex = %v, want 0 — no phantom shard from the deduped duplicate", c.ShardIndex)
+		if c.ShardIndex != nil {
+			t.Errorf("ShardIndex = %v, want nil — single file (post-dedupe) + --shard must be a no-op", *c.ShardIndex)
+		}
+	}
+}
+
+// --shard with exactly one input file must be a true no-op: it must not overwrite
+// a real per-worker ShardIndex a file's own parser already set (native WorkerIndex,
+// or the shard-property fallback), matching the flag's documented "requires 2+
+// files. Does not apply to a single file." behavior.
+func TestParseTestResults_ShardFlag_SingleFileIsNoOp(t *testing.T) {
+	dir := t.TempDir()
+	f := writeFile(t, dir, "r.xml", "<x/>")
+	suite := onePassing(domain.FrameworkJUnit)
+	suite.Cases[0].ShardIndex = domain.IntPtr(3) // pre-set by mechanism A/C
+	parser := &stubParser{framework: domain.FrameworkJUnit, suite: suite}
+	fac := &stubFactory{parsers: map[domain.Framework]ports.Parser{domain.FrameworkJUnit: parser}}
+	cfg := config.DefaultConfig()
+	cfg.SetShard(true)
+	s := NewReportService(fac, &stubSender{}, cfg)
+
+	report, err := s.ParseTestResults(context.Background(), []string{f}, domain.FrameworkJUnit)
+	if err != nil {
+		t.Fatalf("ParseTestResults() = %v", err)
+	}
+	if len(report.Suites) != 1 {
+		t.Fatalf("Suites = %d, want 1", len(report.Suites))
+	}
+	for _, c := range report.Suites[0].Cases {
+		if c.ShardIndex == nil || *c.ShardIndex != 3 {
+			got := "nil"
+			if c.ShardIndex != nil {
+				got = fmt.Sprint(*c.ShardIndex)
+			}
+			t.Errorf("ShardIndex = %s, want 3 — --shard with a single file must not overwrite an existing ShardIndex", got)
 		}
 	}
 }
