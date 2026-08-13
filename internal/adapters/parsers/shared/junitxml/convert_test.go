@@ -168,6 +168,62 @@ func TestConvertTestCase_CapturedOutput(t *testing.T) {
 	}
 }
 
+// Mechanism C: generic <properties><property> pairs must reach domain.Case.Properties,
+// not just captured stdout/stderr — pytest's record_property (and any other runner's
+// custom <property> extension) relies on this passthrough.
+func TestConvertTestCase_GenericPropertyPassthrough(t *testing.T) {
+	got := convertTestCase(TestCase{
+		Name:       "t",
+		Properties: []Property{{Name: "browser", Value: "chrome"}},
+	})
+	if got.Properties["browser"] != "chrome" {
+		t.Errorf("Properties[browser] = %q, want %q", got.Properties["browser"], "chrome")
+	}
+}
+
+// Mechanism C's fallback: a <property name="shard" value="..."/> sets ShardIndex when no
+// more specific mechanism (e.g. Playwright's native workerIndex) already has.
+func TestConvertTestCase_ShardPropertyFallback(t *testing.T) {
+	tests := []struct {
+		name      string
+		props     []Property
+		wantShard *int
+	}{
+		{"valid integer", []Property{{Name: "shard", Value: "2"}}, domain.IntPtr(2)},
+		{"non-numeric value", []Property{{Name: "shard", Value: "not-a-number"}}, nil},
+		{"empty value", []Property{{Name: "shard", Value: ""}}, nil},
+		{"whitespace-padded value", []Property{{Name: "shard", Value: " 5 "}}, domain.IntPtr(5)},
+		{"no shard property", []Property{{Name: "browser", Value: "chrome"}}, nil},
+		{"no properties at all", nil, nil},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := convertTestCase(TestCase{Name: "t", Properties: tt.props})
+			switch {
+			case tt.wantShard == nil && got.ShardIndex != nil:
+				t.Errorf("ShardIndex = %d, want nil", *got.ShardIndex)
+			case tt.wantShard != nil && got.ShardIndex == nil:
+				t.Errorf("ShardIndex = nil, want %d", *tt.wantShard)
+			case tt.wantShard != nil && *got.ShardIndex != *tt.wantShard:
+				t.Errorf("ShardIndex = %d, want %d", *got.ShardIndex, *tt.wantShard)
+			}
+		})
+	}
+}
+
+// Captured stdout/stderr always win over a same-named <property> so a rogue property
+// can't spoof what the runner actually captured.
+func TestConvertTestCase_CapturedOutputWinsOverProperty(t *testing.T) {
+	got := convertTestCase(TestCase{
+		Name:       "t",
+		SystemOut:  "real stdout",
+		Properties: []Property{{Name: "system-out", Value: "fake"}},
+	})
+	if got.Properties["system-out"] != "real stdout" {
+		t.Errorf("Properties[system-out] = %q, want the real captured output to win", got.Properties["system-out"])
+	}
+}
+
 // BUG-13: prefer the suite-level time attribute, and fall back to summing the case
 // durations when it is missing or unparseable — otherwise a whole suite reports as 0s.
 func TestCollectSuite_DurationFallback(t *testing.T) {
