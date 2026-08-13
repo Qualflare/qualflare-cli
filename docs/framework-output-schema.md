@@ -43,6 +43,25 @@ Every parsed test result produces a `Suite` with the following structure:
 
 > **Note:** Browser and platform information for E2E tests are stored in `properties` and should be extracted to `Launch.Browser` when creating a Launch.
 
+### Shard index via `<property name="shard">`
+
+Any JUnit-family report (JUnit, TestNG, XCTest, Espresso, Maestro — anything parsed by the
+shared JUnit XML parser) or a Pytest report can report which shard/worker ran a case with a
+plain case-level property:
+
+```xml
+<properties>
+  <property name="shard" value="2"/>
+</properties>
+```
+
+- The property name is `shard`, case-sensitive.
+- The value must parse as an integer and is 0-based.
+- This is read as a fallback only when the framework's own parser hasn't already set a
+  native shard index (e.g. Playwright's `workerIndex`); a native signal always wins.
+- For pytest, a `conftest.py` recording `record_property("shard", worker_id)` (e.g. from
+  `pytest-xdist`'s `worker_id` fixture) is a concrete way to populate this.
+
 ---
 
 ## Unit Test Frameworks
