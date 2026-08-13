@@ -78,6 +78,9 @@ type ConfigProvider interface {
 	// IsNoCaptureOutput reports whether captured stdout/stderr (system-out/
 	// system-err) must be stripped from the report before sending (SEC-04).
 	IsNoCaptureOutput() bool
+	// IsShard reports whether --shard mode is enabled: every case from input
+	// file i is tagged shard_index = i, overwriting any other mechanism's value.
+	IsShard() bool
 
 	// Validation
 	Validate() error

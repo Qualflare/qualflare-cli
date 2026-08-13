@@ -45,6 +45,7 @@ func (c *stubConfig) IsQuiet() bool             { return false }
 func (c *stubConfig) IsDryRun() bool            { return false }
 func (c *stubConfig) IsDebug() bool             { return c.debug }
 func (c *stubConfig) IsNoCaptureOutput() bool   { return false }
+func (c *stubConfig) IsShard() bool             { return false }
 func (c *stubConfig) Validate() error           { return nil }
 
 func newTestClient(t *testing.T, h http.HandlerFunc) *Client {
