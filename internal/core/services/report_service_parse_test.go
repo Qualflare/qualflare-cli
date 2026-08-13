@@ -3,6 +3,7 @@ package services
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -31,7 +32,13 @@ func (p *stubParser) Parse(r io.Reader) (*domain.Suite, error) {
 	if _, err := io.ReadAll(r); err != nil {
 		return nil, err
 	}
+	// Deep-copy Cases so multiple Parse() calls on one stubParser (multiple files
+	// mapped to the same framework) hand back independent backing arrays, matching a
+	// real parser's per-file allocation — otherwise callers that mutate one returned
+	// suite's Cases in place (e.g. tagShardsByFile) would corrupt every other
+	// "file's" suite that aliased the same underlying array.
 	s := *p.suite
+	s.Cases = append([]domain.Case(nil), p.suite.Cases...)
 	return &s, nil
 }
 func (p *stubParser) GetFramework() domain.Framework    { return p.framework }
@@ -111,6 +118,42 @@ func onePassing(fw domain.Framework) *domain.Suite {
 	}
 }
 
+// --- tagShardsByFile (mechanism B: --shard) ---------------------------------------------
+
+// TestTagShardsByFile pins the direct unit contract: shard_index is the 0-based file
+// index the suite occupies, and it unconditionally overwrites any value another
+// mechanism (native worker index, or the shard-property fallback) already set — that
+// overwrite is the entire point of an explicit --shard: it must win.
+func TestTagShardsByFile(t *testing.T) {
+	suites := []domain.Suite{
+		{Cases: []domain.Case{
+			{Name: "a1"},
+			{Name: "a2", ShardIndex: domain.IntPtr(99)}, // pre-set by mechanism A/C
+		}},
+		{Cases: []domain.Case{
+			{Name: "b1", ShardIndex: domain.IntPtr(7)},
+		}},
+		{Cases: []domain.Case{
+			{Name: "c1"},
+		}},
+	}
+
+	tagShardsByFile(suites)
+
+	want := [][]int{{0, 0}, {1}, {2}}
+	for i := range suites {
+		for j := range suites[i].Cases {
+			got := suites[i].Cases[j].ShardIndex
+			if got == nil {
+				t.Fatalf("suite %d case %d: ShardIndex = nil, want %d", i, j, want[i][j])
+			}
+			if *got != want[i][j] {
+				t.Errorf("suite %d case %d: ShardIndex = %d, want %d", i, j, *got, want[i][j])
+			}
+		}
+	}
+}
+
 // --- ParseTestResults ------------------------------------------------------------------
 
 func TestParseTestResults_NoFiles(t *testing.T) {
@@ -171,6 +214,69 @@ func TestParseTestResults_DedupesFiles(t *testing.T) {
 	}
 	if len(report.Suites) != 1 {
 		t.Errorf("Suites = %d, want 1", len(report.Suites))
+	}
+}
+
+// End-to-end: --shard numbers each file's cases by argument position, 0-based, in the
+// same order ParseTestResults processed the (globbed, deduped) files.
+func TestParseTestResults_ShardFlag(t *testing.T) {
+	dir := t.TempDir()
+	files := []string{
+		writeFile(t, dir, "shard0.xml", "<x/>"),
+		writeFile(t, dir, "shard1.xml", "<x/>"),
+		writeFile(t, dir, "shard2.xml", "<x/>"),
+	}
+	parser := &stubParser{framework: domain.FrameworkJUnit, suite: onePassing(domain.FrameworkJUnit)}
+	fac := &stubFactory{parsers: map[domain.Framework]ports.Parser{domain.FrameworkJUnit: parser}}
+	cfg := config.DefaultConfig()
+	cfg.SetShard(true)
+	s := NewReportService(fac, &stubSender{}, cfg)
+
+	report, err := s.ParseTestResults(context.Background(), files, domain.FrameworkJUnit)
+	if err != nil {
+		t.Fatalf("ParseTestResults() = %v", err)
+	}
+	if len(report.Suites) != 3 {
+		t.Fatalf("Suites = %d, want 3", len(report.Suites))
+	}
+	for i, suite := range report.Suites {
+		for j, c := range suite.Cases {
+			if c.ShardIndex == nil || *c.ShardIndex != i {
+				got := "nil"
+				if c.ShardIndex != nil {
+					got = fmt.Sprint(*c.ShardIndex)
+				}
+				t.Errorf("suite %d (file %s) case %d: ShardIndex = %s, want %d", i, filepath.Base(files[i]), j, got, i)
+			}
+		}
+	}
+}
+
+// --shard must not create a phantom extra shard slot when dedupeFiles collapses the
+// same path (given twice, directly or via overlapping globs) into one file: the merged
+// file gets exactly one shard index, not two.
+func TestParseTestResults_ShardFlag_DedupeInteraction(t *testing.T) {
+	dir := t.TempDir()
+	f := writeFile(t, dir, "r.xml", "<x/>")
+	parser := &stubParser{framework: domain.FrameworkJUnit, suite: onePassing(domain.FrameworkJUnit)}
+	fac := &stubFactory{parsers: map[domain.Framework]ports.Parser{domain.FrameworkJUnit: parser}}
+	cfg := config.DefaultConfig()
+	cfg.SetShard(true)
+	s := NewReportService(fac, &stubSender{}, cfg)
+
+	// The same file listed twice must dedupe to one shard slot (index 0), not spill
+	// into a second slot at index 1.
+	report, err := s.ParseTestResults(context.Background(), []string{f, f}, domain.FrameworkJUnit)
+	if err != nil {
+		t.Fatalf("ParseTestResults() = %v", err)
+	}
+	if len(report.Suites) != 1 {
+		t.Fatalf("Suites = %d, want 1 (deduped)", len(report.Suites))
+	}
+	for _, c := range report.Suites[0].Cases {
+		if c.ShardIndex == nil || *c.ShardIndex != 0 {
+			t.Errorf("ShardIndex = %v, want 0 — no phantom shard from the deduped duplicate", c.ShardIndex)
+		}
 	}
 }
 

@@ -172,6 +172,7 @@ func (c *CLI) createCollectCommand() *cobra.Command {
 		commit      string
 		timeout     time.Duration
 		dryRun      bool
+		shard       bool
 		output      string
 	)
 
@@ -208,6 +209,7 @@ The format is auto-detected if not specified.`,
 				commit:      commit,
 				timeout:     timeout,
 				dryRun:      dryRun,
+				shard:       shard,
 				output:      output,
 			})
 		},
@@ -227,6 +229,8 @@ The format is auto-detected if not specified.`,
 	cmd.Flags().StringVar(&commit, "commit", "", "Git commit hash")
 	cmd.Flags().DurationVar(&timeout, "timeout", 30*time.Second, "Request timeout")
 	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "Parse files without sending")
+	cmd.Flags().BoolVar(&shard, "shard", false,
+		"Treat each input file as one parallel shard of the same run, numbered by argument position starting at 0 (requires 2+ files). Does not apply to a single file.")
 	cmd.Flags().StringVarP(&output, "output", "o", "", "Output format for dry-run (json)")
 
 	return cmd
@@ -242,6 +246,7 @@ type collectOptions struct {
 	commit      string
 	timeout     time.Duration
 	dryRun      bool
+	shard       bool
 	output      string
 }
 
@@ -298,6 +303,7 @@ func applyCollectOptions(cfg *config.Config, opts collectOptions) {
 	cfg.SetCommit(opts.commit)
 	cfg.SetTimeout(opts.timeout)
 	cfg.SetDryRun(opts.dryRun)
+	cfg.SetShard(opts.shard)
 }
 
 // verifyFilesExist fails on the first missing path rather than uploading a partial set.
