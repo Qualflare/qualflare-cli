@@ -253,6 +253,10 @@ type Case struct {
 	RetryCount *int  `json:"retryCount,omitempty"` // Number of retry attempts
 	IsFlaky    *bool `json:"isFlaky,omitempty"`    // True if test passed after one or more retries
 
+	// Shard/parallel-worker information (pointers: nil = not applicable/unknown)
+	ShardIndex *int       `json:"shardIndex,omitempty"` // Index of the worker/shard that ran this test
+	StartedAt  *time.Time `json:"startedAt,omitempty"`  // When this test started executing
+
 	// Error information (single field matching API schema)
 	Error string `json:"error,omitempty"`
 
