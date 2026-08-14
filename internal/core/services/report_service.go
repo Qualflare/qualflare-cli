@@ -5,11 +5,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"qualflare-cli/internal/core/domain"
 	"qualflare-cli/internal/core/ports"
 	"runtime"
+	"strings"
 	"time"
 )
 
@@ -18,6 +20,10 @@ type ReportService struct {
 	parserFactory ports.ParserFactory
 	sender        ports.ReportSender
 	config        ports.ConfigProvider
+	// warn receives operator-facing diagnostics only — never report data — so it is
+	// stderr in production (stdout stays machine-parseable, BUG-03/04) and a buffer
+	// under test.
+	warn io.Writer
 }
 
 // NewReportService creates a new report service
@@ -30,7 +36,16 @@ func NewReportService(
 		parserFactory: parserFactory,
 		sender:        sender,
 		config:        config,
+		warn:          os.Stderr,
 	}
+}
+
+// warnWriter never returns nil, so a zero-value ReportService cannot panic on a warning.
+func (s *ReportService) warnWriter() io.Writer {
+	if s.warn == nil {
+		return io.Discard
+	}
+	return s.warn
 }
 
 // ProcessTestResults parses files and sends results to the API
@@ -274,10 +289,10 @@ func dedupeFiles(files []string) []string {
 func (s *ReportService) createReport(testSuites []domain.Suite, framework domain.Framework) *domain.Launch {
 	normalizeCasePriorities(testSuites)
 	if s.config.IsNoCaptureOutput() {
-		stripCapturedOutput(testSuites)
+		stripSensitiveCaseProperties(testSuites)
 	}
 	if s.config.IsShard() {
-		tagShardsByFile(testSuites)
+		tagShardsByFile(testSuites, s.warnWriter())
 	}
 	return &domain.Launch{
 		Framework:   string(framework),
@@ -310,20 +325,90 @@ func normalizeCasePriorities(suites []domain.Suite) {
 	}
 }
 
-// stripCapturedOutput removes captured stdout/stderr (JUnit system-out/system-err)
-// from every case in place. Those streams routinely echo whatever an environment
-// printed during a run — including secrets — and --no-capture-output opts out of
-// uploading them. Test status, timing, and failure messages are left intact; only
-// the bulk captured output is dropped (SEC-04). delete on a nil map is a no-op.
-// This only ever deletes the two captured-output keys: it does not strip other,
-// arbitrary user-declared <property> values a report may carry (e.g. a "shard"
-// property, or any other custom metadata) — those are not captured output and are
-// left in Properties untouched.
-func stripCapturedOutput(suites []domain.Suite) {
+// structuralCaseProperties is the allowlist --no-capture-output keeps: every case
+// property key this repo's own parsers synthesize from a report's structure. Their
+// names AND values come from the tool's schema, never from free-form user text, so
+// they cannot carry a secret the way captured output or a custom property can.
+//
+// Anything NOT listed here is treated as user-authored and dropped by
+// stripSensitiveCaseProperties — see the comment there for why. Adding a parser that
+// emits a new structural case property means adding its key here, or
+// --no-capture-output users will silently lose it.
+var structuralCaseProperties = map[string]struct{}{
+	// Shared JUnit/pytest signals the parsers themselves interpret. The parsed values
+	// already live in typed fields (ShardIndex, RetryCount) by the time this runs, so
+	// keeping the raw properties is about not mangling a report the user can read back
+	// — and each is a bounded integer written by tooling, not free-form text.
+	"shard": {}, "retries": {}, "retryCount": {},
+
+	// Source location (junit, pytest, jest, mocha, phpunit, rspec, cypress, playwright,
+	// sonarqube, k6, testcafe).
+	"file": {}, "line": {}, "line_number": {}, "path": {},
+
+	// Test identity, grouping and environment (playwright, cypress, selenium, testcafe,
+	// cucumber, karate, k6).
+	"project": {}, "fullTitle": {}, "methodName": {}, "fixture": {}, "feature": {},
+	"uri": {}, "group": {}, "speed": {}, "browser": {}, "userAgent": {},
+
+	// newman request/response metadata.
+	"method": {}, "responseCode": {}, "responseTime": {},
+
+	// k6 check results.
+	"passes": {}, "fails": {}, "passRate": {},
+
+	// trivy / snyk package and vulnerability metadata (trivy's per-source cvss_<source>
+	// keys are open-ended and handled by prefix in isStructuralCaseProperty).
+	"package": {}, "installedVersion": {}, "fixedVersion": {}, "version": {},
+	"severity": {}, "url": {}, "resolution": {}, "cvssScore": {}, "isPatchable": {},
+	"isUpgradable": {}, "language": {}, "packageManager": {}, "fixedIn": {},
+	"dependencyPath": {},
+
+	// zap alert metadata.
+	"host": {}, "port": {}, "riskCode": {}, "riskDesc": {}, "confidence": {},
+	"cweId": {}, "wascId": {}, "solution": {}, "reference": {}, "instanceCount": {},
+	"affectedURL": {},
+
+	// sonarqube issue metadata.
+	"rule": {}, "ruleName": {}, "type": {}, "status": {}, "effort": {},
+	"component": {}, "assignee": {},
+}
+
+// isStructuralCaseProperty reports whether a case property key is one this repo's
+// parsers generate from a report's structure, rather than something a test author
+// wrote.
+func isStructuralCaseProperty(key string) bool {
+	if _, ok := structuralCaseProperties[key]; ok {
+		return true
+	}
+	// trivy emits one CVSS score per scoring source (cvss_nvd, cvss_redhat, ...): an
+	// open-ended key set, but every member is generated by the scanner.
+	return strings.HasPrefix(key, "cvss_")
+}
+
+// stripSensitiveCaseProperties drops every case property that a parser did not
+// generate itself, in place, for --no-capture-output (SEC-04).
+//
+// It started life deleting only system-out/system-err, which was equivalent to
+// emptying the map back when captured output was the only thing JUnit-family parsers
+// put in it. Once generic <property> values began flowing through (they have to — the
+// "shard" fallback reads one), that equivalence broke: a
+// <property name="AWS_SECRET_ACCESS_KEY" value="..."/> written by a test survived the
+// very flag that exists to keep such values off the server. So the rule is now an
+// allowlist: captured output, custom <property> values, TestCafe fixture/test meta and
+// any other user-authored key are dropped, and only structuralCaseProperties (plus
+// trivy's cvss_* family) survive.
+//
+// Status, timing, error messages and attachments are untouched — only Properties is
+// filtered. Ranging over a map while deleting from it is defined behaviour in Go, and
+// ranging a nil map is a no-op.
+func stripSensitiveCaseProperties(suites []domain.Suite) {
 	for i := range suites {
 		for j := range suites[i].Cases {
-			delete(suites[i].Cases[j].Properties, "system-out")
-			delete(suites[i].Cases[j].Properties, "system-err")
+			for key := range suites[i].Cases[j].Properties {
+				if !isStructuralCaseProperty(key) {
+					delete(suites[i].Cases[j].Properties, key)
+				}
+			}
 		}
 	}
 }
@@ -351,9 +436,21 @@ func stripCapturedOutput(suites []domain.Suite) {
 // blindly stamping shard_index = 0 would silently clobber a real per-worker
 // index a file's own parser already set (native WorkerIndex, or the
 // shard-property fallback). This matches the flag's documented behavior
-// ("requires 2+ files. Does not apply to a single file.").
-func tagShardsByFile(suites []domain.Suite) {
+// ("requires 2+ files. Does not apply to a single file."). That no-op is
+// announced on warn rather than taken silently: the user explicitly asked for
+// --shard semantics, and a glob that collapsed to one file (or two spellings
+// of the same path) otherwise looks like it worked.
+//
+// i is a slice index over the input files, so shard_index is inherently within
+// the server's 32-bit range here — unlike the property-driven fallbacks, which
+// bound-check their parsed value (base.ParseShardIndex).
+func tagShardsByFile(suites []domain.Suite, warn io.Writer) {
 	if len(suites) < 2 {
+		// Counted after glob expansion and de-duplication, which is where the count can
+		// differ from the number of arguments the user typed.
+		fmt.Fprintf(warn,
+			"warning: --shard requires 2+ input files to have any effect; %d file(s) left after glob expansion and de-duplication, shard tagging skipped\n",
+			len(suites))
 		return
 	}
 	for i := range suites {
