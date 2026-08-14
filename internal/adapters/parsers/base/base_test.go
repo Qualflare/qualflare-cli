@@ -187,3 +187,28 @@ func TestParseShardIndex(t *testing.T) {
 		})
 	}
 }
+
+// The same bound for callers that already hold an int — Playwright's JSON workerIndex.
+// On the 64-bit targets this CLI ships for, decoding cannot be relied on to reject an
+// out-of-range value, so this is the only thing standing between a crafted report and an
+// unstorable shard_index.
+func TestValidShardIndex(t *testing.T) {
+	tests := []struct {
+		in   int
+		want bool
+	}{
+		{0, true},
+		{7, true},
+		{2147483647, true},  // int32 max, the last storable value
+		{2147483648, false}, // one past it: fine for a 64-bit int, not for the column
+		{9223372036854775807, false},
+		{-1, false},
+		{-3, false},
+		{-9223372036854775808, false},
+	}
+	for _, tt := range tests {
+		if got := ValidShardIndex(tt.in); got != tt.want {
+			t.Errorf("ValidShardIndex(%d) = %v, want %v", tt.in, got, tt.want)
+		}
+	}
+}

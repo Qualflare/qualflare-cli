@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"qualflare-cli/internal/adapters/parsers/base"
 	"qualflare-cli/internal/core/domain"
 )
 
@@ -231,8 +232,15 @@ func (p *Parser) convertTest(spec Spec, test Test, file string, prefix string) d
 
 		// Mechanism A: Playwright's own per-worker index. Only set when the report
 		// actually carried one — an absent workerIndex leaves ShardIndex nil ("no shard
-		// data") instead of claiming worker 0.
-		if lastResult.WorkerIndex != nil {
+		// data") instead of claiming worker 0 — and only when the value fits the
+		// server's 32-bit signed shard_index column.
+		//
+		// The bound is not redundant with JSON decoding: `int` is 64 bits on every
+		// platform this CLI ships for, so "workerIndex": 2147483648 or -3 decodes
+		// cleanly and would reach the wire unbounded, risking rejection of the whole
+		// launch over one optional hint. Out-of-range is skipped silently, exactly as
+		// the junitxml/pytest `shard` property fallback does (base.ParseShardIndex).
+		if lastResult.WorkerIndex != nil && base.ValidShardIndex(*lastResult.WorkerIndex) {
 			testCase.ShardIndex = domain.IntPtr(*lastResult.WorkerIndex)
 		}
 		if lastResult.StartTime != "" {

@@ -12,6 +12,17 @@ import (
 // is not storable there and must never leave this CLI.
 const MaxShardIndex = math.MaxInt32
 
+// ValidShardIndex reports whether n is storable in the server's shard_index column.
+//
+// Callers that already hold an int use this; callers holding raw property text use
+// ParseShardIndex, which is this check plus a parse. The int case is not hypothetical:
+// Playwright's JSON `workerIndex` decodes straight into an int, and on every platform
+// this CLI is built for (goarch amd64/arm64) that is 64 bits wide — so 2147483648 and
+// -3 decode without error and would otherwise reach the wire unbounded.
+func ValidShardIndex(n int) bool {
+	return n >= 0 && n <= MaxShardIndex
+}
+
 // ParseShardIndex parses the value of a shard property and reports whether it is
 // usable. A value that is not an integer, is negative, or overflows the server's
 // 32-bit signed shard_index column is reported as unusable so the caller leaves
@@ -22,7 +33,7 @@ const MaxShardIndex = math.MaxInt32
 // metadata, and one malformed property must never fail an upload.
 func ParseShardIndex(value string) (int, bool) {
 	n, err := strconv.Atoi(strings.TrimSpace(value))
-	if err != nil || n < 0 || n > MaxShardIndex {
+	if err != nil || !ValidShardIndex(n) {
 		return 0, false
 	}
 	return n, true
