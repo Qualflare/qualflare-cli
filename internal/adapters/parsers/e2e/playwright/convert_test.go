@@ -151,8 +151,8 @@ func TestConvertTest_RetriesAndFlaky(t *testing.T) {
 func TestConvertTest_UsesLastResult(t *testing.T) {
 	p := &Parser{}
 	got := p.convertTest(Spec{Title: "spec"}, Test{Results: []Result{
-		{Status: "failed", Duration: 100, WorkerIndex: 0},
-		{Status: "passed", Duration: 250, WorkerIndex: 3},
+		{Status: "failed", Duration: 100, WorkerIndex: domain.IntPtr(0)},
+		{Status: "passed", Duration: 250, WorkerIndex: domain.IntPtr(3)},
 	}}, "a.spec.ts", "")
 
 	if got.Duration != 250*time.Millisecond {
@@ -164,6 +164,79 @@ func TestConvertTest_UsesLastResult(t *testing.T) {
 	// WorkerIndex, like Duration/Status, comes from the last (post-retry) result.
 	if got.ShardIndex == nil || *got.ShardIndex != 3 {
 		t.Errorf("ShardIndex = %v, want 3 from the last result's WorkerIndex", got.ShardIndex)
+	}
+}
+
+// Mechanism A: workerIndex becomes ShardIndex — but ONLY when the report actually
+// carried the key. ShardIndex == nil is the project-wide encoding of "this report has no
+// shard data", so a report that never mentioned workerIndex must not come out claiming
+// worker 0: that would be indistinguishable from a genuine shard 0, and it would attach
+// a spurious shardIndex to every case of every non-sharded Playwright report.
+func TestConvertTest_ShardIndexFromWorkerIndex(t *testing.T) {
+	p := &Parser{}
+	tests := []struct {
+		name string
+		in   *int
+		want *int
+	}{
+		{"absent workerIndex leaves ShardIndex nil", nil, nil},
+		{"explicit worker 0 is a real shard 0", domain.IntPtr(0), domain.IntPtr(0)},
+		{"non-zero worker index", domain.IntPtr(4), domain.IntPtr(4)},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := p.convertTest(Spec{Title: "spec"},
+				testWithResult(Result{Status: "passed", WorkerIndex: tt.in}), "a.spec.ts", "")
+			switch {
+			case tt.want == nil && got.ShardIndex != nil:
+				t.Errorf("ShardIndex = %d, want nil", *got.ShardIndex)
+			case tt.want != nil && got.ShardIndex == nil:
+				t.Errorf("ShardIndex = nil, want %d", *tt.want)
+			case tt.want != nil && *got.ShardIndex != *tt.want:
+				t.Errorf("ShardIndex = %d, want %d", *got.ShardIndex, *tt.want)
+			}
+		})
+	}
+}
+
+// The same contract through the real JSON decoder, which is where the regression lived:
+// a plain int field cannot tell an absent key from an explicit 0.
+func TestParse_ShardIndexOnlyWhenWorkerIndexPresent(t *testing.T) {
+	report := func(result string) string {
+		return `{"suites":[{"title":"S","file":"a.spec.ts","specs":[{"title":"t","tests":[{"results":[` +
+			result + `]}]}]}],"stats":{}}`
+	}
+	tests := []struct {
+		name   string
+		result string
+		want   *int
+	}{
+		// Every Playwright report written before this field was wired up, plus any
+		// hand-trimmed or merged blob, looks like this.
+		{"no workerIndex key at all", `{"status":"passed","duration":10}`, nil},
+		{"explicit null", `{"status":"passed","workerIndex":null}`, nil},
+		{"explicit 0", `{"status":"passed","workerIndex":0}`, domain.IntPtr(0)},
+		{"explicit 2", `{"status":"passed","workerIndex":2}`, domain.IntPtr(2)},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			suite, err := New().Parse(strings.NewReader(report(tt.result)))
+			if err != nil {
+				t.Fatalf("Parse() = %v", err)
+			}
+			if len(suite.Cases) != 1 {
+				t.Fatalf("cases = %d, want 1", len(suite.Cases))
+			}
+			got := suite.Cases[0].ShardIndex
+			switch {
+			case tt.want == nil && got != nil:
+				t.Errorf("ShardIndex = %d, want nil — no shard data was reported", *got)
+			case tt.want != nil && got == nil:
+				t.Errorf("ShardIndex = nil, want %d", *tt.want)
+			case tt.want != nil && *got != *tt.want:
+				t.Errorf("ShardIndex = %d, want %d", *got, *tt.want)
+			}
+		})
 	}
 }
 
