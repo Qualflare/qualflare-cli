@@ -98,7 +98,7 @@ Supported frameworks:
 	cmd.PersistentFlags().BoolVarP(&c.config.Verbose, "verbose", "v", c.config.Verbose, "Enable verbose output")
 	cmd.PersistentFlags().BoolVarP(&c.config.Quiet, "quiet", "q", c.config.Quiet, "Suppress non-error output")
 	cmd.PersistentFlags().BoolVar(&c.config.Debug, "debug", c.config.Debug, "Log full HTTP request/response to stderr (token redacted)")
-	cmd.PersistentFlags().BoolVar(&c.config.NoCaptureOutput, "no-capture-output", c.config.NoCaptureOutput, "Do not upload captured stdout/stderr (system-out/system-err) — keeps secrets printed during tests off the server. Does not strip other, explicitly declared <property> values.")
+	cmd.PersistentFlags().BoolVar(&c.config.NoCaptureOutput, "no-capture-output", c.config.NoCaptureOutput, "Do not upload captured stdout/stderr (system-out/system-err), nor any custom <property> value a test declared — keeps secrets printed or recorded during tests off the server. Structural case properties a parser generates itself (file, line, shard, severity, ...) are still uploaded.")
 
 	// Flat (auth-less) subcommands
 	cmd.AddCommand(c.createLoginCommand())
@@ -230,7 +230,7 @@ The format is auto-detected if not specified.`,
 	cmd.Flags().DurationVar(&timeout, "timeout", 30*time.Second, "Request timeout")
 	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "Parse files without sending")
 	cmd.Flags().BoolVar(&shard, "shard", false,
-		"Treat each input file as one parallel shard of the same run, numbered by argument position starting at 0 (requires 2+ files). Does not apply to a single file.")
+		"Treat each input file as one parallel shard of the same run, numbered by argument position starting at 0 (requires 2+ files). Does not apply to a single file. WARNING: with a glob, files are numbered in lexical filename order (t1, t10, t100, t2, ...), which is NOT a stable per-shard identity — adding, renaming or losing a file shifts every later index. List the files explicitly, in shard order, when the index has to be stable across runs.")
 	cmd.Flags().StringVarP(&output, "output", "o", "", "Output format for dry-run (json)")
 
 	return cmd

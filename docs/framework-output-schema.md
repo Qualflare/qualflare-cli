@@ -57,10 +57,46 @@ plain case-level property:
 
 - The property name is `shard`, case-sensitive.
 - The value must parse as an integer and is 0-based.
+- The value must be within `0`–`2147483647`. The server stores `shard_index` in a 32-bit
+  signed column, so a negative or larger value is **ignored** — the case is uploaded with
+  no shard index at all, exactly as if the property had been absent or non-numeric. This
+  is always a silent skip: a malformed shard hint never fails an upload.
 - This is read as a fallback only when the framework's own parser hasn't already set a
   native shard index (e.g. Playwright's `workerIndex`); a native signal always wins.
 - For pytest, a `conftest.py` recording `record_property("shard", worker_id)` (e.g. from
   `pytest-xdist`'s `worker_id` fixture) is a concrete way to populate this.
+
+Playwright reports carry the index natively as `results[].workerIndex`, and it is used
+only when the key is actually present. A report that omits it (older reporters,
+hand-merged or trimmed JSON) produces cases with **no** shard index rather than cases
+claiming worker `0`.
+
+### Shard index via `--shard`
+
+`qf collect a.xml b.xml --shard` treats each **input file** as one shard of the same run
+and stamps its cases with the file's 0-based position, overriding whatever the file's own
+parser produced.
+
+- It requires 2+ files after glob expansion and de-duplication. With one file it is a
+  no-op and prints a warning to stderr — the file's own shard data is left untouched.
+- **With a glob, the numbering is lexical filename order, not a stable per-shard
+  identity.** `qf collect 'reports/*.xml' --shard` numbers `t1.xml`→0, `t10.xml`→1,
+  `t100.xml`→2, `t2.xml`→3, and a file that is added, renamed, or missing on the next run
+  shifts every index after it. When the index must mean the same shard from run to run,
+  list the files explicitly in shard order (`qf collect s0.xml s1.xml s2.xml --shard`), or
+  have each shard emit its own `shard` property / native `workerIndex` instead.
+
+### Case properties and `--no-capture-output`
+
+`--no-capture-output` drops, from every case, both captured streams (`system-out`,
+`system-err`) **and** every property key that a parser did not generate itself — custom
+JUnit/pytest `<property>` values, TestCafe `fixture.*`/`test.*` meta, and k6 threshold
+metric keys. Only the structural keys documented per framework below (plus trivy's
+`cvss_<source>` family) are uploaded.
+
+The flag exists to keep values a test printed or recorded — which routinely include
+credentials — off the server, so anything whose key was chosen by a test author is
+treated as potentially sensitive. Suite-level properties are not filtered.
 
 ---
 

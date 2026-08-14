@@ -138,7 +138,12 @@ func TestTagShardsByFile(t *testing.T) {
 		}},
 	}
 
-	tagShardsByFile(suites)
+	var warn strings.Builder
+	tagShardsByFile(suites, &warn)
+
+	if warn.Len() != 0 {
+		t.Errorf("warned on a multi-file tagging run: %q", warn.String())
+	}
 
 	want := [][]int{{0, 0}, {1}, {2}}
 	for i := range suites {
@@ -152,6 +157,74 @@ func TestTagShardsByFile(t *testing.T) {
 			}
 		}
 	}
+}
+
+// --shard with fewer than 2 files does nothing — which is correct, but the user
+// explicitly asked for shard semantics, so it must say so instead of falling back
+// silently. A glob that collapsed to one match (or two spellings of one path) is the
+// realistic way to land here, and it looks identical to success without this warning.
+func TestTagShardsByFile_WarnsWhenItCannotApply(t *testing.T) {
+	tests := []struct {
+		name   string
+		suites []domain.Suite
+	}{
+		{"single file", []domain.Suite{{Cases: []domain.Case{{Name: "a"}}}}},
+		{"no files", nil},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var warn strings.Builder
+			tagShardsByFile(tt.suites, &warn)
+
+			got := warn.String()
+			for _, want := range []string{"warning:", "--shard", "2+ input files", "skipped"} {
+				if !strings.Contains(got, want) {
+					t.Errorf("warning = %q, missing %q", got, want)
+				}
+			}
+			if !strings.Contains(got, fmt.Sprintf("%d file(s) left after glob expansion and de-duplication", len(tt.suites))) {
+				t.Errorf("warning = %q, want it to report how many files were left to tag", got)
+			}
+		})
+	}
+}
+
+// The warning must reach the operator on the real path too, and the single file's own
+// shard data must survive the no-op.
+func TestCreateReport_ShardWarningReachesStderrWriter(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.SetShard(true)
+	s := NewReportService(nil, nil, cfg)
+	var warn strings.Builder
+	s.warn = &warn
+
+	suites := []domain.Suite{{Cases: []domain.Case{{Name: "a", ShardIndex: domain.IntPtr(3)}}}}
+	report := s.createReport(suites, domain.FrameworkJUnit)
+
+	if !strings.Contains(warn.String(), "--shard requires 2+ input files") {
+		t.Errorf("warn = %q, want the --shard no-op warning", warn.String())
+	}
+	if got := report.Suites[0].Cases[0].ShardIndex; got == nil || *got != 3 {
+		t.Errorf("ShardIndex = %v, want the parser's own 3 left untouched", got)
+	}
+
+	// Two files: the flag applies, so there is nothing to warn about.
+	warn.Reset()
+	s.createReport([]domain.Suite{
+		{Cases: []domain.Case{{Name: "a"}}},
+		{Cases: []domain.Case{{Name: "b"}}},
+	}, domain.FrameworkJUnit)
+	if warn.Len() != 0 {
+		t.Errorf("warn = %q, want silence when --shard actually applies", warn.String())
+	}
+}
+
+// A service built without the constructor must not panic when it warns.
+func TestReportService_WarnWriterDefaultsToDiscard(t *testing.T) {
+	cfg := config.DefaultConfig()
+	cfg.SetShard(true)
+	s := &ReportService{config: cfg}
+	s.createReport([]domain.Suite{{Cases: []domain.Case{{Name: "a"}}}}, domain.FrameworkJUnit)
 }
 
 // --- ParseTestResults ------------------------------------------------------------------
@@ -263,6 +336,8 @@ func TestParseTestResults_ShardFlag_DedupeInteraction(t *testing.T) {
 	cfg := config.DefaultConfig()
 	cfg.SetShard(true)
 	s := NewReportService(fac, &stubSender{}, cfg)
+	var warn strings.Builder
+	s.warn = &warn
 
 	// The same file listed twice must dedupe to one file, and with only one file
 	// left after dedupe, --shard becomes a no-op (fewer than 2 suites): the case's
@@ -280,6 +355,11 @@ func TestParseTestResults_ShardFlag_DedupeInteraction(t *testing.T) {
 			t.Errorf("ShardIndex = %v, want nil — single file (post-dedupe) + --shard must be a no-op", *c.ShardIndex)
 		}
 	}
+	// Silently collapsing two --shard arguments into an unsharded upload is exactly the
+	// case that must not go unannounced.
+	if !strings.Contains(warn.String(), "--shard requires 2+ input files") {
+		t.Errorf("warn = %q, want the --shard no-op warning after dedupe left one file", warn.String())
+	}
 }
 
 // --shard with exactly one input file must be a true no-op: it must not overwrite
@@ -296,6 +376,8 @@ func TestParseTestResults_ShardFlag_SingleFileIsNoOp(t *testing.T) {
 	cfg := config.DefaultConfig()
 	cfg.SetShard(true)
 	s := NewReportService(fac, &stubSender{}, cfg)
+	var warn strings.Builder
+	s.warn = &warn
 
 	report, err := s.ParseTestResults(context.Background(), []string{f}, domain.FrameworkJUnit)
 	if err != nil {
@@ -303,6 +385,9 @@ func TestParseTestResults_ShardFlag_SingleFileIsNoOp(t *testing.T) {
 	}
 	if len(report.Suites) != 1 {
 		t.Fatalf("Suites = %d, want 1", len(report.Suites))
+	}
+	if !strings.Contains(warn.String(), "--shard requires 2+ input files") {
+		t.Errorf("warn = %q, want the --shard no-op warning", warn.String())
 	}
 	for _, c := range report.Suites[0].Cases {
 		if c.ShardIndex == nil || *c.ShardIndex != 3 {
