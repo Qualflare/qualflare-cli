@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -317,7 +318,7 @@ func TestParseTestResults_ShardFlag(t *testing.T) {
 			if c.ShardIndex == nil || *c.ShardIndex != i {
 				got := "nil"
 				if c.ShardIndex != nil {
-					got = fmt.Sprint(*c.ShardIndex)
+					got = strconv.Itoa(*c.ShardIndex)
 				}
 				t.Errorf("suite %d (file %s) case %d: ShardIndex = %s, want %d", i, filepath.Base(files[i]), j, got, i)
 			}
@@ -393,7 +394,7 @@ func TestParseTestResults_ShardFlag_SingleFileIsNoOp(t *testing.T) {
 		if c.ShardIndex == nil || *c.ShardIndex != 3 {
 			got := "nil"
 			if c.ShardIndex != nil {
-				got = fmt.Sprint(*c.ShardIndex)
+				got = strconv.Itoa(*c.ShardIndex)
 			}
 			t.Errorf("ShardIndex = %s, want 3 — --shard with a single file must not overwrite an existing ShardIndex", got)
 		}
