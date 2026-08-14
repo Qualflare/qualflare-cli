@@ -5,11 +5,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"qualflare-cli/internal/core/domain"
 	"qualflare-cli/internal/core/ports"
 	"runtime"
+	"strconv"
+	"strings"
 	"time"
 )
 
@@ -18,6 +21,10 @@ type ReportService struct {
 	parserFactory ports.ParserFactory
 	sender        ports.ReportSender
 	config        ports.ConfigProvider
+	// warn receives operator-facing diagnostics only — never report data — so it is
+	// stderr in production (stdout stays machine-parseable, BUG-03/04) and a buffer
+	// under test.
+	warn io.Writer
 }
 
 // NewReportService creates a new report service
@@ -30,7 +37,16 @@ func NewReportService(
 		parserFactory: parserFactory,
 		sender:        sender,
 		config:        config,
+		warn:          os.Stderr,
 	}
+}
+
+// warnWriter never returns nil, so a zero-value ReportService cannot panic on a warning.
+func (s *ReportService) warnWriter() io.Writer {
+	if s.warn == nil {
+		return io.Discard
+	}
+	return s.warn
 }
 
 // ProcessTestResults parses files and sends results to the API
@@ -95,6 +111,15 @@ func (s *ReportService) ParseTestResults(ctx context.Context, files []string, fr
 		suite, parseErr := s.parseFile(filePath, currentParser)
 		if parseErr != nil {
 			return nil, fmt.Errorf("failed to parse file %s: %w", filePath, parseErr)
+		}
+
+		// The rest of --no-capture-output is applied in createReport, which sees only
+		// []domain.Suite. This half has to happen here because it is the one filter
+		// that depends on WHICH parser produced the suite, and that is known only
+		// inside this loop — a launch can mix frameworks, so the launch-level label
+		// resolved below cannot answer it.
+		if s.config.IsNoCaptureOutput() {
+			stripUserAuthoredSuiteProperties(suite, currentParser.GetFramework())
 		}
 
 		testSuites = append(testSuites, *suite)
@@ -274,10 +299,12 @@ func dedupeFiles(files []string) []string {
 func (s *ReportService) createReport(testSuites []domain.Suite, framework domain.Framework) *domain.Launch {
 	normalizeCasePriorities(testSuites)
 	if s.config.IsNoCaptureOutput() {
-		stripCapturedOutput(testSuites)
+		// Suite-level properties are filtered in ParseTestResults, where the producing
+		// parser is still known — see stripUserAuthoredSuiteProperties.
+		stripSensitiveCaseProperties(testSuites)
 	}
 	if s.config.IsShard() {
-		tagShardsByFile(testSuites)
+		tagShardsByFile(testSuites, s.warnWriter())
 	}
 	return &domain.Launch{
 		Framework:   string(framework),
@@ -310,20 +337,158 @@ func normalizeCasePriorities(suites []domain.Suite) {
 	}
 }
 
-// stripCapturedOutput removes captured stdout/stderr (JUnit system-out/system-err)
-// from every case in place. Those streams routinely echo whatever an environment
-// printed during a run — including secrets — and --no-capture-output opts out of
-// uploading them. Test status, timing, and failure messages are left intact; only
-// the bulk captured output is dropped (SEC-04). delete on a nil map is a no-op.
-// This only ever deletes the two captured-output keys: it does not strip other,
-// arbitrary user-declared <property> values a report may carry (e.g. a "shard"
-// property, or any other custom metadata) — those are not captured output and are
-// left in Properties untouched.
-func stripCapturedOutput(suites []domain.Suite) {
+// structuralCaseProperties is the allowlist --no-capture-output keeps: every case
+// property key this repo's own parsers synthesize from a report's structure. Their
+// names AND values come from the tool's schema, never from free-form user text, so
+// they cannot carry a secret the way captured output or a custom property can.
+//
+// Anything NOT listed here is treated as user-authored and dropped by
+// stripSensitiveCaseProperties — see the comment there for why. Adding a parser that
+// emits a new structural case property means adding its key here, or
+// --no-capture-output users will silently lose it.
+var structuralCaseProperties = map[string]struct{}{
+	// Shared JUnit/pytest signals the parsers themselves interpret. The parsed values
+	// already live in typed fields (ShardIndex, RetryCount) by the time this runs, so
+	// keeping the raw properties is about not mangling a report the user can read back
+	// — and each is a bounded integer written by tooling, not free-form text.
+	"shard": {}, "retries": {}, "retryCount": {},
+
+	// Source location (junit, pytest, jest, mocha, phpunit, rspec, cypress, playwright,
+	// sonarqube, k6, testcafe).
+	"file": {}, "line": {}, "line_number": {}, "path": {},
+
+	// Test identity, grouping and environment (playwright, cypress, selenium, testcafe,
+	// cucumber, karate, k6).
+	"project": {}, "fullTitle": {}, "methodName": {}, "fixture": {}, "feature": {},
+	"uri": {}, "group": {}, "speed": {}, "browser": {}, "userAgent": {},
+
+	// newman request/response metadata.
+	"method": {}, "responseCode": {}, "responseTime": {},
+
+	// k6 check results.
+	"passes": {}, "fails": {}, "passRate": {},
+
+	// trivy / snyk package and vulnerability metadata (trivy's per-source cvss_<source>
+	// keys are open-ended and handled by prefix in isStructuralProperty).
+	"package": {}, "installedVersion": {}, "fixedVersion": {}, "version": {},
+	"severity": {}, "url": {}, "resolution": {}, "cvssScore": {}, "isPatchable": {},
+	"isUpgradable": {}, "language": {}, "packageManager": {}, "fixedIn": {},
+	"dependencyPath": {},
+
+	// zap alert metadata.
+	"host": {}, "port": {}, "riskCode": {}, "riskDesc": {}, "confidence": {},
+	"cweId": {}, "wascId": {}, "solution": {}, "reference": {}, "instanceCount": {},
+	"affectedURL": {},
+
+	// sonarqube issue metadata.
+	"rule": {}, "ruleName": {}, "type": {}, "status": {}, "effort": {},
+	"component": {}, "assignee": {},
+}
+
+// k6MetricAggregations are the aggregation keys k6 puts in a metric's `values` object,
+// which the k6 parser copies verbatim onto each threshold case. They are tool-generated
+// measurements, structural in exactly the way trivy's cvss_* scores are — but unlike
+// cvss_*, several are bare English words that a test author could plausibly also use as
+// a custom property name, so membership here is not sufficient on its own: see
+// isStructuralProperty.
+//
+// Trend metrics also emit percentiles (p(90), p(95), and any p(N) a threshold defines),
+// handled by prefix.
+var k6MetricAggregations = map[string]struct{}{
+	"avg": {}, "min": {}, "med": {}, "max": {}, "count": {}, "rate": {}, "value": {},
+}
+
+// isStructuralProperty reports whether a property is one this repo's parsers generate
+// from a report's structure, rather than something a test author wrote.
+//
+// It takes the value as well as the key because one family of keys (k6's metric
+// aggregations) cannot be decided by name alone. Callers with no value to offer — or
+// that want the stricter key-only answer — pass "".
+func isStructuralProperty(key, value string) bool {
+	if _, ok := structuralCaseProperties[key]; ok {
+		return true
+	}
+	// trivy emits one CVSS score per scoring source (cvss_nvd, cvss_redhat, ...): an
+	// open-ended key set, but every member is generated by the scanner.
+	if strings.HasPrefix(key, "cvss_") {
+		return true
+	}
+	// k6 threshold metrics. The key alone is too weak a signal — "max" or "rate" is a
+	// name a test author might also pick — so the value must also be what the k6 parser
+	// writes there: a formatted float and nothing else. That keeps k6's threshold
+	// numbers, which the flag was gutting for no security benefit, without handing every
+	// passthrough parser a way to smuggle a secret out under a six-word vocabulary.
+	if _, ok := k6MetricAggregations[key]; ok {
+		return isFormattedNumber(value)
+	}
+	return strings.HasPrefix(key, "p(") && isFormattedNumber(value)
+}
+
+// isFormattedNumber reports whether s is entirely a decimal number, i.e. carries no
+// information beyond a measurement. Empty is not a number, so a caller passing "" gets
+// false for the value-dependent families.
+func isFormattedNumber(s string) bool {
+	if s == "" {
+		return false
+	}
+	_, err := strconv.ParseFloat(s, 64)
+	return err == nil
+}
+
+// stripSensitiveCaseProperties drops every case property that a parser did not
+// generate itself, in place, for --no-capture-output (SEC-04).
+//
+// It started life deleting only system-out/system-err, which was equivalent to
+// emptying the map back when captured output was the only thing JUnit-family parsers
+// put in it. Once generic <property> values began flowing through (they have to — the
+// "shard" fallback reads one), that equivalence broke: a
+// <property name="AWS_SECRET_ACCESS_KEY" value="..."/> written by a test survived the
+// very flag that exists to keep such values off the server. So the rule is now an
+// allowlist: captured output, custom <property> values, TestCafe fixture/test meta and
+// any other user-authored key are dropped, and only what isStructuralProperty accepts
+// survives.
+//
+// Status, timing, error messages and attachments are untouched — only Properties is
+// filtered. Ranging over a map while deleting from it is defined behaviour in Go, and
+// ranging a nil map is a no-op.
+func stripSensitiveCaseProperties(suites []domain.Suite) {
 	for i := range suites {
 		for j := range suites[i].Cases {
-			delete(suites[i].Cases[j].Properties, "system-out")
-			delete(suites[i].Cases[j].Properties, "system-err")
+			for key, value := range suites[i].Cases[j].Properties {
+				if !isStructuralProperty(key, value) {
+					delete(suites[i].Cases[j].Properties, key)
+				}
+			}
+		}
+	}
+}
+
+// stripUserAuthoredSuiteProperties applies the same allowlist to a suite's own
+// Properties, for --no-capture-output (SEC-04), when the producing parser is one that
+// puts user-authored text there.
+//
+// Only pytest does. record_testsuite_property() is the sibling of the record_property()
+// the case-level filter already covers, and pytest.go copies every <testsuite>-level
+// <property> through verbatim, so a secret recorded that way survived the flag entirely
+// — the case-level fix alone left the flag's promise half true. Every other parser fills
+// suite Properties from fixed structural keys of its own (zapVersion, artifactName,
+// browser, k6's http_req_* summary, ...) with no user-authored text among them, and
+// junitxml does not decode <testsuite>-level <properties> at all, so they are left
+// alone: filtering them would need a second, suite-specific allowlist whose only effect
+// would be to silently gut scanner and load-test summaries the day a key is missed.
+//
+// Skipping non-pytest frameworks is a deliberate scope limit, not an oversight. Should
+// another parser ever pass user-authored suite properties through, add it here.
+func stripUserAuthoredSuiteProperties(suite *domain.Suite, framework domain.Framework) {
+	if framework != domain.FrameworkPython {
+		return
+	}
+	// The key-only form of the allowlist: pytest is a passthrough parser, so nothing it
+	// puts here is a k6-style measurement, and the value-dependent families would only
+	// widen what a record_testsuite_property() call can smuggle past the flag.
+	for key := range suite.Properties {
+		if !isStructuralProperty(key, "") {
+			delete(suite.Properties, key)
 		}
 	}
 }
@@ -351,9 +516,21 @@ func stripCapturedOutput(suites []domain.Suite) {
 // blindly stamping shard_index = 0 would silently clobber a real per-worker
 // index a file's own parser already set (native WorkerIndex, or the
 // shard-property fallback). This matches the flag's documented behavior
-// ("requires 2+ files. Does not apply to a single file.").
-func tagShardsByFile(suites []domain.Suite) {
+// ("requires 2+ files. Does not apply to a single file."). That no-op is
+// announced on warn rather than taken silently: the user explicitly asked for
+// --shard semantics, and a glob that collapsed to one file (or two spellings
+// of the same path) otherwise looks like it worked.
+//
+// i is a slice index over the input files, so shard_index is inherently within
+// the server's 32-bit range here — unlike the property-driven fallbacks, which
+// bound-check their parsed value (base.ParseShardIndex).
+func tagShardsByFile(suites []domain.Suite, warn io.Writer) {
 	if len(suites) < 2 {
+		// Counted after glob expansion and de-duplication, which is where the count can
+		// differ from the number of arguments the user typed.
+		fmt.Fprintf(warn,
+			"warning: --shard requires 2+ input files to have any effect; %d file(s) left after glob expansion and de-duplication, shard tagging skipped\n",
+			len(suites))
 		return
 	}
 	for i := range suites {

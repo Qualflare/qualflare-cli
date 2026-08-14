@@ -3,8 +3,6 @@ package pytest
 import (
 	"encoding/xml"
 	"io"
-	"strconv"
-	"strings"
 	"time"
 
 	"qualflare-cli/internal/adapters/parsers/base"
@@ -139,9 +137,16 @@ func (p *Parser) convertTestCase(tc TestCase) domain.Case {
 	// Fallback shard mechanism (mechanism C): pytest-xdist can't emit Playwright's
 	// native workerIndex (mechanism A), but a conftest using record_property("shard", ...)
 	// can still report which shard ran a case via a plain <property name="shard" value="..."/>.
-	if v, ok := testCase.Properties["shard"]; ok {
-		if n, err := strconv.Atoi(strings.TrimSpace(v)); err == nil {
-			testCase.ShardIndex = domain.IntPtr(n)
+	// Mirrors junitxml.convertTestCase exactly: applied only when nothing has already set
+	// ShardIndex (no earlier path here does today — the guard keeps a future native signal
+	// winning over this generic one), and a value that is non-numeric, negative, or too
+	// large for the server's 32-bit shard_index column is skipped silently, leaving
+	// ShardIndex nil rather than emitting a number the server cannot store.
+	if testCase.ShardIndex == nil {
+		if v, ok := testCase.Properties["shard"]; ok {
+			if n, valid := base.ParseShardIndex(v); valid {
+				testCase.ShardIndex = domain.IntPtr(n)
+			}
 		}
 	}
 

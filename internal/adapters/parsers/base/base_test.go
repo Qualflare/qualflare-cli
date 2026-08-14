@@ -144,3 +144,71 @@ func TestTruncateString(t *testing.T) {
 		})
 	}
 }
+
+// ParseShardIndex is the single bound check behind every property-driven shard hint
+// (junitxml's and pytest's `<property name="shard">`). The bound is not cosmetic: the
+// server stores shard_index in a 32-bit signed INTEGER column, and an out-of-range value
+// is rejected there — historically rejecting the whole launch upload, not just the one
+// case. So anything unstorable must be reported as unusable and dropped here.
+func TestParseShardIndex(t *testing.T) {
+	tests := []struct {
+		name  string
+		value string
+		want  int
+		ok    bool
+	}{
+		{"zero", "0", 0, true},
+		{"positive", "7", 7, true},
+		{"whitespace padded", "  12\n", 12, true},
+		{"int32 max is the last valid value", "2147483647", 2147483647, true},
+		{"one past int32 max", "2147483648", 0, false},
+		{"int64 max", "9223372036854775807", 0, false},
+		{"digits beyond any int", "999999999999999999999999", 0, false},
+		{"negative", "-1", 0, false},
+		{"large negative", "-2147483649", 0, false},
+		{"non-numeric", "shard-3", 0, false},
+		{"float", "1.5", 0, false},
+		{"empty", "", 0, false},
+		{"whitespace only", "   ", 0, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, ok := ParseShardIndex(tt.value)
+			if ok != tt.ok {
+				t.Fatalf("ParseShardIndex(%q) ok = %v, want %v", tt.value, ok, tt.ok)
+			}
+			if got != tt.want {
+				t.Errorf("ParseShardIndex(%q) = %d, want %d", tt.value, got, tt.want)
+			}
+			// A rejected value must never leak a usable-looking number to the caller.
+			if !ok && got != 0 {
+				t.Errorf("ParseShardIndex(%q) returned %d alongside ok=false", tt.value, got)
+			}
+		})
+	}
+}
+
+// The same bound for callers that already hold an int — Playwright's JSON workerIndex.
+// On the 64-bit targets this CLI ships for, decoding cannot be relied on to reject an
+// out-of-range value, so this is the only thing standing between a crafted report and an
+// unstorable shard_index.
+func TestValidShardIndex(t *testing.T) {
+	tests := []struct {
+		in   int
+		want bool
+	}{
+		{0, true},
+		{7, true},
+		{2147483647, true},  // int32 max, the last storable value
+		{2147483648, false}, // one past it: fine for a 64-bit int, not for the column
+		{9223372036854775807, false},
+		{-1, false},
+		{-3, false},
+		{-9223372036854775808, false},
+	}
+	for _, tt := range tests {
+		if got := ValidShardIndex(tt.in); got != tt.want {
+			t.Errorf("ValidShardIndex(%d) = %v, want %v", tt.in, got, tt.want)
+		}
+	}
+}

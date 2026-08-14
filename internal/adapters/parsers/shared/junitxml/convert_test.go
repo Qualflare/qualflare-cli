@@ -195,6 +195,15 @@ func TestConvertTestCase_ShardPropertyFallback(t *testing.T) {
 		{"whitespace-padded value", []Property{{Name: "shard", Value: " 5 "}}, domain.IntPtr(5)},
 		{"no shard property", []Property{{Name: "browser", Value: "chrome"}}, nil},
 		{"no properties at all", nil, nil},
+		// Out-of-range values are skipped exactly like non-numeric ones: the server's
+		// shard_index is a 32-bit signed column, and emitting a value it cannot store
+		// puts the ENTIRE launch upload at risk over one optional hint.
+		{"zero", []Property{{Name: "shard", Value: "0"}}, domain.IntPtr(0)},
+		{"negative value", []Property{{Name: "shard", Value: "-5"}}, nil},
+		{"int32 max is still accepted", []Property{{Name: "shard", Value: "2147483647"}}, domain.IntPtr(2147483647)},
+		{"one past int32 max", []Property{{Name: "shard", Value: "2147483648"}}, nil},
+		{"int64 max", []Property{{Name: "shard", Value: "9223372036854775807"}}, nil},
+		{"overflows any int", []Property{{Name: "shard", Value: "999999999999999999999999"}}, nil},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
