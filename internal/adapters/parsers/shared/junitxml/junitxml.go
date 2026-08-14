@@ -7,8 +7,6 @@ import (
 	"encoding/xml"
 	"fmt"
 	"io"
-	"strconv"
-	"strings"
 	"time"
 
 	"golang.org/x/net/html/charset"
@@ -233,10 +231,13 @@ func convertTestCase(tc TestCase) domain.Case {
 	// Playwright's native workerIndex (mechanism A) can still report which shard ran a
 	// case via a plain <property name="shard" value="..."/> — e.g. pytest's
 	// record_property. Only applied when mechanism A hasn't already set ShardIndex, so a
-	// more specific/native signal always wins over this generic one.
+	// more specific/native signal always wins over this generic one. A value that is
+	// non-numeric, negative, or too large for the server's 32-bit shard_index column
+	// is skipped silently (ShardIndex stays nil) rather than passed through, so one
+	// bogus property can never poison the whole launch upload.
 	if testCase.ShardIndex == nil {
 		if v, ok := testCase.Properties["shard"]; ok {
-			if n, err := strconv.Atoi(strings.TrimSpace(v)); err == nil {
+			if n, valid := base.ParseShardIndex(v); valid {
 				testCase.ShardIndex = domain.IntPtr(n)
 			}
 		}

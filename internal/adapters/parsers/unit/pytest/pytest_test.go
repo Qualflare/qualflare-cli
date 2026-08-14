@@ -96,6 +96,13 @@ func TestPytestConvertTestCase_ShardPropertyFallback(t *testing.T) {
 		{"whitespace-padded value", []Property{{Name: "shard", Value: " 5 "}}, domain.IntPtr(5)},
 		{"no shard property", []Property{{Name: "browser", Value: "chrome"}}, nil},
 		{"no properties at all", nil, nil},
+		// Same 32-bit bound as junitxml: an unstorable value is skipped, never emitted.
+		{"zero", []Property{{Name: "shard", Value: "0"}}, domain.IntPtr(0)},
+		{"negative value", []Property{{Name: "shard", Value: "-5"}}, nil},
+		{"int32 max is still accepted", []Property{{Name: "shard", Value: "2147483647"}}, domain.IntPtr(2147483647)},
+		{"one past int32 max", []Property{{Name: "shard", Value: "2147483648"}}, nil},
+		{"int64 max", []Property{{Name: "shard", Value: "9223372036854775807"}}, nil},
+		{"overflows any int", []Property{{Name: "shard", Value: "999999999999999999999999"}}, nil},
 	}
 
 	parser := New()
