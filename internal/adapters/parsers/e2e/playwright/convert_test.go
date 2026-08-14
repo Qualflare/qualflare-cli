@@ -182,6 +182,13 @@ func TestConvertTest_ShardIndexFromWorkerIndex(t *testing.T) {
 		{"absent workerIndex leaves ShardIndex nil", nil, nil},
 		{"explicit worker 0 is a real shard 0", domain.IntPtr(0), domain.IntPtr(0)},
 		{"non-zero worker index", domain.IntPtr(4), domain.IntPtr(4)},
+		// Same 32-bit bound the junitxml/pytest `shard` property fallback enforces: the
+		// server's shard_index is a signed INTEGER column, and one optional hint it
+		// cannot store must not put the whole launch upload at risk.
+		{"int32 max is still accepted", domain.IntPtr(2147483647), domain.IntPtr(2147483647)},
+		{"one past int32 max is skipped", domain.IntPtr(2147483648), nil},
+		{"negative worker index is skipped", domain.IntPtr(-3), nil},
+		{"int64 max is skipped", domain.IntPtr(9223372036854775807), nil},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -199,8 +206,12 @@ func TestConvertTest_ShardIndexFromWorkerIndex(t *testing.T) {
 	}
 }
 
-// The same contract through the real JSON decoder, which is where the regression lived:
-// a plain int field cannot tell an absent key from an explicit 0.
+// The same contract through the real JSON decoder, which is where both regressions
+// lived: a plain int field cannot tell an absent key from an explicit 0, and a *64-bit*
+// int accepts numbers the server's 32-bit shard_index column cannot store. The earlier
+// reasoning that decoding alone would reject an oversized workerIndex only holds on a
+// 32-bit platform, and this CLI ships amd64/arm64 only — so the bound has to be
+// explicit, and this test exercises the path that proved it.
 func TestParse_ShardIndexOnlyWhenWorkerIndexPresent(t *testing.T) {
 	report := func(result string) string {
 		return `{"suites":[{"title":"S","file":"a.spec.ts","specs":[{"title":"t","tests":[{"results":[` +
@@ -217,6 +228,12 @@ func TestParse_ShardIndexOnlyWhenWorkerIndexPresent(t *testing.T) {
 		{"explicit null", `{"status":"passed","workerIndex":null}`, nil},
 		{"explicit 0", `{"status":"passed","workerIndex":0}`, domain.IntPtr(0)},
 		{"explicit 2", `{"status":"passed","workerIndex":2}`, domain.IntPtr(2)},
+		// A crafted or corrupted report. Each of these decodes without error into a
+		// 64-bit int, so only the explicit bound keeps it off the wire.
+		{"int32 max", `{"status":"passed","workerIndex":2147483647}`, domain.IntPtr(2147483647)},
+		{"one past int32 max", `{"status":"passed","workerIndex":2147483648}`, nil},
+		{"negative", `{"status":"passed","workerIndex":-3}`, nil},
+		{"int64 max", `{"status":"passed","workerIndex":9223372036854775807}`, nil},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -237,6 +254,21 @@ func TestParse_ShardIndexOnlyWhenWorkerIndexPresent(t *testing.T) {
 				t.Errorf("ShardIndex = %d, want %d", *got, *tt.want)
 			}
 		})
+	}
+}
+
+// Where the bound check hands off to the decoder. Beyond int64 there is no int to
+// range-check: encoding/json refuses the number outright and the whole file fails to
+// parse. That is a loud, actionable error rather than a silent bad value, and it is
+// encoding/json's behaviour for every numeric field in every JSON parser here, so it is
+// pinned rather than special-cased — the point is that no path reaches the wire with an
+// unstorable shardIndex.
+func TestParse_WorkerIndexBeyondInt64FailsDecoding(t *testing.T) {
+	_, err := New().Parse(strings.NewReader(
+		`{"suites":[{"title":"S","file":"a.spec.ts","specs":[{"title":"t","tests":[{"results":[` +
+			`{"status":"passed","workerIndex":999999999999999999999999}]}]}]}],"stats":{}}`))
+	if err == nil {
+		t.Fatal("Parse() = nil error, want a decode error for a number no int can hold")
 	}
 }
 
