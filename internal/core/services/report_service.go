@@ -164,6 +164,46 @@ func resolveLaunchFramework(parser ports.Parser, detected map[domain.Framework]s
 	return current
 }
 
+// BuildCapturedLaunch wraps an already-built Suite (from `qf run`'s
+// log-capture mode) into a Launch via the same createReport path the
+// file-parsing flow uses, so priority normalization / --shard tagging apply
+// identically. --no-capture-output additionally strips per-case and
+// per-step Error text here (stripCapturedStepErrorDetail) — a step of the
+// SEC-04 property-stripping createReport already does, needed because
+// log-capture's Error text is reconstructed directly from raw captured
+// stdout/stderr, unlike cucumber/karate's structured Gherkin step text.
+func (s *ReportService) BuildCapturedLaunch(suite *domain.Suite, framework domain.Framework) *domain.Launch {
+	if s.config.IsNoCaptureOutput() {
+		stripCapturedStepErrorDetail(suite)
+	}
+	return s.createReport([]domain.Suite{*suite}, framework)
+}
+
+// ProcessCapturedSuite builds and sends a Launch from an already-built
+// Suite, honoring --dry-run exactly like ProcessTestResults.
+func (s *ReportService) ProcessCapturedSuite(ctx context.Context, suite *domain.Suite, framework domain.Framework) error {
+	report := s.BuildCapturedLaunch(suite, framework)
+	if s.config.IsDryRun() {
+		return nil
+	}
+	return s.sender.SendReport(ctx, report)
+}
+
+// stripCapturedStepErrorDetail drops per-case and per-step Error text on a
+// suite built by `qf run`'s log-capture mode, for --no-capture-output
+// (SEC-04). Case.Name/Step.Name/Status are the structural narration this
+// feature exists to report (same spirit as cucumber/karate's Gherkin step
+// text) and are left alone; Error text is reconstructed from raw captured
+// stdout/stderr and is exactly what --no-capture-output promises to drop.
+func stripCapturedStepErrorDetail(suite *domain.Suite) {
+	for i := range suite.Cases {
+		suite.Cases[i].Error = ""
+		for j := range suite.Cases[i].Steps {
+			suite.Cases[i].Steps[j].Error = ""
+		}
+	}
+}
+
 // ValidateFiles validates that files can be parsed
 func (s *ReportService) ValidateFiles(ctx context.Context, files []string, framework domain.Framework) ([]ports.ValidationResult, error) {
 	results := make([]ports.ValidationResult, 0, len(files))
