@@ -44,7 +44,7 @@ func newAPICLI(t *testing.T) (*CLI, *stubAPIClient) {
 	cfg := config.DefaultConfig()
 	cfg.APIKey = "qf_token"
 	api := &stubAPIClient{}
-	return NewCLI(nil, cfg, nil, api, nil), api
+	return NewCLI(nil, cfg, nil, api, nil, nil), api
 }
 
 // run executes a subcommand path (e.g. "list") on cmd with the given args.
@@ -174,7 +174,7 @@ func TestFetchAndPrint_RequiresToken(t *testing.T) {
 	cfg := config.DefaultConfig()
 	cfg.APIKey = ""
 	api := &stubAPIClient{}
-	c := NewCLI(nil, cfg, nil, api, nil)
+	c := NewCLI(nil, cfg, nil, api, nil, nil)
 
 	err := c.fetchAndPrint(apiV1+"/suites", nil)
 	if err == nil || !strings.Contains(err.Error(), "qf login") {

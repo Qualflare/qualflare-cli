@@ -73,6 +73,18 @@ type Result struct {
 	Attachments []Attachment `json:"attachments"`
 	Retry       int          `json:"retry"`
 	StartTime   string       `json:"startTime"`
+	Steps       []Step       `json:"steps"`
+}
+
+// Step is Playwright's own nested step-tree node. Category distinguishes
+// author-written test.step() boundaries ("test.step") from the low-level
+// engine actions Playwright also records (e.g. "pw:api", "hook", "expect").
+type Step struct {
+	Title    string     `json:"title"`
+	Category string     `json:"category"`
+	Duration int        `json:"duration"` // milliseconds
+	Error    *TestError `json:"error"`
+	Steps    []Step     `json:"steps"` // nested sub-steps
 }
 
 type TestError struct {
@@ -229,6 +241,7 @@ func (p *Parser) convertTest(spec Spec, test Test, file string, prefix string) d
 		}
 
 		testCase.Attachments = convertAttachments(lastResult.Attachments)
+		testCase.Steps = convertSteps(lastResult.Steps)
 
 		// Mechanism A: Playwright's own per-worker index. Only set when the report
 		// actually carried one — an absent workerIndex leaves ShardIndex nil ("no shard
@@ -302,6 +315,35 @@ func statusFromTestLevel(status string) domain.Status {
 	default:
 		return domain.StatusError
 	}
+}
+
+// convertSteps flattens Playwright's step tree into domain.Step entries, keeping
+// only user-authored test.step() boundaries — the same granularity cucumber/karate
+// already report, not per-locator engine noise (categories like "pw:api", "hook").
+// A test that never calls test.step() produces nil, unchanged from prior behavior.
+// Nested test.step() calls are flattened into sibling entries in tree order, since
+// domain.Step is flat.
+func convertSteps(steps []Step) []domain.Step {
+	var out []domain.Step
+	for _, s := range steps {
+		if s.Category != "test.step" {
+			out = append(out, convertSteps(s.Steps)...)
+			continue
+		}
+		step := domain.Step{
+			Name:     s.Title,
+			Duration: time.Duration(s.Duration) * time.Millisecond,
+		}
+		if s.Error != nil {
+			step.Status = domain.StatusFailed
+			step.Error = domain.FormatError(s.Error.Message, s.Error.Stack, "")
+		} else {
+			step.Status = domain.StatusPassed
+		}
+		out = append(out, step)
+		out = append(out, convertSteps(s.Steps)...)
+	}
+	return out
 }
 
 // convertAttachments maps Playwright's contentType onto the domain's MimeType. Returns

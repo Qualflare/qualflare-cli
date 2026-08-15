@@ -235,3 +235,134 @@ func TestPlaywrightParser_MalformedJSON(t *testing.T) {
 		t.Error("expected error for malformed JSON")
 	}
 }
+
+func TestPlaywrightParserExtractsSteps(t *testing.T) {
+	jsonReport := `
+    {
+        "config": {"configFile": "playwright.config.ts"},
+        "suites": [{
+            "title": "Example Suite",
+            "file": "example.spec.ts",
+            "line": 1,
+            "specs": [{
+                "title": "logs in",
+                "tests": [{
+                    "results": [{
+                        "status": "passed",
+                        "duration": 500,
+                        "steps": [
+                            {"title": "navigate to login", "category": "test.step", "duration": 100},
+                            {"title": "pw:api click", "category": "pw:api", "duration": 5},
+                            {"title": "submit credentials", "category": "test.step", "duration": 200,
+                             "steps": [
+                                {"title": "fill username", "category": "test.step", "duration": 50}
+                             ]}
+                        ]
+                    }],
+                    "status": "passed"
+                }]
+            }]
+        }],
+        "stats": {}
+    }
+    `
+
+	parser := New()
+	suite, err := parser.Parse(strings.NewReader(jsonReport))
+	if err != nil {
+		t.Fatalf("parse error: %v", err)
+	}
+	if len(suite.Cases) != 1 {
+		t.Fatalf("expected 1 case, got %d", len(suite.Cases))
+	}
+
+	steps := suite.Cases[0].Steps
+	// Only test.step() boundaries count — the pw:api engine-noise step is
+	// filtered out, and the nested "fill username" becomes a sibling entry.
+	if len(steps) != 3 {
+		t.Fatalf("expected 3 test.step() entries, got %d: %+v", len(steps), steps)
+	}
+	if steps[0].Name != "navigate to login" || steps[0].Status != domain.StatusPassed {
+		t.Errorf("unexpected first step: %+v", steps[0])
+	}
+	if steps[1].Name != "submit credentials" {
+		t.Errorf("expected second step 'submit credentials', got %+v", steps[1])
+	}
+	if steps[2].Name != "fill username" {
+		t.Errorf("expected nested step 'fill username' flattened as a sibling, got %+v", steps[2])
+	}
+}
+
+func TestPlaywrightParserStepFailureCarriesError(t *testing.T) {
+	jsonReport := `
+    {
+        "config": {"configFile": "playwright.config.ts"},
+        "suites": [{
+            "title": "Example Suite",
+            "file": "example.spec.ts",
+            "line": 1,
+            "specs": [{
+                "title": "logs in",
+                "tests": [{
+                    "results": [{
+                        "status": "failed",
+                        "duration": 500,
+                        "steps": [
+                            {"title": "submit credentials", "category": "test.step", "duration": 200,
+                             "error": {"message": "locator not found", "stack": "at foo.ts:1:1"}}
+                        ]
+                    }],
+                    "status": "unexpected"
+                }]
+            }]
+        }],
+        "stats": {}
+    }
+    `
+
+	parser := New()
+	suite, err := parser.Parse(strings.NewReader(jsonReport))
+	if err != nil {
+		t.Fatalf("parse error: %v", err)
+	}
+	steps := suite.Cases[0].Steps
+	if len(steps) != 1 {
+		t.Fatalf("expected 1 step, got %d", len(steps))
+	}
+	if steps[0].Status != domain.StatusFailed {
+		t.Errorf("expected failed step status, got %v", steps[0].Status)
+	}
+	if !strings.Contains(steps[0].Error, "locator not found") {
+		t.Errorf("expected step error to carry the failure message, got %q", steps[0].Error)
+	}
+}
+
+func TestPlaywrightParserNoStepsProducesEmptySteps(t *testing.T) {
+	jsonReport := `
+    {
+        "config": {"configFile": "playwright.config.ts"},
+        "suites": [{
+            "title": "Example Suite",
+            "file": "example.spec.ts",
+            "line": 1,
+            "specs": [{
+                "title": "no step() calls",
+                "tests": [{
+                    "results": [{"status": "passed", "duration": 100}],
+                    "status": "passed"
+                }]
+            }]
+        }],
+        "stats": {}
+    }
+    `
+
+	parser := New()
+	suite, err := parser.Parse(strings.NewReader(jsonReport))
+	if err != nil {
+		t.Fatalf("parse error: %v", err)
+	}
+	if len(suite.Cases[0].Steps) != 0 {
+		t.Errorf("a test with no test.step() calls must produce no steps, got %+v", suite.Cases[0].Steps)
+	}
+}

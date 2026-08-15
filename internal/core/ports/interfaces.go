@@ -34,6 +34,31 @@ type ParserFactory interface {
 	RegisterParser(parser Parser)
 }
 
+// LogStepExtractor derives domain.Case entries (each with its own nested
+// Steps) from a wrapped test command's captured console output (interleaved
+// stdout+stderr, in the order the process wrote them). Unlike Parser, there
+// is no structured file to decode — everything comes from a framework's own
+// human-readable reporter text.
+type LogStepExtractor interface {
+	// ExtractCases parses captured output and returns one domain.Case per
+	// detected test boundary, each Case's Steps populated from that
+	// framework's own step-narration convention.
+	ExtractCases(output []byte) ([]domain.Case, error)
+	// GetFramework returns the framework this extractor targets.
+	GetFramework() domain.Framework
+	// Detect reports whether this extractor's console convention appears
+	// present in output, used for auto-selection when --format is not given.
+	Detect(output []byte) bool
+}
+
+// LogStepExtractorRegistry mirrors ParserFactory for the log-capture path.
+type LogStepExtractorRegistry interface {
+	GetExtractor(framework domain.Framework) (LogStepExtractor, error)
+	DetectExtractor(output []byte) (LogStepExtractor, error)
+	RegisterExtractor(extractor LogStepExtractor)
+	GetSupportedFrameworks() []domain.Framework
+}
+
 // ReportSender defines the interface for sending reports to the API
 type ReportSender interface {
 	// SendReport sends a report to the API
@@ -94,6 +119,15 @@ type ReportService interface {
 	ParseTestResults(ctx context.Context, files []string, framework domain.Framework) (*domain.Launch, error)
 	// ValidateFiles validates that files can be parsed
 	ValidateFiles(ctx context.Context, files []string, framework domain.Framework) ([]ValidationResult, error)
+
+	// BuildCapturedLaunch wraps an already-built Suite (from `qf run`'s
+	// log-capture mode) into a Launch, applying the same priority
+	// normalization / --no-capture-output / --shard rules ParseTestResults
+	// applies, without sending it.
+	BuildCapturedLaunch(suite *domain.Suite, framework domain.Framework) *domain.Launch
+	// ProcessCapturedSuite builds and sends a Launch from an already-built
+	// Suite, honoring --dry-run exactly like ProcessTestResults.
+	ProcessCapturedSuite(ctx context.Context, suite *domain.Suite, framework domain.Framework) error
 }
 
 // ValidationResult represents the result of validating a file
