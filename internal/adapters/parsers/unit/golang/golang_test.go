@@ -50,6 +50,28 @@ func TestGolangParser_ParsePassAndFail(t *testing.T) {
 	}
 }
 
+// The "run" event's Time was already decoded but never surfaced —
+// domain.Case.StartedAt exists precisely for this.
+func TestGolangParser_CaseStartedAt(t *testing.T) {
+	input := `{"Time":"2026-01-02T03:04:05Z","Action":"run","Package":"pkg","Test":"TestPass"}
+{"Time":"2026-01-02T03:04:06Z","Action":"pass","Package":"pkg","Test":"TestPass","Elapsed":1.0}
+`
+	parser := New()
+	suite, err := parser.Parse(strings.NewReader(input))
+	if err != nil {
+		t.Fatalf("parse error: %v", err)
+	}
+	if len(suite.Cases) != 1 {
+		t.Fatalf("expected 1 case, got %d", len(suite.Cases))
+	}
+
+	want := time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)
+	got := suite.Cases[0].StartedAt
+	if got == nil || !got.Equal(want) {
+		t.Errorf("StartedAt = %v, want %v", got, want)
+	}
+}
+
 // BUG-16: `go test ./...` emits one package-level pass/fail per package. The
 // parser assigned instead of accumulated, so only the last package's elapsed
 // time survived. Durations across packages must sum.

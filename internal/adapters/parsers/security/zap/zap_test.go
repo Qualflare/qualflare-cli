@@ -177,6 +177,61 @@ func TestZAPParser_UnknownRiskCodeFailsClosed(t *testing.T) {
 	}
 }
 
+// An alert with multiple instances (the same vulnerability found on several
+// URLs) previously only captured Instances[0] — every other occurrence's
+// URL/method was silently dropped, a real data-loss bug, not just an
+// unused field.
+func TestZAPParser_AllInstancesCaptured(t *testing.T) {
+	jsonReport := `{
+    "@version": "2.14.0",
+    "@generated": "",
+    "site": [
+        {
+            "@name": "https://example.com",
+            "@host": "example.com",
+            "@port": "443",
+            "@ssl": "true",
+            "alerts": [
+                {
+                    "pluginid": "10016",
+                    "name": "Web Browser XSS Protection Not Enabled",
+                    "riskcode": "3",
+                    "desc": "XSS protection header missing",
+                    "instances": [
+                        {"uri": "https://example.com/", "method": "GET"},
+                        {"uri": "https://example.com/login", "method": "POST"},
+                        {"uri": "https://example.com/admin", "method": "GET"}
+                    ],
+                    "count": "3",
+                    "solution": "Set X-XSS-Protection header"
+                }
+            ]
+        }
+    ]
+}`
+
+	parser := New()
+	suite, err := parser.Parse(strings.NewReader(jsonReport))
+	if err != nil {
+		t.Fatalf("parse error: %v", err)
+	}
+	if len(suite.Cases) != 1 {
+		t.Fatalf("expected 1 case, got %d", len(suite.Cases))
+	}
+
+	props := suite.Cases[0].Properties
+	for _, want := range []string{"https://example.com/", "https://example.com/login", "https://example.com/admin"} {
+		if !strings.Contains(props["affectedURL"], want) {
+			t.Errorf("affectedURL = %q, missing instance URL %q", props["affectedURL"], want)
+		}
+	}
+	for _, want := range []string{"GET", "POST"} {
+		if !strings.Contains(props["method"], want) {
+			t.Errorf("method = %q, missing instance method %q", props["method"], want)
+		}
+	}
+}
+
 func TestZAPParser_EmptyInput(t *testing.T) {
 	parser := New()
 	_, err := parser.Parse(strings.NewReader(""))

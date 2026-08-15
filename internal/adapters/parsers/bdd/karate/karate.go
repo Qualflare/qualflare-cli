@@ -2,6 +2,7 @@ package karate
 
 import (
 	"encoding/json"
+	"fmt"
 	"io"
 	"strings"
 	"time"
@@ -135,7 +136,7 @@ func (p *Parser) convertScenario(scenario Scenario, report Report) domain.Case {
 		Tags:     mergeTags(report.Tags, scenario.Tags),
 	}
 
-	steps, errorMessages := convertSteps(scenario.StepResults)
+	steps, errorMessages := convertSteps(scenario.StepResults, report.FeatureName)
 	testCase.Steps = steps
 
 	switch {
@@ -171,7 +172,11 @@ func mergeTags(reportTags, scenarioTags []string) []string {
 // convertSteps converts the visible steps, also returning the error messages the failed
 // ones carried. Hidden steps are Karate's own bookkeeping: they are neither reported as
 // steps nor allowed to contribute an error message.
-func convertSteps(steps []Step) ([]domain.Step, []string) {
+//
+// Karate has no single "file:line" string of its own (unlike Cucumber's
+// Match.Location) — featureName + the step's own line number builds the
+// same shape.
+func convertSteps(steps []Step, featureName string) ([]domain.Step, []string) {
 	out := make([]domain.Step, 0, len(steps))
 	var errorMessages []string
 
@@ -183,6 +188,9 @@ func convertSteps(steps []Step) ([]domain.Step, []string) {
 		domainStep := domain.Step{
 			Name:     step.Step,
 			Duration: base.ParseDurationNs(step.DurationNanos),
+		}
+		if step.Line > 0 {
+			domainStep.Location = fmt.Sprintf("%s:%d", featureName, step.Line)
 		}
 
 		switch step.Result {
