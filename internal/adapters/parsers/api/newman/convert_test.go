@@ -144,6 +144,42 @@ func TestConvertExecution_FailureMap(t *testing.T) {
 	})
 }
 
+// Newman's run.executions[].assertions[] is genuinely step-shaped — one
+// entry per test-script assertion, in execution order — but was previously
+// only mined for its first error message. This wires it into Case.Steps.
+func TestConvertExecution_Steps(t *testing.T) {
+	p := &Parser{}
+	got := p.convertExecution(exec(
+		Assertion{Assertion: "Status code is 200"},
+		Assertion{Assertion: "Response has users", Error: &Error{Message: "expected users, got none"}},
+		Assertion{Assertion: "Optional check", Skipped: true},
+	), nil)
+
+	if len(got.Steps) != 3 {
+		t.Fatalf("Steps = %d, want 3 (one per assertion, in order)", len(got.Steps))
+	}
+	if got.Steps[0].Name != "Status code is 200" || got.Steps[0].Status != domain.StatusPassed {
+		t.Errorf("step 0 = %+v, want a passed %q", got.Steps[0], "Status code is 200")
+	}
+	if got.Steps[1].Name != "Response has users" || got.Steps[1].Status != domain.StatusFailed {
+		t.Errorf("step 1 = %+v, want a failed %q", got.Steps[1], "Response has users")
+	}
+	if got.Steps[1].Error != "expected users, got none" {
+		t.Errorf("step 1 Error = %q, want the assertion's own error message", got.Steps[1].Error)
+	}
+	if got.Steps[2].Name != "Optional check" || got.Steps[2].Status != domain.StatusSkipped {
+		t.Errorf("step 2 = %+v, want a skipped %q", got.Steps[2], "Optional check")
+	}
+}
+
+func TestConvertExecution_NoAssertionsMeansNoSteps(t *testing.T) {
+	p := &Parser{}
+	got := p.convertExecution(exec(), nil)
+	if len(got.Steps) != 0 {
+		t.Errorf("Steps = %+v, want empty when the request has no assertions", got.Steps)
+	}
+}
+
 func TestConvertExecution_IdentityAndProperties(t *testing.T) {
 	p := &Parser{}
 	e := Execution{
