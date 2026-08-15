@@ -187,9 +187,6 @@ func (c *CLI) runRun(ctx context.Context, wrapped []string, opts runOptions) err
 
 	warnIfLooksParallel(os.Stderr, wrapped)
 
-	ctx, cancel := context.WithTimeout(ctx, opts.timeout)
-	defer cancel()
-
 	if !c.config.IsQuiet() {
 		c.printInfo("Running: %s", strings.Join(wrapped, " "))
 	}
@@ -239,7 +236,11 @@ func (c *CLI) runRun(ctx context.Context, wrapped []string, opts runOptions) err
 			fmt.Println(string(jsonData))
 		}
 	} else {
-		uploadErr = c.reportService.ProcessCapturedSuite(ctx, suite, framework)
+		// --timeout only bounds the upload, not the wrapped command above — a
+		// test suite's own runtime is the CI system's concern, not qf run's.
+		uploadCtx, cancel := context.WithTimeout(ctx, opts.timeout)
+		defer cancel()
+		uploadErr = c.reportService.ProcessCapturedSuite(uploadCtx, suite, framework)
 	}
 
 	// Exit-code rule: the wrapped command's own exit code is the primary

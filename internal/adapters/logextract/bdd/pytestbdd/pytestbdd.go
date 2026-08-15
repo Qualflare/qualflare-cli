@@ -21,9 +21,12 @@ func New() *Extractor {
 }
 
 var (
-	scenarioLine = regexp.MustCompile(`^Scenario(?: Outline)?:\s*(.+?)\s*$`)
-	stepLine     = regexp.MustCompile(`^(Given|When|Then|And|But)\s+(.+?)\s*$`)
-	resultLine   = regexp.MustCompile(`^(PASSED|FAILED|ERROR|SKIPPED)\b`)
+	scenarioLine   = regexp.MustCompile(`^Scenario(?: Outline)?:\s*(.+?)\s*$`)
+	stepLine       = regexp.MustCompile(`^(Given|When|Then|And|But)\s+(.+?)\s*$`)
+	resultLine     = regexp.MustCompile(`^(PASSED|FAILED|ERROR|SKIPPED)\b`)
+	failuresHeader = regexp.MustCompile(`^=+\s*FAILURES\s*=+$`)
+	failureDivider = regexp.MustCompile(`^_{3,}\s*(.+?)\s*_{3,}$`)
+	sectionDivider = regexp.MustCompile(`^=+.*=+$`)
 )
 
 // ExtractCases scans captured pytest-bdd output line by line: a "Scenario:"
@@ -32,8 +35,16 @@ var (
 // trailing "[ NN%]" progress suffix) closes it. Non-matching lines (blank
 // lines, "Feature:" lines, pytest banners) are ignored.
 func (e *Extractor) ExtractCases(output []byte) ([]domain.Case, error) {
+	failures := parseFailures(output)
+
 	var cases []domain.Case
 	var current *domain.Case
+	closeCurrent := func() {
+		if msg, ok := failures[current.Name]; ok {
+			current.Error = msg
+		}
+		cases = append(cases, *current)
+	}
 
 	scanner := bufio.NewScanner(bytes.NewReader(output))
 	for scanner.Scan() {
@@ -45,7 +56,7 @@ func (e *Extractor) ExtractCases(output []byte) ([]domain.Case, error) {
 				// A new Scenario: line before the previous one closed — flush
 				// it with whatever status it has (zero value if none matched),
 				// rather than silently dropping it.
-				cases = append(cases, *current)
+				closeCurrent()
 			}
 			current = &domain.Case{Name: m[1]}
 			continue
@@ -68,14 +79,63 @@ func (e *Extractor) ExtractCases(output []byte) ([]domain.Case, error) {
 			for i := range current.Steps {
 				current.Steps[i].Status = current.Status
 			}
-			cases = append(cases, *current)
+			closeCurrent()
 			current = nil
 		}
 	}
 	if current != nil {
-		cases = append(cases, *current)
+		closeCurrent()
 	}
 	return cases, scanner.Err()
+}
+
+// parseFailures reads pytest's own "=== FAILURES ===" section and returns
+// scenario name -> failure detail, correlated by pytest's standard
+// "___ <name> ___" divider convention (the same divider pytest emits for
+// any test function, gherkin-terminal-reporter included). A block runs
+// until the next such divider, the next "===...===" section header (e.g.
+// pytest's trailing "short test summary info"), or the end of output.
+func parseFailures(output []byte) map[string]string {
+	out := map[string]string{}
+
+	scanner := bufio.NewScanner(bytes.NewReader(output))
+	inFailures := false
+	var currentName string
+	var lines []string
+	flush := func() {
+		if currentName != "" {
+			out[currentName] = strings.TrimSpace(strings.Join(lines, "\n"))
+		}
+		lines = nil
+	}
+
+	for scanner.Scan() {
+		trimmed := strings.TrimSpace(ansi.Strip(scanner.Text()))
+
+		if !inFailures {
+			if failuresHeader.MatchString(trimmed) {
+				inFailures = true
+			}
+			continue
+		}
+
+		if m := failureDivider.FindStringSubmatch(trimmed); m != nil {
+			flush()
+			currentName = m[1]
+			continue
+		}
+		if sectionDivider.MatchString(trimmed) {
+			flush()
+			currentName = ""
+			inFailures = false
+			continue
+		}
+		if currentName != "" && trimmed != "" {
+			lines = append(lines, trimmed)
+		}
+	}
+	flush()
+	return out
 }
 
 func statusFromMarker(marker string) domain.Status {

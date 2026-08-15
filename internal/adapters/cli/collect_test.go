@@ -178,6 +178,7 @@ type stubReportService struct {
 	parsed     int
 	lastFiles  []string
 	lastFW     domain.Framework
+	lastCtx    context.Context
 	processErr error
 	parseErr   error
 	launch     *domain.Launch
@@ -209,9 +210,10 @@ func (s *stubReportService) BuildCapturedLaunch(suite *domain.Suite, fw domain.F
 	return &domain.Launch{Framework: string(fw), Suites: []domain.Suite{*suite}}
 }
 
-func (s *stubReportService) ProcessCapturedSuite(_ context.Context, _ *domain.Suite, fw domain.Framework) error {
+func (s *stubReportService) ProcessCapturedSuite(ctx context.Context, _ *domain.Suite, fw domain.Framework) error {
 	s.processed++
 	s.lastFW = fw
+	s.lastCtx = ctx
 	return s.processErr
 }
 
