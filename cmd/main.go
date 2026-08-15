@@ -9,7 +9,6 @@ import (
 
 	"qualflare-cli/internal/adapters/cli"
 	qfhttp "qualflare-cli/internal/adapters/http"
-	"qualflare-cli/internal/adapters/logextract/registry"
 	"qualflare-cli/internal/adapters/parsers/factory"
 	"qualflare-cli/internal/auth"
 	"qualflare-cli/internal/config"
@@ -27,16 +26,8 @@ const (
 	exitTransient = 7 // 429 / 5xx — safe to retry
 )
 
-// exitCodeForError maps an error (unwrapping to *qfhttp.APIError, or to
-// *cli.WrappedCommandError for `qf run`) to an exit code.
+// exitCodeForError maps an error (unwrapping to *qfhttp.APIError) to an exit code.
 func exitCodeForError(err error) int {
-	// `qf run` propagates its wrapped test command's own exit code verbatim,
-	// so it can safely replace the bare test command in an existing CI step.
-	var wrapped *cli.WrappedCommandError
-	if errors.As(err, &wrapped) {
-		return wrapped.ExitCode
-	}
-
 	var apiErr *qfhttp.APIError
 	if errors.As(err, &apiErr) {
 		switch {
@@ -64,9 +55,6 @@ func run() int {
 	// Initialize parser factory
 	parserFactory := factory.NewParserFactory()
 
-	// Initialize log-step extractor registry (for `qf run`'s log-capture mode)
-	logExtractors := registry.New()
-
 	// Initialize HTTP client
 	httpClient := qfhttp.NewHTTPClient(cfg)
 	defer httpClient.Close()
@@ -87,18 +75,12 @@ func run() int {
 	}
 
 	// Initialize CLI
-	cliApp := cli.NewCLI(reportService, cfg, parserFactory, httpClient, store, logExtractors)
+	cliApp := cli.NewCLI(reportService, cfg, parserFactory, httpClient, store)
 
 	// Create and execute root command
 	cmd := cliApp.CreateRootCommand()
 	if err := cmd.Execute(); err != nil {
-		// A WrappedCommandError means the wrapped test command already printed
-		// its own failure output (via `qf run`'s live tee) — printing "Error:
-		// ..." here would just be a redundant, confusing echo.
-		var wrapped *cli.WrappedCommandError
-		if !errors.As(err, &wrapped) {
-			fmt.Fprintf(os.Stderr, "Error: %v\n", rewriteUnknownCommandError(err))
-		}
+		fmt.Fprintf(os.Stderr, "Error: %v\n", rewriteUnknownCommandError(err))
 		return exitCodeForError(err)
 	}
 	return exitOK

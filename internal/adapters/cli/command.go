@@ -6,10 +6,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
-	"qualflare-cli/internal/adapters/runner"
 	"qualflare-cli/internal/auth"
 	"qualflare-cli/internal/config"
 	"qualflare-cli/internal/core/domain"
@@ -36,21 +34,16 @@ type CLI struct {
 	parserFactory ports.ParserFactory
 	apiClient     ports.APIClient
 	store         *auth.Store
-	logExtractors ports.LogStepExtractorRegistry
-	// runCmd is a test seam for `qf run`'s subprocess execution, defaulting to
-	// runner.Run. Never set outside tests.
-	runCmd func(ctx context.Context, teeOut io.Writer, name string, args ...string) (*runner.Result, error)
 }
 
 // NewCLI creates a new CLI instance
-func NewCLI(reportService ports.ReportService, cfg *config.Config, parserFactory ports.ParserFactory, apiClient ports.APIClient, store *auth.Store, logExtractors ports.LogStepExtractorRegistry) *CLI {
+func NewCLI(reportService ports.ReportService, cfg *config.Config, parserFactory ports.ParserFactory, apiClient ports.APIClient, store *auth.Store) *CLI {
 	return &CLI{
 		reportService: reportService,
 		config:        cfg,
 		parserFactory: parserFactory,
 		apiClient:     apiClient,
 		store:         store,
-		logExtractors: logExtractors,
 	}
 }
 
@@ -149,7 +142,6 @@ func (c *CLI) createIdentifierCommand(identifier, token string) *cobra.Command {
 func (c *CLI) buildAuthedSubtree() []*cobra.Command {
 	return []*cobra.Command{
 		c.createCollectCommand(),
-		c.createRunCommand(),
 		c.createValidateCommand(),
 		c.createSuitesCommand(),
 		c.createSuiteCommand(),

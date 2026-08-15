@@ -178,7 +178,6 @@ type stubReportService struct {
 	parsed     int
 	lastFiles  []string
 	lastFW     domain.Framework
-	lastCtx    context.Context
 	processErr error
 	parseErr   error
 	launch     *domain.Launch
@@ -206,17 +205,6 @@ func (s *stubReportService) ValidateFiles(context.Context, []string, domain.Fram
 	return nil, nil
 }
 
-func (s *stubReportService) BuildCapturedLaunch(suite *domain.Suite, fw domain.Framework) *domain.Launch {
-	return &domain.Launch{Framework: string(fw), Suites: []domain.Suite{*suite}}
-}
-
-func (s *stubReportService) ProcessCapturedSuite(ctx context.Context, _ *domain.Suite, fw domain.Framework) error {
-	s.processed++
-	s.lastFW = fw
-	s.lastCtx = ctx
-	return s.processErr
-}
-
 // newCollectCLI wires a CLI with a token already present, so runCollect gets past
 // config.Validate and the test can exercise everything after it.
 func newCollectCLI(t *testing.T) (*CLI, *stubReportService, string) {
@@ -229,7 +217,7 @@ func newCollectCLI(t *testing.T) (*CLI, *stubReportService, string) {
 	cfg := config.DefaultConfig()
 	cfg.APIKey = "qf_token"
 	svc := &stubReportService{}
-	return NewCLI(svc, cfg, nil, nil, nil, nil), svc, f
+	return NewCLI(svc, cfg, nil, nil, nil), svc, f
 }
 
 func baseOpts() collectOptions {

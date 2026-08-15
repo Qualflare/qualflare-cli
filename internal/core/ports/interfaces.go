@@ -20,6 +20,24 @@ type Parser interface {
 	SupportedFileExtensions() []string
 }
 
+// PathAwareParser is an optional extension for parsers that need
+// filesystem-path access beyond a single io.Reader: a companion file next
+// to the primary input (Maestro's commands.json beside its JUnit XML), or a
+// directory bundle a plain io.Reader can't represent (XCTest's .xcresult).
+//
+// Opt-in: report_service.go type-asserts a Parser for this and calls
+// ParsePath instead of Parse when present. Implementations own ALL their
+// own I/O and must degrade gracefully — a missing companion file, a missing
+// external tool, or unexpected output shape are reasons to fall back to
+// case-level-only results, never reasons to fail the whole collect.
+type PathAwareParser interface {
+	Parser
+	// ParsePath parses the test results rooted at path. path may name a
+	// regular file or a directory; the implementation owns all of its own
+	// I/O rather than being handed a pre-opened reader.
+	ParsePath(path string) (*domain.Suite, error)
+}
+
 // ParserFactory defines the interface for creating parsers
 type ParserFactory interface {
 	// GetParser returns a parser for the specified framework
@@ -32,31 +50,6 @@ type ParserFactory interface {
 	GetSupportedFrameworks() []domain.Framework
 	// RegisterParser registers a new parser
 	RegisterParser(parser Parser)
-}
-
-// LogStepExtractor derives domain.Case entries (each with its own nested
-// Steps) from a wrapped test command's captured console output (interleaved
-// stdout+stderr, in the order the process wrote them). Unlike Parser, there
-// is no structured file to decode — everything comes from a framework's own
-// human-readable reporter text.
-type LogStepExtractor interface {
-	// ExtractCases parses captured output and returns one domain.Case per
-	// detected test boundary, each Case's Steps populated from that
-	// framework's own step-narration convention.
-	ExtractCases(output []byte) ([]domain.Case, error)
-	// GetFramework returns the framework this extractor targets.
-	GetFramework() domain.Framework
-	// Detect reports whether this extractor's console convention appears
-	// present in output, used for auto-selection when --format is not given.
-	Detect(output []byte) bool
-}
-
-// LogStepExtractorRegistry mirrors ParserFactory for the log-capture path.
-type LogStepExtractorRegistry interface {
-	GetExtractor(framework domain.Framework) (LogStepExtractor, error)
-	DetectExtractor(output []byte) (LogStepExtractor, error)
-	RegisterExtractor(extractor LogStepExtractor)
-	GetSupportedFrameworks() []domain.Framework
 }
 
 // ReportSender defines the interface for sending reports to the API
@@ -119,15 +112,6 @@ type ReportService interface {
 	ParseTestResults(ctx context.Context, files []string, framework domain.Framework) (*domain.Launch, error)
 	// ValidateFiles validates that files can be parsed
 	ValidateFiles(ctx context.Context, files []string, framework domain.Framework) ([]ValidationResult, error)
-
-	// BuildCapturedLaunch wraps an already-built Suite (from `qf run`'s
-	// log-capture mode) into a Launch, applying the same priority
-	// normalization / --no-capture-output / --shard rules ParseTestResults
-	// applies, without sending it.
-	BuildCapturedLaunch(suite *domain.Suite, framework domain.Framework) *domain.Launch
-	// ProcessCapturedSuite builds and sends a Launch from an already-built
-	// Suite, honoring --dry-run exactly like ProcessTestResults.
-	ProcessCapturedSuite(ctx context.Context, suite *domain.Suite, framework domain.Framework) error
 }
 
 // ValidationResult represents the result of validating a file
