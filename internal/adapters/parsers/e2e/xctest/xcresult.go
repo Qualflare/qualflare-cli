@@ -172,7 +172,7 @@ func mapTestResult(result string) domain.Status {
 // no children of its own). isAssociatedWithFailure is the only per-activity
 // signal xcresulttool provides, so status is necessarily two-state.
 func stepsFromActivities(runs []testRunActivities) []domain.Step {
-	var steps []domain.Step
+	steps := make([]domain.Step, 0, len(runs))
 	for _, run := range runs {
 		steps = append(steps, flattenActivities(run.Activities)...)
 	}
@@ -180,7 +180,7 @@ func stepsFromActivities(runs []testRunActivities) []domain.Step {
 }
 
 func flattenActivities(activities []activityNode) []domain.Step {
-	var steps []domain.Step
+	steps := make([]domain.Step, 0, len(activities))
 	for _, a := range activities {
 		status := domain.StatusPassed
 		if a.IsAssociatedWithFailure {
