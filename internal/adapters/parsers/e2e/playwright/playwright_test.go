@@ -51,6 +51,42 @@ func TestPlaywrightParserExtractsRetryCount(t *testing.T) {
 	}
 }
 
+// Multi-browser projects were joined straight from ranging a map[string]bool
+// with no sorting — Go's randomized map iteration order meant the exact same
+// input could produce "chromium, firefox" on one parse and "firefox,
+// chromium" on the next. That silent nondeterminism defeats
+// promoteConsistentSuiteProperties's exact-string equality check in
+// report_service.go: two suites from an identical multi-browser run could
+// spuriously "disagree", dropping Launch.Properties["browser"] at random.
+func TestPlaywrightParser_MultiBrowserPropertyIsDeterministicallySorted(t *testing.T) {
+	jsonReport := `
+    {
+        "config": {"configFile": "playwright.config.ts"},
+        "suites": [{
+            "title": "Example Suite",
+            "file": "example.spec.ts",
+            "specs": [
+                {"title": "t1", "tests": [{"projectName": "webkit", "results": [{"status": "passed"}]}]},
+                {"title": "t2", "tests": [{"projectName": "chromium", "results": [{"status": "passed"}]}]},
+                {"title": "t3", "tests": [{"projectName": "firefox", "results": [{"status": "passed"}]}]}
+            ]
+        }]
+    }
+    `
+
+	want := "chromium, firefox, webkit"
+	for i := 0; i < 50; i++ {
+		parser := New()
+		suite, err := parser.Parse(strings.NewReader(jsonReport))
+		if err != nil {
+			t.Fatalf("parse error: %v", err)
+		}
+		if got := suite.Properties["browser"]; got != want {
+			t.Fatalf("run %d: Properties[browser] = %q, want %q (sorted, deterministic)", i, got, want)
+		}
+	}
+}
+
 func TestPlaywrightParserNoRetries(t *testing.T) {
 	jsonReport := `
     {
