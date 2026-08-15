@@ -27,6 +27,7 @@ var (
 	failedSuffix = regexp.MustCompile(`\s*\(FAILED - (\d+)\)\s*$`)
 	summaryLine  = regexp.MustCompile(`^\d+ examples?, \d+ failures?`)
 	failureIndex = regexp.MustCompile(`^\s*(\d+)\)\s`)
+	finishedLine = regexp.MustCompile(`^Finished in `)
 )
 
 // ExtractCases builds an indentation tree from the lines up to (not
@@ -94,33 +95,58 @@ func caseFromLeaf(leaf *indenttree.Node, failures map[int]string) domain.Case {
 	return c
 }
 
-// splitBodyAndFooter finds the first blank line AFTER real content starts —
-// not simply the first blank line in the output. RSpec's documentation
-// formatter (and wrapper noise like a shell banner) can print blank lines
-// BEFORE the tree as well as between the tree and the "Failures:"/summary
-// footer; splitting on the very first blank line anywhere mistakes a
-// leading blank line for the boundary and discards the entire real tree
-// into the footer, which ExtractCases never turns into cases. Skipping past
-// any leading blank-only prefix first, then taking the next blank line,
-// finds the true boundary regardless of what precedes the tree.
+// splitBodyAndFooter anchors on the footer's own markers — the literal
+// "Failures:" header when present, else the "Finished in ..." line RSpec's
+// documentation formatter always emits right before its summary — rather
+// than guessing the boundary from blank-line position. Blank-line position
+// is ambiguous: wrapper noise (a shell banner, an npm/yarn warning) can
+// itself be followed by a blank line before the real tree even starts, so
+// "the first blank line after any leading blank-only prefix" still mistakes
+// noise for the tree and discards the real tree into the unused footer —
+// this reproduced from a real `npx mocha`/wrapped-rspec run, not a
+// hypothetical. Anchoring on a marker that can only occur once, near the
+// end, sidesteps the ambiguity entirely: body is then read backward from
+// that anchor as the single contiguous block of non-blank lines immediately
+// preceding it — the real tree, regardless of what (noise, blank lines)
+// precedes that block.
 func splitBodyAndFooter(output []byte) (body, footer []byte) {
 	lines := bytes.Split(output, []byte("\n"))
 
-	start := 0
-	for start < len(lines) && len(bytes.TrimSpace(lines[start])) == 0 {
-		start++
-	}
-
-	boundary := len(lines)
-	for i := start; i < len(lines); i++ {
-		if len(bytes.TrimSpace(lines[i])) == 0 {
-			boundary = i
+	footerStart := len(lines)
+	for i, l := range lines {
+		trimmed := strings.TrimSpace(ansi.Strip(string(l)))
+		if trimmed == "Failures:" || finishedLine.MatchString(trimmed) {
+			footerStart = i
 			break
 		}
 	}
+	if footerStart == len(lines) {
+		// No recognizable footer marker (e.g. a formatter variant without
+		// "Finished in ..."): fall back to the first blank line after any
+		// leading blank-only prefix.
+		start := 0
+		for start < len(lines) && len(bytes.TrimSpace(lines[start])) == 0 {
+			start++
+		}
+		for i := start; i < len(lines); i++ {
+			if len(bytes.TrimSpace(lines[i])) == 0 {
+				footerStart = i
+				break
+			}
+		}
+	}
 
-	body = bytes.Join(lines[:boundary], []byte("\n"))
-	footer = bytes.Join(lines[boundary:], []byte("\n"))
+	bodyEnd := footerStart
+	for bodyEnd > 0 && len(bytes.TrimSpace(lines[bodyEnd-1])) == 0 {
+		bodyEnd--
+	}
+	bodyStart := bodyEnd
+	for bodyStart > 0 && len(bytes.TrimSpace(lines[bodyStart-1])) != 0 {
+		bodyStart--
+	}
+
+	body = bytes.Join(lines[bodyStart:bodyEnd], []byte("\n"))
+	footer = bytes.Join(lines[footerStart:], []byte("\n"))
 	return body, footer
 }
 

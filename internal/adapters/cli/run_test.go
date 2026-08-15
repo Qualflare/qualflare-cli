@@ -55,6 +55,16 @@ func fakeRunCmd(result *runner.Result, err error) func(context.Context, io.Write
 	}
 }
 
+// fakeRunCmdCapturingContext behaves like fakeRunCmd but also records the
+// context it was invoked with, so a test can inspect whether --timeout
+// leaked a deadline onto the wrapped command's own execution.
+func fakeRunCmdCapturingContext(result *runner.Result, err error, gotCtx *context.Context) func(context.Context, io.Writer, string, ...string) (*runner.Result, error) {
+	return func(ctx context.Context, _ io.Writer, _ string, _ ...string) (*runner.Result, error) {
+		*gotCtx = ctx
+		return result, err
+	}
+}
+
 func newRunCLI(t *testing.T) (*CLI, *stubReportService) {
 	t.Helper()
 	cfg := config.DefaultConfig()
@@ -173,6 +183,54 @@ func TestRunRun_CommandNotFound_ReturnsPlainError(t *testing.T) {
 	err := c.runRun(context.Background(), []string{"nosuchtool"}, runOptions{timeout: 5 * time.Second})
 	if err == nil || !strings.Contains(err.Error(), "nosuchtool") {
 		t.Fatalf("expected the command-not-found error to surface, got %v", err)
+	}
+}
+
+// --timeout ("Request timeout" per its own help text, matching collect's use
+// of the same flag) must bound only the upload — a real test suite run under
+// `qf run --timeout 30s` (the default) would otherwise be killed mid-run,
+// since a test command commonly runs far longer than 30 seconds.
+func TestRunRun_TimeoutDoesNotBoundTheWrappedCommand(t *testing.T) {
+	c, _ := newRunCLI(t)
+	e := &fakeExtractor{framework: domain.FrameworkRSpec, cases: []domain.Case{{Name: "a test", Status: domain.StatusPassed}}}
+	c.logExtractors = &fakeRegistry{byFramework: map[domain.Framework]ports.LogStepExtractor{domain.FrameworkRSpec: e}}
+
+	var gotCtx context.Context
+	c.runCmd = fakeRunCmdCapturingContext(&runner.Result{Output: []byte("1 example, 0 failures\n"), ExitCode: 0}, nil, &gotCtx)
+
+	err := c.runRun(context.Background(), []string{"rspec"}, runOptions{format: "rspec", timeout: time.Millisecond})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if gotCtx == nil {
+		t.Fatal("expected the wrapped command to receive a context")
+	}
+	if _, hasDeadline := gotCtx.Deadline(); hasDeadline {
+		t.Error("the wrapped command's context must not carry a deadline from --timeout")
+	}
+}
+
+// The upload that follows the wrapped command must still respect --timeout —
+// the fix must narrow the timeout's scope, not remove it.
+func TestRunRun_TimeoutStillBoundsTheUpload(t *testing.T) {
+	c, svc := newRunCLI(t)
+	e := &fakeExtractor{framework: domain.FrameworkRSpec, cases: []domain.Case{{Name: "a test", Status: domain.StatusPassed}}}
+	c.logExtractors = &fakeRegistry{byFramework: map[domain.Framework]ports.LogStepExtractor{domain.FrameworkRSpec: e}}
+	c.runCmd = fakeRunCmd(&runner.Result{Output: []byte("1 example, 0 failures\n"), ExitCode: 0}, nil)
+
+	err := c.runRun(context.Background(), []string{"rspec"}, runOptions{format: "rspec", timeout: 5 * time.Second})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if svc.lastCtx == nil {
+		t.Fatal("expected ProcessCapturedSuite to receive a context")
+	}
+	deadline, hasDeadline := svc.lastCtx.Deadline()
+	if !hasDeadline {
+		t.Fatal("expected the upload's context to carry a --timeout deadline")
+	}
+	if time.Until(deadline) > 5*time.Second {
+		t.Error("upload deadline exceeds the configured --timeout")
 	}
 }
 

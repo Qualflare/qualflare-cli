@@ -1,6 +1,7 @@
 package pytestbdd
 
 import (
+	"strings"
 	"testing"
 
 	"qualflare-cli/internal/core/domain"
@@ -67,6 +68,32 @@ func TestExtractCases_TwoScenarios(t *testing.T) {
 		if s.Status != domain.StatusFailed {
 			t.Errorf("expected all steps of a failed scenario to be failed, got %+v", s)
 		}
+	}
+}
+
+// The "=== FAILURES ===" section (pytest's own failure-detail block, headed
+// by a "___ <name> ___" divider matching the scenario name) is currently
+// discarded entirely — a failed scenario's Case.Error stays empty, unlike
+// every other extractor (rspecdoc, mochaspec both populate case-level Error
+// from their own failure sections).
+func TestExtractCases_FailedScenarioPopulatesErrorFromFailuresSection(t *testing.T) {
+	e := New()
+	cases, err := e.ExtractCases([]byte(twoScenarios))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	passed := cases[0]
+	if passed.Error != "" {
+		t.Errorf("expected a passed case to have no Error, got %q", passed.Error)
+	}
+
+	failed := cases[1]
+	if failed.Name != "Failed login" {
+		t.Fatalf("expected the failed case, got %+v", failed)
+	}
+	if !strings.Contains(failed.Error, "expected error banner, found none") {
+		t.Errorf("expected Case.Error populated from the FAILURES section, got %q", failed.Error)
 	}
 }
 
