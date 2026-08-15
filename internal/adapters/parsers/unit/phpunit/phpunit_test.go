@@ -51,6 +51,32 @@ func TestPHPUnitParser_ParsePassAndFail(t *testing.T) {
 	}
 }
 
+// TestCase.Assertions was already decoded but never rolled up —
+// domain.Suite.Assertions exists precisely for this and is already
+// populated by newman/k6, just not phpunit. Summed per-case (not from
+// TestSuite.Assertions, which nested suites would double-count) so nesting
+// depth never affects the total.
+func TestPHPUnitParser_SuiteAssertionsSummedAcrossCases(t *testing.T) {
+	xmlReport := `
+<testsuites>
+    <testsuite name="MyTests" tests="2" failures="0" errors="0" time="0.5">
+        <testcase name="testA" class="App\Tests\ExampleTest" assertions="3" time="0.2">
+        </testcase>
+        <testcase name="testB" class="App\Tests\ExampleTest" assertions="2" time="0.3">
+        </testcase>
+    </testsuite>
+</testsuites>
+`
+	parser := New()
+	suite, err := parser.Parse(strings.NewReader(xmlReport))
+	if err != nil {
+		t.Fatalf("parse error: %v", err)
+	}
+	if suite.Assertions != 5 {
+		t.Errorf("Assertions = %d, want 5 (3+2 summed per case)", suite.Assertions)
+	}
+}
+
 func TestPHPUnitParser_EmptyInput(t *testing.T) {
 	parser := New()
 	_, err := parser.Parse(strings.NewReader(""))

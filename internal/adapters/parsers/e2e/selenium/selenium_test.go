@@ -3,6 +3,7 @@ package selenium
 import (
 	"strings"
 	"testing"
+	"time"
 
 	"qualflare-cli/internal/core/domain"
 )
@@ -42,6 +43,53 @@ func TestSeleniumParserDefaultRetryCount(t *testing.T) {
 	}
 	if testCase.IsFlaky != nil && *testCase.IsFlaky {
 		t.Errorf("expected default IsFlaky nil or false, got true")
+	}
+}
+
+// Test.StartTime was already decoded but never surfaced — domain.Case.StartedAt
+// exists precisely for this.
+func TestSeleniumParser_CaseStartedAt(t *testing.T) {
+	jsonReport := `
+    {
+        "suites": [{
+            "name": "Login Suite",
+            "tests": [{
+                "name": "test example",
+                "status": "passed",
+                "startTime": "2026-01-02T03:04:05Z"
+            }]
+        }]
+    }
+    `
+	parser := New()
+	suite, err := parser.Parse(strings.NewReader(jsonReport))
+	if err != nil {
+		t.Fatalf("parse error: %v", err)
+	}
+
+	want := time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)
+	got := suite.Cases[0].StartedAt
+	if got == nil || !got.Equal(want) {
+		t.Errorf("StartedAt = %v, want %v", got, want)
+	}
+}
+
+func TestSeleniumParser_CaseStartedAt_AbsentWhenNotReported(t *testing.T) {
+	jsonReport := `
+    {
+        "suites": [{
+            "name": "Login Suite",
+            "tests": [{"name": "test example", "status": "passed"}]
+        }]
+    }
+    `
+	parser := New()
+	suite, err := parser.Parse(strings.NewReader(jsonReport))
+	if err != nil {
+		t.Fatalf("parse error: %v", err)
+	}
+	if suite.Cases[0].StartedAt != nil {
+		t.Errorf("StartedAt = %v, want nil when the report has no startTime", suite.Cases[0].StartedAt)
 	}
 }
 

@@ -66,6 +66,29 @@ func TestConvertScenario_StepStatusArms(t *testing.T) {
 	}
 }
 
+// Step.Line was already decoded but never surfaced — domain.Step.Location
+// exists precisely for this (cucumber already populates it from its own
+// Match.Location). Karate has no full "file:line" string of its own, but
+// combining the feature file name (already available via Report) with the
+// step's line number gives the same shape.
+func TestConvertScenario_StepLocation(t *testing.T) {
+	p := &Parser{}
+	got := p.convertScenario(Scenario{
+		Name: "s",
+		StepResults: []Step{
+			{Step: "Given a thing", Result: "passed", Line: 12},
+			{Step: "no line info", Result: "passed"},
+		},
+	}, Report{FeatureName: "classpath:features/login.feature"})
+
+	if want := "classpath:features/login.feature:12"; got.Steps[0].Location != want {
+		t.Errorf("Location = %q, want %q", got.Steps[0].Location, want)
+	}
+	if got.Steps[1].Location != "" {
+		t.Errorf("Location = %q, want empty when the step has no line (0 is not a real line number)", got.Steps[1].Location)
+	}
+}
+
 // Hidden steps are Karate's internal bookkeeping and must not appear as test steps.
 func TestConvertScenario_SkipsHiddenSteps(t *testing.T) {
 	p := &Parser{}

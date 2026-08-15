@@ -110,6 +110,7 @@ func (p *Parser) processSuites(suites []TestSuite, domainSuite *domain.Suite) {
 		for _, tc := range s.TestCases {
 			testCase := p.convertTestCase(tc)
 			domainSuite.Cases = append(domainSuite.Cases, testCase)
+			domainSuite.Assertions += tc.Assertions
 
 			// Update counters
 			switch testCase.Status {

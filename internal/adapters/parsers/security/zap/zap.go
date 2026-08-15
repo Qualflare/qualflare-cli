@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 
 	"qualflare-cli/internal/core/domain"
@@ -185,10 +186,18 @@ func (p *Parser) convertAlert(alert Alert, site Site) domain.Case {
 		testCase.Properties["instanceCount"] = strconv.Itoa(count)
 	}
 
-	// Add first instance URL if available
+	// Capture every instance's URL/method, not just the first — an alert
+	// commonly recurs across several URLs, and Instances[0]-only silently
+	// dropped every other occurrence's evidence.
 	if len(alert.Instances) > 0 {
-		testCase.Properties["affectedURL"] = alert.Instances[0].URI
-		testCase.Properties["method"] = alert.Instances[0].Method
+		urls := make([]string, len(alert.Instances))
+		methods := make([]string, len(alert.Instances))
+		for i, inst := range alert.Instances {
+			urls[i] = inst.URI
+			methods[i] = inst.Method
+		}
+		testCase.Properties["affectedURL"] = strings.Join(urls, ", ")
+		testCase.Properties["method"] = strings.Join(methods, ", ")
 	}
 
 	return testCase

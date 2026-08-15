@@ -126,6 +126,11 @@ func (p *Parser) convertTest(test Test, suiteName string) domain.Case {
 		ClassName: base.CoalesceString(test.ClassName, suiteName),
 		Duration:  time.Duration(test.Duration * float64(time.Second)),
 	}
+	if test.StartTime != "" {
+		if t, err := time.Parse(time.RFC3339, test.StartTime); err == nil {
+			testCase.StartedAt = &t
+		}
+	}
 
 	// Determine status
 	switch test.Status {

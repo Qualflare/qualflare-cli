@@ -144,6 +144,10 @@ func buildCasesFromTests(tests map[string]*testState) []domain.Case {
 			Status:    state.status,
 			Duration:  state.duration,
 		}
+		if !state.startedAt.IsZero() {
+			startedAt := state.startedAt
+			testCase.StartedAt = &startedAt
+		}
 
 		if state.status == "" {
 			// BUG-15: a test that never reached a terminal event (panic/timeout —
@@ -227,13 +231,14 @@ func appendPackageFailureCases(cases []domain.Case, pkgFailed map[string]bool, p
 
 // testState tracks the state of a test during parsing
 type testState struct {
-	id       string
-	name     string
-	pkg      string
-	status   domain.Status
-	duration time.Duration
-	failed   bool
-	output   strings.Builder
+	id        string
+	name      string
+	pkg       string
+	status    domain.Status
+	duration  time.Duration
+	startedAt time.Time
+	failed    bool
+	output    strings.Builder
 }
 
 // processEvent processes a single test event
@@ -241,9 +246,10 @@ func (p *Parser) processEvent(tests map[string]*testState, testKey string, event
 	switch event.Action {
 	case "run":
 		tests[testKey] = &testState{
-			id:   testKey,
-			name: event.Test,
-			pkg:  event.Package,
+			id:        testKey,
+			name:      event.Test,
+			pkg:       event.Package,
+			startedAt: event.Time,
 		}
 
 	case "pass":
