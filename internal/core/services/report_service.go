@@ -319,10 +319,20 @@ func (s *ReportService) createReport(testSuites []domain.Suite, framework domain
 	if s.config.IsShard() {
 		tagShardsByFile(testSuites, s.warnWriter())
 	}
+
+	// browser/platform are already structural, parser-generated Suite.Properties
+	// (Selenium, Playwright, TestCafe) — promoting them here is not putting new
+	// user-authored data through an unvetted path, so no --no-capture-output
+	// allowlist consideration is needed for THIS producer specifically. A future
+	// producer of user-authored Launch.Properties (e.g. a --property flag) would
+	// need its own allowlist, same as stripUserAuthoredSuiteProperties's pytest case.
+	launchProps := promoteConsistentSuiteProperties(testSuites, "browser", "platform")
+
 	return &domain.Launch{
 		Framework:   string(framework),
 		Platform:    s.config.GetPlatform(),
 		OS:          fmt.Sprintf("%s/%s", runtime.GOOS, runtime.GOARCH),
+		Browser:     launchProps["browser"],
 		Environment: s.config.GetEnvironment(),
 		Language:    s.config.GetLanguage(),
 		Milestone:   s.config.GetMilestone(),
@@ -333,8 +343,40 @@ func (s *ReportService) createReport(testSuites []domain.Suite, framework domain
 			Timestamp: time.Now().UTC().Format(time.RFC3339),
 			CLIName:   "qf",
 		},
-		Suites: testSuites,
+		Properties: launchProps,
+		Suites:     testSuites,
 	}
+}
+
+// promoteConsistentSuiteProperties collects, for each key, the value every
+// suite that sets it agrees on. A key is omitted from the result — never
+// guessed — when suites disagree (a genuine multi-browser/multi-platform
+// run) or when no suite sets it at all. Suite-level values are left
+// untouched; this only reads them.
+func promoteConsistentSuiteProperties(suites []domain.Suite, keys ...string) map[string]string {
+	result := make(map[string]string, len(keys))
+	for _, key := range keys {
+		value, consistent := "", true
+		seen := false
+		for _, suite := range suites {
+			v, ok := suite.Properties[key]
+			if !ok || v == "" {
+				continue
+			}
+			if !seen {
+				value, seen = v, true
+				continue
+			}
+			if v != value {
+				consistent = false
+				break
+			}
+		}
+		if seen && consistent {
+			result[key] = value
+		}
+	}
+	return result
 }
 
 // normalizeCasePriorities coerces every case's Priority into a value the API's
