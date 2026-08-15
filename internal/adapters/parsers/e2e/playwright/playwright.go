@@ -3,6 +3,7 @@ package playwright
 import (
 	"encoding/json"
 	"io"
+	"sort"
 	"strings"
 	"time"
 
@@ -147,12 +148,18 @@ func (p *Parser) Parse(reader io.Reader) (*domain.Suite, error) {
 	browsers := make(map[string]bool)
 	p.processSuites(report.Suites, suite, "", browsers)
 
-	// Store browser in properties for Launch to use
+	// Store browser in properties for Launch to use. Sorted: ranging a Go map
+	// has randomized iteration order, so an unsorted join would produce a
+	// different string each parse for the exact same input — which silently
+	// breaks report_service.go's promoteConsistentSuiteProperties, an
+	// exact-string-equality check across suites that needs the same browser
+	// set to always join the same way.
 	if len(browsers) > 0 {
 		browserList := make([]string, 0, len(browsers))
 		for b := range browsers {
 			browserList = append(browserList, b)
 		}
+		sort.Strings(browserList)
 		if suite.Properties == nil {
 			suite.Properties = make(map[string]string)
 		}
