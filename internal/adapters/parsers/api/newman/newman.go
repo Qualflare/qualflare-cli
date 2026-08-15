@@ -207,7 +207,32 @@ func (p *Parser) convertExecution(exec Execution, failureMap map[string][]Failur
 		"responseTime": fmt.Sprintf("%dms", exec.Response.ResponseTime),
 	}
 
+	testCase.Steps = convertAssertionSteps(exec.Assertions)
+
 	return testCase
+}
+
+// convertAssertionSteps maps each assertion to a Step, in execution order —
+// the assertion text itself is descriptive enough on its own (matching how
+// cucumber/playwright build Step.Name without prefixing the parent case's
+// name back onto it).
+func convertAssertionSteps(assertions []Assertion) []domain.Step {
+	if len(assertions) == 0 {
+		return nil
+	}
+	steps := make([]domain.Step, len(assertions))
+	for i, a := range assertions {
+		step := domain.Step{Name: a.Assertion, Status: domain.StatusPassed}
+		switch {
+		case a.Skipped:
+			step.Status = domain.StatusSkipped
+		case a.Error != nil:
+			step.Status = domain.StatusFailed
+			step.Error = a.Error.Message
+		}
+		steps[i] = step
+	}
+	return steps
 }
 
 // evaluateAssertions summarises a request's assertions: whether none failed, whether any
