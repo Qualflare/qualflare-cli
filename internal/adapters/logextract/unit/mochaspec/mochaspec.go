@@ -106,34 +106,54 @@ func caseFromLeaf(leaf *indenttree.Node, failures map[int]string) (domain.Case, 
 	return c, true
 }
 
-// splitBodyAndFooter finds the first blank line AFTER real content starts —
-// not simply the first blank line in the output. Mocha's spec reporter (and
-// wrapper noise like npm/npx banners) can print blank lines BEFORE the tree
-// as well as between the tree and the passing/failing footer; splitting on
-// the very first blank line anywhere mistakes a leading blank line for the
-// boundary and discards the entire real tree into the footer, which
-// ExtractCases never turns into cases (this is a real, reproduced-from-a-
-// live-npx-run bug, not a hypothetical). Skipping past any leading
-// blank-only prefix first, then taking the next blank line, finds the true
-// boundary regardless of what precedes the tree.
+// splitBodyAndFooter anchors on Mocha's own "N passing (Nms)" summary line —
+// a marker that can only occur once, near the end — rather than guessing
+// the boundary from blank-line position. Blank-line position is ambiguous:
+// wrapper noise (an npm/npx banner) can itself be followed by a blank line
+// before the real tree even starts, so "the first blank line after any
+// leading blank-only prefix" still mistakes noise for the tree and discards
+// the real tree into the unused footer (this is a real, reproduced-from-a-
+// live-npx-run bug, not a hypothetical). Once the summary line is found,
+// body is read backward from it as the single contiguous block of non-blank
+// lines immediately preceding it — the real tree, regardless of what
+// (noise, blank lines) precedes that block.
 func splitBodyAndFooter(output []byte) (body, footer []byte) {
 	lines := bytes.Split(output, []byte("\n"))
 
-	start := 0
-	for start < len(lines) && len(bytes.TrimSpace(lines[start])) == 0 {
-		start++
-	}
-
-	boundary := len(lines)
-	for i := start; i < len(lines); i++ {
-		if len(bytes.TrimSpace(lines[i])) == 0 {
-			boundary = i
+	footerStart := len(lines)
+	for i, l := range lines {
+		trimmed := strings.TrimSpace(ansi.Strip(string(l)))
+		if summaryLine.MatchString(trimmed) {
+			footerStart = i
 			break
 		}
 	}
+	if footerStart == len(lines) {
+		// No recognizable summary line: fall back to the first blank line
+		// after any leading blank-only prefix.
+		start := 0
+		for start < len(lines) && len(bytes.TrimSpace(lines[start])) == 0 {
+			start++
+		}
+		for i := start; i < len(lines); i++ {
+			if len(bytes.TrimSpace(lines[i])) == 0 {
+				footerStart = i
+				break
+			}
+		}
+	}
 
-	body = bytes.Join(lines[:boundary], []byte("\n"))
-	footer = bytes.Join(lines[boundary:], []byte("\n"))
+	bodyEnd := footerStart
+	for bodyEnd > 0 && len(bytes.TrimSpace(lines[bodyEnd-1])) == 0 {
+		bodyEnd--
+	}
+	bodyStart := bodyEnd
+	for bodyStart > 0 && len(bytes.TrimSpace(lines[bodyStart-1])) != 0 {
+		bodyStart--
+	}
+
+	body = bytes.Join(lines[bodyStart:bodyEnd], []byte("\n"))
+	footer = bytes.Join(lines[footerStart:], []byte("\n"))
 	return body, footer
 }
 

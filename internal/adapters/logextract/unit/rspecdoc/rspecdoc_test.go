@@ -130,6 +130,31 @@ func TestExtractCases_LeadingBlankLinesBeforeTreeDoNotConfuseTheSplit(t *testing
 	}
 }
 
+// A non-blank noise line before the tree (e.g. an npm/yarn deprecation
+// warning printed by the wrapping package manager, followed by its own
+// blank line) is not "a leading blank line" — the earlier fix for that only
+// skips a leading run of *blank* lines. Since the noise line itself is
+// non-blank, the boundary search still stops at the very next blank line
+// (the one after the noise), so the noise becomes "body" (fabricating a
+// fake case from it) while the entire real tree is discarded into the
+// unused footer.
+func TestExtractCases_NonBlankNoiseBeforeTreeDoesNotConfuseTheSplit(t *testing.T) {
+	input := "npm warn deprecated foo@1.0.0: bar\n\n" + worked
+	e := New()
+	cases, err := e.ExtractCases([]byte(input))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(cases) != 2 {
+		t.Fatalf("expected 2 real cases despite leading noise, got %d: %+v", len(cases), cases)
+	}
+	for _, c := range cases {
+		if strings.Contains(c.Name, "npm warn") {
+			t.Errorf("noise line leaked into a case name: %q", c.Name)
+		}
+	}
+}
+
 func TestDetect(t *testing.T) {
 	e := New()
 	if !e.Detect([]byte(worked)) {
