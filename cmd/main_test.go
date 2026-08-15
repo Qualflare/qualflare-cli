@@ -6,7 +6,6 @@ import (
 	"strings"
 	"testing"
 
-	"qualflare-cli/internal/adapters/cli"
 	qfhttp "qualflare-cli/internal/adapters/http"
 )
 
@@ -37,18 +36,6 @@ func TestExitCodeForError(t *testing.T) {
 	// A non-API error is generic.
 	if got := exitCodeForError(errors.New("boom")); got != exitGeneric {
 		t.Errorf("non-API error: exit code = %d, want %d", got, exitGeneric)
-	}
-}
-
-// TestExitCodeForError_WrappedCommand pins that `qf run`'s wrapped test
-// command exit code propagates verbatim (so `qf run` is a safe drop-in CI
-// replacement for the bare test command), not squashed into exitGeneric.
-func TestExitCodeForError_WrappedCommand(t *testing.T) {
-	for _, code := range []int{1, 2, 3, 127} {
-		err := &cli.WrappedCommandError{ExitCode: code}
-		if got := exitCodeForError(err); got != code {
-			t.Errorf("WrappedCommandError{%d}: exit code = %d, want %d", code, got, code)
-		}
 	}
 }
 

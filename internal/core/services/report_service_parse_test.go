@@ -45,6 +45,23 @@ func (p *stubParser) Parse(r io.Reader) (*domain.Suite, error) {
 func (p *stubParser) GetFramework() domain.Framework    { return p.framework }
 func (p *stubParser) SupportedFileExtensions() []string { return []string{".xml"} }
 
+// stubPathAwareParser implements ports.PathAwareParser — it owns its own I/O
+// entirely and never goes through parseFile's os.Open+Parse(reader) path.
+type stubPathAwareParser struct {
+	stubParser
+	gotPaths []string
+}
+
+func (p *stubPathAwareParser) ParsePath(path string) (*domain.Suite, error) {
+	p.gotPaths = append(p.gotPaths, path)
+	if p.err != nil {
+		return nil, p.err
+	}
+	s := *p.suite
+	s.Cases = append([]domain.Case(nil), p.suite.Cases...)
+	return &s, nil
+}
+
 type stubFactory struct {
 	parsers      map[domain.Framework]ports.Parser
 	detect       map[string]domain.Framework // keyed by file base name
@@ -508,6 +525,85 @@ func TestParseTestResults_RejectsOversizedFile(t *testing.T) {
 	}
 	if parser.parsed != 0 {
 		t.Error("the parser ran despite the file exceeding the size cap")
+	}
+}
+
+// --- PathAwareParser opt-in --------------------------------------------------------------
+
+// A parser implementing ports.PathAwareParser owns all of its own I/O —
+// parseFile must call ParsePath(filePath) instead of opening the file itself
+// and calling Parse(reader). This is the extension point Maestro (a sibling
+// commands.json) and XCTest (a .xcresult directory bundle) build on.
+func TestParseTestResults_PathAwareParserReceivesThePath(t *testing.T) {
+	dir := t.TempDir()
+	f := writeFile(t, dir, "r.xml", "<x/>")
+
+	parser := &stubPathAwareParser{stubParser: stubParser{framework: domain.FrameworkMaestro, suite: onePassing(domain.FrameworkMaestro)}}
+	fac := &stubFactory{parsers: map[domain.Framework]ports.Parser{domain.FrameworkMaestro: parser}}
+	s := NewReportService(fac, &stubSender{}, config.DefaultConfig())
+
+	_, err := s.ParseTestResults(context.Background(), []string{f}, domain.FrameworkMaestro)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(parser.gotPaths) != 1 || parser.gotPaths[0] != f {
+		t.Fatalf("ParsePath calls = %v, want exactly [%q]", parser.gotPaths, f)
+	}
+	if parser.parsed != 0 {
+		t.Error("Parse(reader) must not be called when ParsePath is available")
+	}
+}
+
+// A directory input (e.g. an XCTest .xcresult bundle) reaching a parser that
+// only implements Parser (not PathAwareParser) must still fail with a
+// message that says what actually happened ("is a directory"), not a
+// generic decode error — os.Open succeeds on a directory, but Read/Parse
+// then fails with EISDIR, and parseFile's existing error wrap already
+// surfaces that OS message clearly; this locks that in as intentional
+// behavior rather than an accident to regress.
+func TestParseTestResults_DirectoryInputToNonPathAwareParser_ClearError(t *testing.T) {
+	dir := t.TempDir()
+	bundle := filepath.Join(dir, "Result.xcresult")
+	if err := os.Mkdir(bundle, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	parser := &stubParser{framework: domain.FrameworkXCTest, suite: onePassing(domain.FrameworkXCTest)}
+	fac := &stubFactory{parsers: map[domain.Framework]ports.Parser{domain.FrameworkXCTest: parser}}
+	s := NewReportService(fac, &stubSender{}, config.DefaultConfig())
+
+	_, err := s.ParseTestResults(context.Background(), []string{bundle}, domain.FrameworkXCTest)
+	if err == nil || !strings.Contains(err.Error(), "directory") {
+		t.Fatalf("err = %v, want a clear directory-input error", err)
+	}
+}
+
+// Auto-detection (no explicit --format) must still route a directory input
+// (e.g. an XCTest .xcresult bundle) to a PathAwareParser's ParsePath —
+// detectFramework's content-sniffing step can't read a directory, so
+// detection must fall back to filename-based matching, and parseFile must
+// then use ParsePath rather than the plain Parse(reader) path.
+func TestParseTestResults_DirectoryInput_AutoDetectsAndUsesParsePath(t *testing.T) {
+	dir := t.TempDir()
+	bundle := filepath.Join(dir, "Result.xcresult")
+	if err := os.Mkdir(bundle, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	parser := &stubPathAwareParser{stubParser: stubParser{framework: domain.FrameworkXCTest, suite: onePassing(domain.FrameworkXCTest)}}
+	fac := &stubFactory{
+		parsers: map[domain.Framework]ports.Parser{domain.FrameworkXCTest: parser},
+		detect:  map[string]domain.Framework{"Result.xcresult": domain.FrameworkXCTest},
+	}
+	s := NewReportService(fac, &stubSender{}, config.DefaultConfig())
+
+	// No explicit framework — forces auto-detection through detectFramework.
+	_, err := s.ParseTestResults(context.Background(), []string{bundle}, "")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(parser.gotPaths) != 1 {
+		t.Fatalf("expected the directory to reach ParsePath via filename-based detection, got %v", parser.gotPaths)
 	}
 }
 
