@@ -21,15 +21,14 @@ type Parser interface {
 }
 
 // PathAwareParser is an optional extension for parsers that need
-// filesystem-path access beyond a single io.Reader: a companion file next
-// to the primary input (Maestro's commands.json beside its JUnit XML), or a
-// directory bundle a plain io.Reader can't represent (XCTest's .xcresult).
+// filesystem-path access beyond a single io.Reader: a directory bundle a
+// plain io.Reader can't represent (XCTest's .xcresult).
 //
 // Opt-in: report_service.go type-asserts a Parser for this and calls
 // ParsePath instead of Parse when present. Implementations own ALL their
-// own I/O and must degrade gracefully — a missing companion file, a missing
-// external tool, or unexpected output shape are reasons to fall back to
-// case-level-only results, never reasons to fail the whole collect.
+// own I/O and must degrade gracefully — a missing external tool or
+// unexpected output shape are reasons to fall back to case-level-only
+// results, never reasons to fail the whole collect.
 type PathAwareParser interface {
 	Parser
 	// ParsePath parses the test results rooted at path. path may name a

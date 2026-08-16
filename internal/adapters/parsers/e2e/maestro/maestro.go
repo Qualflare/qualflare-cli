@@ -1,12 +1,14 @@
 // Package maestro parses Maestro mobile flow test results: the JUnit XML
-// output every input goes through, optionally enriched with per-command
-// step data from a sibling commands.json (see ParsePath/commands.go) when
-// one is present next to the JUnit XML.
+// output every input goes through. Case-level only — Maestro's own JUnit
+// XML carries no step-level data, and real `maestro test` output never
+// places any richer report alongside it in a discoverable, consistent way
+// (confirmed live: commands.json's location relative to the XML varies by
+// flag combination and is never a sibling of it), so there is no reliable
+// second file to enrich from.
 package maestro
 
 import (
 	"io"
-	"os"
 
 	"qualflare-cli/internal/adapters/parsers/shared/junitxml"
 	"qualflare-cli/internal/core/domain"
@@ -24,28 +26,7 @@ func (p *Parser) GetFramework() domain.Framework { return domain.FrameworkMaestr
 // SupportedFileExtensions returns the file extensions this parser handles.
 func (p *Parser) SupportedFileExtensions() []string { return []string{".xml"} }
 
-// Parse reads Maestro JUnit XML from reader and returns a Suite. This is
-// the case-level-only path (no steps) — ParsePath is preferred when a
-// filesystem path is available, since it can also pick up a sibling
-// commands.json.
+// Parse reads Maestro JUnit XML from reader and returns a Suite.
 func (p *Parser) Parse(reader io.Reader) (*domain.Suite, error) {
 	return junitxml.Parse(reader, domain.FrameworkMaestro)
-}
-
-// ParsePath implements ports.PathAwareParser: parses the JUnit XML at path
-// exactly as Parse does, then best-effort enriches the result with step
-// data from a sibling commands.json, if one is present and well-formed.
-func (p *Parser) ParsePath(path string) (*domain.Suite, error) {
-	file, err := os.Open(path)
-	if err != nil {
-		return nil, err
-	}
-	defer func() { _ = file.Close() }()
-
-	suite, err := p.Parse(file)
-	if err != nil {
-		return nil, err
-	}
-	enrichWithCommandSteps(suite, path)
-	return suite, nil
 }
