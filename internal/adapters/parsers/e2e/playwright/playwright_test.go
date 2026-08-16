@@ -3,9 +3,34 @@ package playwright
 import (
 	"strings"
 	"testing"
+	"time"
 
 	"qualflare-cli/internal/core/domain"
 )
+
+// TestPlaywrightParser_FractionalStatsDurationIsAccepted uses the exact
+// stats.duration value from a real `playwright test --reporter=json` run
+// (2921.147): Playwright's own reporter emits a sub-millisecond float here
+// (likely performance.now()-derived), unlike per-test/per-step durations,
+// which are always whole milliseconds in real output.
+func TestPlaywrightParser_FractionalStatsDurationIsAccepted(t *testing.T) {
+	jsonReport := `
+    {
+        "config": {"configFile": "playwright.config.ts"},
+        "suites": [],
+        "stats": {"duration": 2921.147}
+    }
+    `
+
+	parser := New()
+	suite, err := parser.Parse(strings.NewReader(jsonReport))
+	if err != nil {
+		t.Fatalf("parse error: %v", err)
+	}
+	if suite.Duration != 2921*time.Millisecond {
+		t.Errorf("suite.Duration = %v, want 2921ms", suite.Duration)
+	}
+}
 
 func TestPlaywrightParserExtractsRetryCount(t *testing.T) {
 	// Playwright JSON with retries (test fails twice, passes on 3rd try)
@@ -287,11 +312,10 @@ func TestPlaywrightParserExtractsSteps(t *testing.T) {
                         "status": "passed",
                         "duration": 500,
                         "steps": [
-                            {"title": "navigate to login", "category": "test.step", "duration": 100},
-                            {"title": "pw:api click", "category": "pw:api", "duration": 5},
-                            {"title": "submit credentials", "category": "test.step", "duration": 200,
+                            {"title": "navigate to login", "duration": 100},
+                            {"title": "submit credentials", "duration": 200,
                              "steps": [
-                                {"title": "fill username", "category": "test.step", "duration": 50}
+                                {"title": "fill username", "duration": 50}
                              ]}
                         ]
                     }],
@@ -313,10 +337,10 @@ func TestPlaywrightParserExtractsSteps(t *testing.T) {
 	}
 
 	steps := suite.Cases[0].Steps
-	// Only test.step() boundaries count — the pw:api engine-noise step is
-	// filtered out, and the nested "fill username" becomes a sibling entry.
+	// Matches real `playwright test --reporter=json` shape: no "category"
+	// field, and the nested "fill username" becomes a sibling entry.
 	if len(steps) != 3 {
-		t.Fatalf("expected 3 test.step() entries, got %d: %+v", len(steps), steps)
+		t.Fatalf("expected 3 step entries, got %d: %+v", len(steps), steps)
 	}
 	if steps[0].Name != "navigate to login" || steps[0].Status != domain.StatusPassed {
 		t.Errorf("unexpected first step: %+v", steps[0])
@@ -344,7 +368,7 @@ func TestPlaywrightParserStepFailureCarriesError(t *testing.T) {
                         "status": "failed",
                         "duration": 500,
                         "steps": [
-                            {"title": "submit credentials", "category": "test.step", "duration": 200,
+                            {"title": "submit credentials", "duration": 200,
                              "error": {"message": "locator not found", "stack": "at foo.ts:1:1"}}
                         ]
                     }],

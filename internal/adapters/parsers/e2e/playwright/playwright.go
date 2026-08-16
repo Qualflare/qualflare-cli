@@ -77,12 +77,9 @@ type Result struct {
 	Steps       []Step       `json:"steps"`
 }
 
-// Step is Playwright's own nested step-tree node. Category distinguishes
-// author-written test.step() boundaries ("test.step") from the low-level
-// engine actions Playwright also records (e.g. "pw:api", "hook", "expect").
+// Step is Playwright's own nested step-tree node.
 type Step struct {
 	Title    string     `json:"title"`
-	Category string     `json:"category"`
 	Duration int        `json:"duration"` // milliseconds
 	Error    *TestError `json:"error"`
 	Steps    []Step     `json:"steps"` // nested sub-steps
@@ -104,12 +101,16 @@ type Error struct {
 }
 
 type Stats struct {
-	StartTime  string `json:"startTime"`
-	Duration   int    `json:"duration"`
-	Expected   int    `json:"expected"`
-	Skipped    int    `json:"skipped"`
-	Unexpected int    `json:"unexpected"`
-	Flaky      int    `json:"flaky"`
+	StartTime string `json:"startTime"`
+	// Duration is a float in real output (e.g. 2921.147) — unlike every
+	// other duration in this report, which is always a whole millisecond
+	// integer. Confirmed against a real `playwright test --reporter=json`
+	// run; likely performance.now()-derived rather than Date.now()-derived.
+	Duration   float64 `json:"duration"`
+	Expected   int     `json:"expected"`
+	Skipped    int     `json:"skipped"`
+	Unexpected int     `json:"unexpected"`
+	Flaky      int     `json:"flaky"`
 }
 
 // New creates a new Playwright parser
@@ -324,19 +325,20 @@ func statusFromTestLevel(status string) domain.Status {
 	}
 }
 
-// convertSteps flattens Playwright's step tree into domain.Step entries, keeping
-// only user-authored test.step() boundaries — the same granularity cucumber/karate
-// already report, not per-locator engine noise (categories like "pw:api", "hook").
-// A test that never calls test.step() produces nil, unchanged from prior behavior.
-// Nested test.step() calls are flattened into sibling entries in tree order, since
-// domain.Step is flat.
+// convertSteps flattens Playwright's step tree into domain.Step entries.
+// Confirmed against a real `playwright test --reporter=json` run: the step
+// tree already contains only user-authored test.step() boundaries — a bare,
+// unwrapped action (e.g. a page.goto() or expect() call outside any
+// test.step()) produces no tree entry at all, so there is no engine noise
+// to filter here (an earlier version of this code assumed a "category"
+// field distinguished "test.step" boundaries from engine actions like
+// "pw:api"/"hook" mixed into the same array; real output never populates
+// that field). A test that never calls test.step() produces nil, unchanged
+// from prior behavior. Nested test.step() calls are flattened into sibling
+// entries in tree order, since domain.Step is flat.
 func convertSteps(steps []Step) []domain.Step {
-	var out []domain.Step
+	out := make([]domain.Step, 0, len(steps))
 	for _, s := range steps {
-		if s.Category != "test.step" {
-			out = append(out, convertSteps(s.Steps)...)
-			continue
-		}
 		step := domain.Step{
 			Name:     s.Title,
 			Duration: time.Duration(s.Duration) * time.Millisecond,
