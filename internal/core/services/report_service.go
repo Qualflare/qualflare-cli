@@ -264,8 +264,8 @@ func (s *ReportService) parseFile(filePath string, parser ports.Parser) (*domain
 		return nil, fmt.Errorf("file %s is too large (%d bytes, max %d bytes)", filePath, info.Size(), s.config.GetMaxFileSize())
 	}
 
-	// Opt-in extension point: a parser needing sibling-file or
-	// directory-bundle access takes over all I/O for this input.
+	// Opt-in extension point: a parser needing directory-bundle access
+	// takes over all I/O for this input.
 	if pathParser, ok := parser.(ports.PathAwareParser); ok {
 		suite, err := pathParser.ParsePath(filePath)
 		if err != nil {
