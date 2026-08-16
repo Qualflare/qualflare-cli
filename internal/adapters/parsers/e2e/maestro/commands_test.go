@@ -10,30 +10,57 @@ import (
 	"qualflare-cli/internal/core/domain"
 )
 
-// commandsFixture matches Maestro's own documented shape for commands.json
-// (docs.maestro.dev/maestro-flows/workspace-management/test-reports-and-artifacts):
-// a JSON array with one entry per executed step, in order, each carrying
-// the command, its status, duration, sequenceNumber, and any error. The
-// exact shape of the "command" field itself (string vs. a tagged-union
-// object per command type) was not verifiable against real output in this
-// environment (no connectable iOS/Android/web device), so commandStepName
-// tolerates either.
+// commandsFixture is modeled directly on real commands.json captured from
+// `maestro test` runs against a real Android emulator (both a passing and a
+// failing flow) and cross-checked against Maestro's own source
+// (mobile-dev-inc/maestro: ArtifactsGenerator.kt, TestOutputWriter.kt,
+// FlowDebugOutput.kt, CommandStatus.kt, Env.kt, YamlConfig.kt). Each entry
+// is a {command, metadata} wrapper, not a flat object — status/duration/
+// sequenceNumber/error live under metadata, not as siblings of command. The
+// first two entries (defineVariablesCommand, applyConfigurationCommand) are
+// what Maestro always prepends to every flow itself; never something a test
+// author wrote.
 const commandsFixture = `[
-	{"command": {"tapOnCommand": {"selector": {"text": "Login"}}}, "status": "COMPLETED", "duration": 120, "sequenceNumber": 1},
-	{"command": {"inputTextCommand": {"text": "hello"}}, "status": "COMPLETED", "duration": 45, "sequenceNumber": 2},
-	{"command": {"assertVisibleCommand": {"selector": {"text": "Welcome"}}}, "status": "FAILED", "duration": 5000, "sequenceNumber": 3, "error": "element not found: Welcome"}
+	{
+		"command": {"defineVariablesCommand": {"env": {"MAESTRO_FILENAME": "flow"}, "optional": false}},
+		"metadata": {"status": "COMPLETED", "timestamp": 1, "duration": 2, "sequenceNumber": 0, "depth": 0}
+	},
+	{
+		"command": {"applyConfigurationCommand": {"config": {"appId": "me.ibrahimsn.app"}, "optional": false}},
+		"metadata": {"status": "COMPLETED", "timestamp": 1, "duration": 0, "sequenceNumber": 1, "depth": 0}
+	},
+	{
+		"command": {"launchAppCommand": {"appId": "me.ibrahimsn.app", "optional": false}},
+		"metadata": {"status": "COMPLETED", "timestamp": 2, "duration": 397, "sequenceNumber": 2, "depth": 0}
+	},
+	{
+		"command": {"tapOnElement": {"selector": {"textRegex": "Leaderboard"}, "optional": false}},
+		"metadata": {"status": "COMPLETED", "timestamp": 3, "duration": 2687, "sequenceNumber": 3, "depth": 0}
+	},
+	{
+		"command": {"assertConditionCommand": {"condition": {"visible": {"textRegex": "Missing Text"}}, "optional": false}},
+		"metadata": {
+			"status": "FAILED",
+			"timestamp": 4,
+			"duration": 15696,
+			"sequenceNumber": 4,
+			"depth": 0,
+			"error": {"message": "Assertion is false: \"Missing Text\" is visible", "debugMessage": "Check the UI hierarchy..."}
+		}
+	}
 ]`
 
 func TestParseCommandsJSON(t *testing.T) {
-	cmds, err := parseCommandsJSON([]byte(commandsFixture))
+	entries, err := parseCommandsJSON([]byte(commandsFixture))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if len(cmds) != 3 {
-		t.Fatalf("commands = %d, want 3", len(cmds))
+	if len(entries) != 5 {
+		t.Fatalf("entries = %d, want 5", len(entries))
 	}
-	if cmds[2].Status != "FAILED" || cmds[2].Error != "element not found: Welcome" {
-		t.Errorf("cmds[2] = %+v, want the failed assertVisible entry", cmds[2])
+	last := entries[4]
+	if last.Metadata.Status != "FAILED" || last.Metadata.Error == nil || last.Metadata.Error.Message != `Assertion is false: "Missing Text" is visible` {
+		t.Errorf("entries[4] = %+v, want the failed assertCondition entry", last)
 	}
 }
 
@@ -49,7 +76,8 @@ func TestCommandStepName(t *testing.T) {
 		raw  string
 		want string
 	}{
-		{"single-key tagged object strips the Command suffix", `{"tapOnCommand":{"selector":{"text":"Login"}}}`, "tapOn"},
+		{"single-key tagged object with a Command suffix strips it", `{"launchAppCommand":{"appId":"x"}}`, "launchApp"},
+		{"single-key tagged object without a Command suffix is used as-is", `{"tapOnElement":{"selector":{}}}`, "tapOnElement"},
 		{"plain string command", `"tapOn Login"`, "tapOn Login"},
 		{"unrecognized shape falls back to a positional label", `{"a":1,"b":2}`, "step 4"},
 	}
@@ -62,25 +90,72 @@ func TestCommandStepName(t *testing.T) {
 	}
 }
 
+func TestIsSyntheticCommand(t *testing.T) {
+	tests := []struct {
+		name string
+		raw  string
+		want bool
+	}{
+		{"defineVariablesCommand is synthetic", `{"defineVariablesCommand":{"env":{}}}`, true},
+		{"applyConfigurationCommand is synthetic", `{"applyConfigurationCommand":{"config":{}}}`, true},
+		{"a real user step is not synthetic", `{"tapOnElement":{"selector":{}}}`, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := isSyntheticCommand(json.RawMessage(tt.raw)); got != tt.want {
+				t.Errorf("isSyntheticCommand(%s) = %v, want %v", tt.raw, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestCommandStatus(t *testing.T) {
+	tests := []struct {
+		status string
+		want   domain.Status
+	}{
+		{"COMPLETED", domain.StatusPassed},
+		{"FAILED", domain.StatusFailed},
+		{"SKIPPED", domain.StatusSkipped},
+		{"WARNED", domain.StatusError},
+		{"PENDING", domain.StatusPending},
+		{"RUNNING", domain.StatusPending},
+		{"SOME_FUTURE_VALUE", domain.StatusError},
+	}
+	for _, tt := range tests {
+		t.Run(tt.status, func(t *testing.T) {
+			if got := commandStatus(mCommandMetadata{Status: tt.status}); got != tt.want {
+				t.Errorf("commandStatus(%q) = %q, want %q", tt.status, got, tt.want)
+			}
+		})
+	}
+}
+
 func TestStepsFromCommands(t *testing.T) {
-	cmds, err := parseCommandsJSON([]byte(commandsFixture))
+	entries, err := parseCommandsJSON([]byte(commandsFixture))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	steps := stepsFromCommands(cmds)
+	steps := stepsFromCommands(entries)
+
+	// The 2 synthetic entries (defineVariablesCommand, applyConfigurationCommand)
+	// Maestro always prepends must not show up as steps.
 	if len(steps) != 3 {
-		t.Fatalf("steps = %d, want 3", len(steps))
+		t.Fatalf("steps = %d, want 3 (5 entries minus 2 synthetic)", len(steps))
 	}
-	if steps[0].Name != "tapOn" || steps[0].Status != domain.StatusPassed {
-		t.Errorf("steps[0] = %+v, want a passed tapOn", steps[0])
+	if steps[0].Name != "launchApp" || steps[0].Status != domain.StatusPassed {
+		t.Errorf("steps[0] = %+v, want a passed launchApp", steps[0])
 	}
-	if steps[0].Duration != 120*time.Millisecond {
-		t.Errorf("steps[0].Duration = %v, want 120ms", steps[0].Duration)
+	if steps[0].Duration != 397*time.Millisecond {
+		t.Errorf("steps[0].Duration = %v, want 397ms", steps[0].Duration)
 	}
-	if steps[2].Name != "assertVisible" || steps[2].Status != domain.StatusFailed {
-		t.Errorf("steps[2] = %+v, want a failed assertVisible", steps[2])
+	if steps[1].Name != "tapOnElement" || steps[1].Status != domain.StatusPassed {
+		t.Errorf("steps[1] = %+v, want a passed tapOnElement", steps[1])
 	}
-	if steps[2].Error != "element not found: Welcome" {
+	if steps[2].Name != "assertCondition" || steps[2].Status != domain.StatusFailed {
+		t.Errorf("steps[2] = %+v, want a failed assertCondition", steps[2])
+	}
+	if steps[2].Error != `Assertion is false: "Missing Text" is visible` {
 		t.Errorf("steps[2].Error = %q", steps[2].Error)
 	}
 }
