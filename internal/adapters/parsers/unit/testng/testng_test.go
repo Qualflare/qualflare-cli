@@ -19,7 +19,7 @@ func TestTestNGParser_CategoryAndFramework(t *testing.T) {
 	if err != nil {
 		t.Fatalf("parse error: %v", err)
 	}
-	if suite.Category != domain.CategoryUnitTest {
-		t.Errorf("expected CategoryUnitTest, got %s", suite.Category)
+	if want := domain.FrameworkCategory(domain.FrameworkTestNG); suite.Category != want {
+		t.Errorf("expected %q, got %s", want, suite.Category)
 	}
 }

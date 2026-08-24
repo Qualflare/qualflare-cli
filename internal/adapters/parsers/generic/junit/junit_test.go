@@ -99,8 +99,8 @@ func TestJUnitParser_Category(t *testing.T) {
 	if err != nil {
 		t.Fatalf("parse error: %v", err)
 	}
-	if suite.Category != domain.CategoryGeneric {
-		t.Errorf("expected CategoryGeneric, got %s", suite.Category)
+	if want := domain.FrameworkCategory(domain.FrameworkJUnit); suite.Category != want {
+		t.Errorf("expected %q, got %s", want, suite.Category)
 	}
 }
 
