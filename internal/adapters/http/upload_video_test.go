@@ -2,6 +2,7 @@ package http
 
 import (
 	"context"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -9,6 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 // TestUploadVideoRoundTrip exercises the full presigned-URL flow against two
@@ -80,5 +82,56 @@ func TestUploadVideoRoundTrip(t *testing.T) {
 		!strings.Contains(presignBody, `"mimeType":"video/mp4"`) ||
 		!strings.Contains(presignBody, `"fileSize":16`) {
 		t.Errorf("presign request body = %q, missing expected fields", presignBody)
+	}
+}
+
+// TestUploadVideoRespectsShorterParentDeadline guards UploadVideo's internal
+// 5-minute upload budget: it must be DERIVED from the caller's ctx
+// (context.WithTimeout(ctx, 5*time.Minute), composing with whatever deadline
+// ctx already carries) rather than replacing it with a detached timeout built
+// from context.Background(). A parent context that is already past its
+// deadline is passed in; both httptest servers would otherwise answer
+// instantly, so the only thing that can make the call fail is the expired
+// parent deadline still being honored. If UploadVideo instead built its
+// 5-minute timeout from a fresh context.Background(), the expired parent
+// deadline would be silently dropped and this call would succeed.
+func TestUploadVideoRespectsShorterParentDeadline(t *testing.T) {
+	putServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer putServer.Close()
+
+	presignServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"uploadUrl":"` + putServer.URL + `","storageKey":"x"}`))
+	}))
+	defer presignServer.Close()
+
+	client := NewHTTPClient(&stubConfig{endpoint: presignServer.URL, apiKey: "test-token"})
+	defer client.Close()
+
+	dir := t.TempDir()
+	videoPath := filepath.Join(dir, "clip.mp4")
+	if err := os.WriteFile(videoPath, []byte("x"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	ctx, cancel := context.WithDeadline(context.Background(), time.Now().Add(-time.Second))
+	defer cancel()
+
+	start := time.Now()
+	_, _, err := client.UploadVideo(ctx, videoPath, "video/mp4")
+	elapsed := time.Since(start)
+
+	if err == nil {
+		t.Fatal("UploadVideo() = nil error, want the already-expired parent deadline to fail the call")
+	}
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Errorf("UploadVideo() error = %v, want it to wrap context.DeadlineExceeded", err)
+	}
+	// Generous bound: the point is "failed immediately", not "waited anywhere
+	// close to the internal 5-minute timeout".
+	if elapsed > 5*time.Second {
+		t.Errorf("UploadVideo() took %v, want it to fail immediately on the expired parent deadline", elapsed)
 	}
 }
