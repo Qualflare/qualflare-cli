@@ -118,6 +118,10 @@ func (s *stubSender) SendReport(_ context.Context, report *domain.Launch) error 
 	return s.err
 }
 
+func (s *stubSender) UploadVideo(_ context.Context, _, _ string) (string, int64, error) {
+	return "", 0, nil
+}
+
 func writeFile(t *testing.T, dir, name, content string) string {
 	t.Helper()
 	p := filepath.Join(dir, name)

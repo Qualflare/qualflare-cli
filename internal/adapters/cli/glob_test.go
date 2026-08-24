@@ -37,3 +37,37 @@ func TestExpandGlobs(t *testing.T) {
 		t.Fatal("a glob matching nothing must error")
 	}
 }
+
+func TestExpandDirectories(t *testing.T) {
+	dir := t.TempDir()
+	for _, n := range []string{"shard-0.json", "shard-1.json"} {
+		if err := os.WriteFile(filepath.Join(dir, n), []byte("{}"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// A non-JSON file in the same directory must NOT be picked up.
+	if err := os.WriteFile(filepath.Join(dir, "clip.mp4"), []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	out, err := expandDirectories([]string{dir})
+	if err != nil {
+		t.Fatalf("expandDirectories errored: %v", err)
+	}
+	if len(out) != 2 {
+		t.Fatalf("expected 2 JSON files, got %d: %v", len(out), out)
+	}
+
+	// A literal file argument passes through untouched.
+	filePath := filepath.Join(dir, "shard-0.json")
+	out, err = expandDirectories([]string{filePath})
+	if err != nil || len(out) != 1 || out[0] != filePath {
+		t.Fatalf("literal file passthrough failed: %v %v", out, err)
+	}
+
+	// An empty directory is a loud error, not a silent empty collect.
+	emptyDir := t.TempDir()
+	if _, err := expandDirectories([]string{emptyDir}); err == nil {
+		t.Fatal("an empty directory must error")
+	}
+}
