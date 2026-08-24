@@ -122,6 +122,13 @@ func (c *Client) SendReport(ctx context.Context, report *domain.Launch) error {
 	return c.buildAPIError("send", resp)
 }
 
+// UploadVideo uploads a local video file via the presigned-URL flow and returns the
+// resulting storageKey and the file's byte size.
+func (c *Client) UploadVideo(ctx context.Context, localPath, mimeType string) (string, int64, error) {
+	// TODO: Implement video upload via presigned-URL flow in a later task
+	return "", 0, nil
+}
+
 // newIdempotencyKey returns a random RFC 4122 v4 UUID string (≤255 chars, the
 // server's limit). One key is generated per collect invocation; resty reuses the
 // underlying request across retries so the key stays stable, letting the server

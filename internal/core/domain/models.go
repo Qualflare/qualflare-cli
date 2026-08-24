@@ -292,6 +292,19 @@ type Attachment struct {
 	Path     string `json:"path,omitempty"`
 	MimeType string `json:"mimeType,omitempty"`
 	Content  string `json:"content,omitempty"` // Base64 encoded
+	// StorageKey/FileSize mirror the server's launch.Attachment fields of the
+	// same name (video attachments uploaded via the presigned-URL flow) —
+	// set by report_service.go's video-resolution pass, never by a parser
+	// directly.
+	StorageKey string `json:"storageKey,omitempty"`
+	FileSize   int64  `json:"fileSize,omitempty"`
+	// LocalVideoPath is set by the qualflare-native parser only (see
+	// internal/adapters/parsers/native/qualflare) when a report file
+	// references a video it hasn't uploaded itself — an absolute path,
+	// resolved at parse time relative to that source file's own directory.
+	// Never sent to the server: report_service.go's video-resolution pass
+	// consumes it and fills StorageKey/FileSize before SendReport is called.
+	LocalVideoPath string `json:"-"`
 }
 
 // IntPtr returns a pointer to an int value
