@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"path/filepath"
 	"qualflare-cli/internal/core/domain"
 	"qualflare-cli/internal/core/ports"
 	"qualflare-cli/internal/version"
@@ -122,11 +123,75 @@ func (c *Client) SendReport(ctx context.Context, report *domain.Launch) error {
 	return c.buildAPIError("send", resp)
 }
 
-// UploadVideo uploads a local video file via the presigned-URL flow and returns the
-// resulting storageKey and the file's byte size.
+// uploadURLRequest is the body of the presign POST.
+type uploadURLRequest struct {
+	Filename string `json:"filename"`
+	MimeType string `json:"mimeType"`
+	FileSize int64  `json:"fileSize"`
+}
+
+// uploadURLResponse is the presign endpoint's success body.
+type uploadURLResponse struct {
+	UploadURL  string `json:"uploadUrl"`
+	StorageKey string `json:"storageKey"`
+}
+
+// UploadVideo uploads one local video file via the presigned-URL flow
+// (POST /api/v1/attachments/upload-url -> PUT bytes), mirroring the
+// @qualflare/cypress and @qualflare/cucumberjs reporters' own
+// video-uploader.ts, now that neither reporter performs uploads itself.
+// Single attempt, no retry on the PUT (the presign request itself still
+// goes through the client's normal retry policy via c.resty) — the caller
+// (report_service.go) treats any error here as fail-open: log and skip,
+// never fail the whole collect.
 func (c *Client) UploadVideo(ctx context.Context, localPath, mimeType string) (string, int64, error) {
-	// TODO: Implement video upload via presigned-URL flow in a later task
-	return "", 0, nil
+	info, err := os.Stat(localPath)
+	if err != nil {
+		return "", 0, fmt.Errorf("stat video file: %w", err)
+	}
+	fileSize := info.Size()
+
+	reqURL := c.endpoint + apiBasePath + "/attachments/upload-url"
+	var presign uploadURLResponse
+	resp, err := c.resty.R().
+		SetContext(ctx).
+		SetBody(uploadURLRequest{
+			Filename: filepath.Base(localPath),
+			MimeType: mimeType,
+			FileSize: fileSize,
+		}).
+		SetResult(&presign).
+		Post(reqURL)
+	if err != nil {
+		return "", 0, &APIError{Op: "upload-url", Message: "failed to request upload URL", Err: err}
+	}
+	if !resp.IsStatusSuccess() {
+		return "", 0, c.buildAPIError("upload-url", resp)
+	}
+
+	body, err := os.ReadFile(localPath)
+	if err != nil {
+		return "", 0, fmt.Errorf("read video file: %w", err)
+	}
+
+	// A bare resty.New() client, not c.resty: the PUT target is R2, not the
+	// Qualflare API, and must not carry the QF_TOKEN auth middleware that
+	// c.resty's request middleware attaches to every request — the presigned
+	// URL itself is the credential, matching the reporters' putObject, which
+	// explicitly sends no auth header on the PUT.
+	putResp, err := resty.New().R().
+		SetContext(ctx).
+		SetHeader("Content-Type", mimeType).
+		SetBody(body).
+		Put(presign.UploadURL)
+	if err != nil {
+		return "", 0, &APIError{Op: "upload-put", Message: "failed to PUT video bytes", Err: err}
+	}
+	if !putResp.IsStatusSuccess() {
+		return "", 0, &APIError{Op: "upload-put", Message: fmt.Sprintf("PUT failed with status %d", putResp.StatusCode())}
+	}
+
+	return presign.StorageKey, fileSize, nil
 }
 
 // newIdempotencyKey returns a random RFC 4122 v4 UUID string (≤255 chars, the
