@@ -196,7 +196,14 @@ func (c *Client) UploadVideo(ctx context.Context, localPath, mimeType string) (s
 	// c.resty's request middleware attaches to every request — the presigned
 	// URL itself is the credential, matching the reporters' putObject, which
 	// explicitly sends no auth header on the PUT.
-	putResp, err := resty.New().R().
+	//
+	// Assigned to a variable and closed explicitly (mirroring Client.Close's own
+	// c.resty.Close()) rather than chained inline — an ad-hoc client that is never
+	// closed leaks its connection pool on every video upload.
+	putClient := resty.New()
+	defer func() { _ = putClient.Close() }()
+
+	putResp, err := putClient.R().
 		SetContext(uploadCtx).
 		SetHeader("Content-Type", mimeType).
 		SetBody(body).

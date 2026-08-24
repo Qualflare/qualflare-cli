@@ -61,7 +61,18 @@ func (s *ReportService) ProcessTestResults(ctx context.Context, files []string, 
 		return nil
 	}
 
-	s.resolveVideoAttachments(ctx, report)
+	// context.Background(), not ctx: ctx here is runCollect's
+	// context.WithTimeout(ctx, opts.timeout) (default 30s, the --timeout flag
+	// meant for lightweight metadata requests), and context.WithTimeout always
+	// resolves to the EARLIER of a parent and child deadline. Passing that ctx
+	// through would silently cap UploadVideo's own, deliberately independent
+	// 5-minute upload budget (see client.go's UploadVideo) at whatever was left
+	// of the 30s after parsing and any earlier upload — for any real-sized
+	// video, that composed deadline is routinely already exhausted, and since
+	// video upload is fail-open, the failure is silent (a warning, but collect
+	// still exits 0). Using context.Background() here lets UploadVideo's own
+	// internal timeout be the only deadline governing upload duration.
+	s.resolveVideoAttachments(context.Background(), report)
 
 	return s.sender.SendReport(ctx, report)
 }
@@ -71,11 +82,33 @@ func (s *ReportService) ProcessTestResults(ctx context.Context, files []string, 
 // ParsePath — see internal/adapters/parsers/native/qualflare) into a real
 // StorageKey/FileSize via the presigned-URL flow. Fail-open per attachment,
 // matching the policy the reporters themselves used before this
-// responsibility moved here: a failed upload is logged and the attachment
-// is left with neither StorageKey nor LocalVideoPath resolved (effectively
-// dropped server-side, since neither Content nor StorageKey ends up set) —
-// it never fails the whole collect.
+// responsibility moved here: a failed upload is logged and the attachment is
+// left with neither StorageKey nor LocalVideoPath set. This does NOT drop the
+// attachment server-side: the server persists a row from the attachment's
+// Name field alone (it does not filter out an attachment with both Content
+// and StorageKey empty), so a failed upload instead produces an
+// undownloadable placeholder "video" entry in the UI, not a fully-dropped
+// attachment.
+//
+// The ctx passed in by ProcessTestResults is deliberately NOT the
+// deadline-bearing --timeout ctx — see the call site's comment — so a caller
+// whose ctx is already expired or near-expired does not, by itself, prevent
+// an upload from being attempted here.
 func (s *ReportService) resolveVideoAttachments(ctx context.Context, launch *domain.Launch) {
+	// Memoizes one upload's result per distinct absolute LocalVideoPath, so a
+	// video referenced by more than one attachment (e.g. a spec-level
+	// recording attached to several test cases) is uploaded once, not once per
+	// attachment. Scoped to a single resolveVideoAttachments call — there is no
+	// reason to persist it further, and ReportService instances are reused
+	// across unrelated ProcessTestResults calls (in tests, at least) where a
+	// stale entry would be wrong.
+	type uploadResult struct {
+		storageKey string
+		fileSize   int64
+		err        error
+	}
+	uploaded := make(map[string]uploadResult)
+
 	for i := range launch.Suites {
 		for j := range launch.Suites[i].Cases {
 			attachments := launch.Suites[i].Cases[j].Attachments
@@ -84,14 +117,21 @@ func (s *ReportService) resolveVideoAttachments(ctx context.Context, launch *dom
 					continue
 				}
 				localPath := attachments[k].LocalVideoPath
-				storageKey, fileSize, err := s.sender.UploadVideo(ctx, localPath, attachments[k].MimeType)
-				if err != nil {
-					fmt.Fprintf(s.warnWriter(), "skipping video attachment %q (%s): %v\n", attachments[k].Name, localPath, err)
+
+				result, ok := uploaded[localPath]
+				if !ok {
+					storageKey, fileSize, err := s.sender.UploadVideo(ctx, localPath, attachments[k].MimeType)
+					result = uploadResult{storageKey: storageKey, fileSize: fileSize, err: err}
+					uploaded[localPath] = result
+				}
+
+				if result.err != nil {
+					fmt.Fprintf(s.warnWriter(), "skipping video attachment %q (%s): %v\n", attachments[k].Name, localPath, result.err)
 					attachments[k].LocalVideoPath = ""
 					continue
 				}
-				attachments[k].StorageKey = storageKey
-				attachments[k].FileSize = fileSize
+				attachments[k].StorageKey = result.storageKey
+				attachments[k].FileSize = result.fileSize
 				attachments[k].LocalVideoPath = ""
 			}
 		}
