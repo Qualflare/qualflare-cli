@@ -38,8 +38,25 @@ func New() *Parser {
 // @qualflare/cucumberjs) closely enough to decode their JSON output —
 // only the fields this parser actually maps onto domain.* are declared.
 type Collect struct {
-	Framework string  `json:"framework"`
-	Suites    []Suite `json:"suites"`
+	Framework string `json:"framework"`
+	// Platform and Browser are launch-level in the reporters' wire contract
+	// (shared/types.ts): both @qualflare/cypress's collect-builder.ts and
+	// @qualflare/cucumberjs's equivalent set them ONLY on the top-level Collect
+	// object (from `config.platform`/`resolveBrowser(config, browserInfo)`) —
+	// neither reporter ever populates a per-suite `browser` override, so this
+	// is the one place in the JSON that actually carries them. Captured here
+	// (stopgap for the data-loss described in buildSuite) and copied onto the
+	// synthetic wrapper Suite's Properties in buildSuite, so
+	// report_service.go's existing promoteConsistentSuiteProperties picks
+	// "browser" (and, if ever consistent across merged shards, "platform")
+	// back up into Launch.Properties automatically. Every other Collect field
+	// (branch, commit, environment, language, milestone, CI metadata, os) is
+	// deliberately still NOT decoded here — recovering those needs a
+	// ports.Parser interface change to carry launch-level fields, out of scope
+	// for this stopgap.
+	Platform string  `json:"platform,omitempty"`
+	Browser  string  `json:"browser,omitempty"`
+	Suites   []Suite `json:"suites"`
 }
 
 type Suite struct {
@@ -154,6 +171,22 @@ func buildSuite(collect Collect, sourceDir string) (*domain.Suite, error) {
 		Category:  domain.Framework(collect.Framework).GetCategory(),
 		Timestamp: time.Now().UTC(),
 		Cases:     make([]domain.Case, 0),
+	}
+
+	// Stopgap for the browser/platform data-loss this parser otherwise has: see
+	// Collect.Platform/Collect.Browser's doc comment for why these are read from
+	// the top-level Collect object. promoteConsistentSuiteProperties
+	// (report_service.go) reads these same two keys off every merged suite and
+	// promotes them to Launch.Properties when every suite that sets them agrees
+	// — unchanged by this parser, it just needed something to read.
+	if collect.Browser != "" || collect.Platform != "" {
+		suite.Properties = make(map[string]string, 2)
+		if collect.Browser != "" {
+			suite.Properties["browser"] = collect.Browser
+		}
+		if collect.Platform != "" {
+			suite.Properties["platform"] = collect.Platform
+		}
 	}
 
 	var totalDurationNs int64
