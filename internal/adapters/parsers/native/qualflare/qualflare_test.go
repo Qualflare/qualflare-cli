@@ -264,6 +264,44 @@ func TestParserMapsSteps(t *testing.T) {
 	}
 }
 
+// Fix 3 regression test: browser/platform, set only on the top-level Collect object
+// by both reporters (see Collect.Platform/Collect.Browser's doc comment), must survive
+// onto the synthetic wrapper Suite's Properties so report_service.go's existing
+// promoteConsistentSuiteProperties can promote them to Launch.Properties.
+func TestParserCapturesBrowserAndPlatformIntoSuiteProperties(t *testing.T) {
+	jsonReport := `{"framework": "cypress", "platform": "web", "browser": "chrome 118", "suites": [
+		{"name": "s", "cases": [{"id": "1", "name": "t", "status": "passed"}]}
+	]}`
+	parser := New()
+	suite, err := parser.Parse(strings.NewReader(jsonReport))
+	if err != nil {
+		t.Fatalf("parse error: %v", err)
+	}
+	if suite.Properties["browser"] != "chrome 118" {
+		t.Errorf("Properties[browser] = %q, want %q", suite.Properties["browser"], "chrome 118")
+	}
+	if suite.Properties["platform"] != "web" {
+		t.Errorf("Properties[platform] = %q, want %q", suite.Properties["platform"], "web")
+	}
+}
+
+func TestParserOmitsBrowserAndPlatformPropertiesWhenSourceOmitsThem(t *testing.T) {
+	jsonReport := `{"framework": "cypress", "suites": [
+		{"name": "s", "cases": [{"id": "1", "name": "t", "status": "passed"}]}
+	]}`
+	parser := New()
+	suite, err := parser.Parse(strings.NewReader(jsonReport))
+	if err != nil {
+		t.Fatalf("parse error: %v", err)
+	}
+	if _, ok := suite.Properties["browser"]; ok {
+		t.Errorf("expected no browser property, got %q", suite.Properties["browser"])
+	}
+	if _, ok := suite.Properties["platform"]; ok {
+		t.Errorf("expected no platform property, got %q", suite.Properties["platform"])
+	}
+}
+
 func TestParserSatisfiesPathAwareParser(t *testing.T) {
 	var _ ports.PathAwareParser = New()
 }
