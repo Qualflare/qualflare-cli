@@ -14,6 +14,7 @@ import (
 	"qualflare-cli/internal/core/ports"
 	"qualflare-cli/internal/version"
 	"strings"
+	"time"
 
 	"resty.dev/v3"
 )
@@ -151,10 +152,26 @@ func (c *Client) UploadVideo(ctx context.Context, localPath, mimeType string) (s
 	}
 	fileSize := info.Size()
 
+	// The presign POST and the PUT share a generous, independent budget derived
+	// from ctx, not the raw ctx itself: command.go wraps the whole
+	// ProcessTestResults call in a single context.WithTimeout(ctx, opts.timeout)
+	// (default 30s, the --timeout flag) meant for lightweight metadata POSTs,
+	// and that same budget is otherwise shared with parsing, SendReport, this
+	// presign request, os.ReadFile of the full video, AND the PUT — for
+	// anything but a tiny clip, 30s is easily exhausted by network transfer
+	// alone. Deriving from ctx (rather than context.Background()) means a
+	// caller-supplied deadline tighter than 5 minutes still wins, since
+	// context.WithTimeout takes the earlier of the two deadlines. 5 minutes
+	// matches a 50-100MB file (maxVideoBytes' cap) over a slow-but-real
+	// connection, mirroring the reporters' AbortSignal.timeout(timeoutMs) scoped
+	// to just the upload.
+	uploadCtx, cancel := context.WithTimeout(ctx, 5*time.Minute)
+	defer cancel()
+
 	reqURL := c.endpoint + apiBasePath + "/attachments/upload-url"
 	var presign uploadURLResponse
 	resp, err := c.resty.R().
-		SetContext(ctx).
+		SetContext(uploadCtx).
 		SetBody(uploadURLRequest{
 			Filename: filepath.Base(localPath),
 			MimeType: mimeType,
@@ -180,7 +197,7 @@ func (c *Client) UploadVideo(ctx context.Context, localPath, mimeType string) (s
 	// URL itself is the credential, matching the reporters' putObject, which
 	// explicitly sends no auth header on the PUT.
 	putResp, err := resty.New().R().
-		SetContext(ctx).
+		SetContext(uploadCtx).
 		SetHeader("Content-Type", mimeType).
 		SetBody(body).
 		Put(presign.UploadURL)
