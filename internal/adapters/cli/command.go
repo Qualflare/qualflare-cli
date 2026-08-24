@@ -13,6 +13,7 @@ import (
 	"qualflare-cli/internal/core/domain"
 	"qualflare-cli/internal/core/ports"
 	"qualflare-cli/internal/version"
+	"sort"
 	"strings"
 	"time"
 
@@ -181,7 +182,7 @@ func (c *CLI) createCollectCommand() *cobra.Command {
 		Short: "Collect test results for Qualflare",
 		Long: `Parse test result files and send them to the Qualflare API.
 
-Files can be specified as arguments or using glob patterns.
+Files can be specified as arguments, using glob patterns, or as a directory.
 The format is auto-detected if not specified.`,
 		Example: `  # Collect JUnit XML files for project 'my-app'
   qf my-app collect results.xml --format junit
@@ -191,6 +192,11 @@ The format is auto-detected if not specified.`,
 
   # Collect multiple files
   qf my-app collect *.xml --format junit
+
+  # Collect (and auto-merge, if the files carry their own shardIndex) every
+  # report in a directory — this is what @qualflare/cypress and
+  # @qualflare/cucumberjs's outputDir produces
+  qf my-app collect ./qualflare-results
 
   # Dry run (parse and show what would be sent)
   qf my-app collect results.xml --dry-run
@@ -274,6 +280,40 @@ func expandGlobs(patterns []string) ([]string, error) {
 		if len(matches) == 0 {
 			return nil, fmt.Errorf("no files match pattern %q", p)
 		}
+		out = append(out, matches...)
+	}
+	return out, nil
+}
+
+// expandDirectories expands any argument that is a directory into the *.json
+// files directly inside it (non-recursive — matches the reporters' flat
+// outputDir layout), preserving order and passing a non-directory argument
+// through literally. A directory with no *.json files inside is an error,
+// matching expandGlobs's "no matches = loud error, not a silent empty
+// upload" convention (BUG-28).
+func expandDirectories(paths []string) ([]string, error) {
+	out := make([]string, 0, len(paths))
+	for _, p := range paths {
+		info, err := os.Stat(p)
+		if err != nil {
+			// Let the existing verifyFilesExist give the real "does not
+			// exist" error later — this function only expands directories
+			// it can actually see.
+			out = append(out, p)
+			continue
+		}
+		if !info.IsDir() {
+			out = append(out, p)
+			continue
+		}
+		matches, err := filepath.Glob(filepath.Join(p, "*.json"))
+		if err != nil {
+			return nil, fmt.Errorf("invalid directory %q: %w", p, err)
+		}
+		if len(matches) == 0 {
+			return nil, fmt.Errorf("directory %q contains no .json report files", p)
+		}
+		sort.Strings(matches)
 		out = append(out, matches...)
 	}
 	return out, nil
@@ -368,6 +408,11 @@ func (c *CLI) runCollect(ctx context.Context, files []string, opts collectOption
 	// CLI never expanded them — BUG-28). A pattern that matches nothing is an
 	// error, so a typo'd glob fails loudly instead of uploading nothing.
 	files, err := expandGlobs(files)
+	if err != nil {
+		return err
+	}
+
+	files, err = expandDirectories(files)
 	if err != nil {
 		return err
 	}
