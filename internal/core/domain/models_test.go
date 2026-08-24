@@ -1,6 +1,9 @@
 package domain
 
-import "testing"
+import (
+	"encoding/json"
+	"testing"
+)
 
 // TestSeverityToCasePriority guards the CLI half of the P0 fix: security parsers
 // emit "info"/"unknown" severities, which the API's `priority` enum rejects.
@@ -308,4 +311,41 @@ func TestPtrHelpers(t *testing.T) {
 	if got := BoolPtr(false); got == nil || *got != false {
 		t.Errorf("BoolPtr(false) = %v, want pointer to false", got)
 	}
+}
+
+func TestAttachmentLocalVideoPathNeverSerializes(t *testing.T) {
+	a := Attachment{Name: "clip", LocalVideoPath: "/tmp/should-not-appear.mp4"}
+	b, err := json.Marshal(a)
+	if err != nil {
+		t.Fatalf("marshal error: %v", err)
+	}
+	if got := string(b); containsSubstring(got, "should-not-appear") {
+		t.Fatalf("LocalVideoPath leaked into wire JSON: %s", got)
+	}
+}
+
+func TestAttachmentStorageKeyAndFileSizeSerialize(t *testing.T) {
+	a := Attachment{Name: "clip", StorageKey: "case-run-attachments/proj/1.mp4", FileSize: 12345}
+	b, err := json.Marshal(a)
+	if err != nil {
+		t.Fatalf("marshal error: %v", err)
+	}
+	got := string(b)
+	if !containsSubstring(got, `"storageKey":"case-run-attachments/proj/1.mp4"`) {
+		t.Fatalf("storageKey missing from wire JSON: %s", got)
+	}
+	if !containsSubstring(got, `"fileSize":12345`) {
+		t.Fatalf("fileSize missing from wire JSON: %s", got)
+	}
+}
+
+func containsSubstring(s, substr string) bool {
+	return len(s) >= len(substr) && (func() bool {
+		for i := 0; i+len(substr) <= len(s); i++ {
+			if s[i:i+len(substr)] == substr {
+				return true
+			}
+		}
+		return false
+	})()
 }
