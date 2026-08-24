@@ -161,6 +161,60 @@ func TestParserResolvesLocalVideoPathToAbsolute(t *testing.T) {
 	}
 }
 
+func TestParserResolvesLocalVideoPathToAbsoluteFromRelativeInputPath(t *testing.T) {
+	dir := t.TempDir()
+	videoFile := filepath.Join(dir, "clip.mp4")
+	if err := os.WriteFile(videoFile, []byte("x"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	jsonReport := `{"framework": "cypress", "suites": [{"name": "s", "cases": [
+		{"id": "1", "name": "t", "status": "passed", "attachments": [
+			{"name": "video", "mimeType": "video/mp4", "localVideoPath": "clip.mp4"}
+		]}
+	]}]}`
+	if err := os.WriteFile(filepath.Join(dir, "report.json"), []byte(jsonReport), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	origWD, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chdir(dir); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(origWD) })
+
+	// Derive the expected path from the post-chdir cwd rather than from the
+	// pre-chdir `dir` string: on macOS, t.TempDir() returns a path under
+	// /var/folders/..., but /var is itself a symlink to /private/var, so
+	// os.Getwd() (and therefore filepath.Abs, which ParsePath uses) reports
+	// the resolved /private/var/folders/... form. Comparing against the
+	// unresolved `dir` would fail on a correct implementation.
+	resolvedWD, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantVideoFile := filepath.Join(resolvedWD, "clip.mp4")
+
+	parser := New()
+	// A bare relative filename, matching real CLI usage (qualflare collect
+	// report.json) — filepath.Dir("report.json") is "." (still relative),
+	// so this is the case filepath.Dir alone can't resolve to absolute.
+	suite, err := parser.ParsePath("report.json")
+	if err != nil {
+		t.Fatalf("parse error: %v", err)
+	}
+
+	video := suite.Cases[0].Attachments[0]
+	if !filepath.IsAbs(video.LocalVideoPath) {
+		t.Errorf("expected LocalVideoPath to be absolute, got %q", video.LocalVideoPath)
+	}
+	if video.LocalVideoPath != wantVideoFile {
+		t.Errorf("expected LocalVideoPath %q, got %q", wantVideoFile, video.LocalVideoPath)
+	}
+}
+
 func TestParserReadsShardIndexFromSource(t *testing.T) {
 	jsonReport := `{"framework": "cypress", "suites": [{"name": "s", "cases": [
 		{"id": "1", "name": "t", "status": "passed", "shardIndex": 2}

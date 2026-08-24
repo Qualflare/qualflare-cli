@@ -106,6 +106,16 @@ func (p *Parser) Parse(reader io.Reader) (*domain.Suite, error) {
 // the CLI's cwd (necessary once a merge pulls files from multiple shard
 // subdirectories together — see the design spec).
 func (p *Parser) ParsePath(path string) (*domain.Suite, error) {
+	// filepath.Dir alone doesn't make its result absolute — a relative path
+	// argument (the normal case for CLI usage like `qualflare collect
+	// report.json`) would otherwise leave sourceDir, and therefore
+	// LocalVideoPath, relative too, contradicting the absolute-path contract
+	// documented on domain.Attachment.LocalVideoPath.
+	absPath, err := filepath.Abs(path)
+	if err != nil {
+		return nil, err
+	}
+
 	f, err := os.Open(path)
 	if err != nil {
 		return nil, err
@@ -116,7 +126,7 @@ func (p *Parser) ParsePath(path string) (*domain.Suite, error) {
 	if err := json.NewDecoder(f).Decode(&collect); err != nil {
 		return nil, err
 	}
-	return buildSuite(collect, filepath.Dir(path))
+	return buildSuite(collect, filepath.Dir(absPath))
 }
 
 // buildSuite decodes a Collect payload into a single synthetic wrapper
