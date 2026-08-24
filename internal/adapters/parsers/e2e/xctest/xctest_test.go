@@ -19,7 +19,7 @@ func TestXCTestParser_CategoryAndFramework(t *testing.T) {
 	if err != nil {
 		t.Fatalf("parse error: %v", err)
 	}
-	if suite.Category != domain.CategoryE2E {
-		t.Errorf("expected CategoryE2E, got %s", suite.Category)
+	if want := domain.FrameworkCategory(domain.FrameworkXCTest); suite.Category != want {
+		t.Errorf("expected %q, got %s", want, suite.Category)
 	}
 }
