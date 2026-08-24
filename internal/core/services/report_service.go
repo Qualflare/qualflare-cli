@@ -61,7 +61,41 @@ func (s *ReportService) ProcessTestResults(ctx context.Context, files []string, 
 		return nil
 	}
 
+	s.resolveVideoAttachments(ctx, report)
+
 	return s.sender.SendReport(ctx, report)
+}
+
+// resolveVideoAttachments walks every attachment in the merged launch and
+// resolves any LocalVideoPath (set by the qualflare-native parser's
+// ParsePath — see internal/adapters/parsers/native/qualflare) into a real
+// StorageKey/FileSize via the presigned-URL flow. Fail-open per attachment,
+// matching the policy the reporters themselves used before this
+// responsibility moved here: a failed upload is logged and the attachment
+// is left with neither StorageKey nor LocalVideoPath resolved (effectively
+// dropped server-side, since neither Content nor StorageKey ends up set) —
+// it never fails the whole collect.
+func (s *ReportService) resolveVideoAttachments(ctx context.Context, launch *domain.Launch) {
+	for i := range launch.Suites {
+		for j := range launch.Suites[i].Cases {
+			attachments := launch.Suites[i].Cases[j].Attachments
+			for k := range attachments {
+				if attachments[k].LocalVideoPath == "" {
+					continue
+				}
+				localPath := attachments[k].LocalVideoPath
+				storageKey, fileSize, err := s.sender.UploadVideo(ctx, localPath, attachments[k].MimeType)
+				if err != nil {
+					fmt.Fprintf(s.warnWriter(), "skipping video attachment %q (%s): %v\n", attachments[k].Name, localPath, err)
+					attachments[k].LocalVideoPath = ""
+					continue
+				}
+				attachments[k].StorageKey = storageKey
+				attachments[k].FileSize = fileSize
+				attachments[k].LocalVideoPath = ""
+			}
+		}
+	}
 }
 
 // ParseTestResults parses files and returns the parsed report without sending
