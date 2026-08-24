@@ -1,11 +1,14 @@
 package qualflare
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
 	"qualflare-cli/internal/core/domain"
+	"qualflare-cli/internal/core/ports"
 )
 
 func TestParserFlattensMultipleSuitesIntoOneWrapperSuite(t *testing.T) {
@@ -122,25 +125,67 @@ func TestParserRetryCountAndIsFlakyPassThrough(t *testing.T) {
 	}
 }
 
-func TestParserDropsStorageKeyAttachmentsButKeepsInlineOnes(t *testing.T) {
+func TestParserResolvesLocalVideoPathToAbsolute(t *testing.T) {
+	dir := t.TempDir()
+	videoFile := filepath.Join(dir, "clip.mp4")
+	if err := os.WriteFile(videoFile, []byte("x"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	reportPath := filepath.Join(dir, "report.json")
 	jsonReport := `{"framework": "cypress", "suites": [{"name": "s", "cases": [
 		{"id": "1", "name": "t", "status": "passed", "attachments": [
 			{"name": "screenshot", "mimeType": "image/png", "content": "aGVsbG8="},
-			{"name": "video", "mimeType": "video/mp4", "storageKey": "case-run-attachments/proj/1.mp4"}
+			{"name": "video", "mimeType": "video/mp4", "localVideoPath": "clip.mp4"}
 		]}
 	]}]}`
+	if err := os.WriteFile(reportPath, []byte(jsonReport), 0o600); err != nil {
+		t.Fatal(err)
+	}
 
+	parser := New()
+	suite, err := parser.ParsePath(reportPath)
+	if err != nil {
+		t.Fatalf("parse error: %v", err)
+	}
+
+	attachments := suite.Cases[0].Attachments
+	if len(attachments) != 2 {
+		t.Fatalf("expected 2 attachments (inline + video), got %d", len(attachments))
+	}
+	video := attachments[1]
+	if video.LocalVideoPath != videoFile {
+		t.Errorf("expected LocalVideoPath %q (resolved relative to report.json's directory), got %q", videoFile, video.LocalVideoPath)
+	}
+	if attachments[0].Content != "aGVsbG8=" {
+		t.Errorf("expected inline screenshot to survive unchanged, got %+v", attachments[0])
+	}
+}
+
+func TestParserReadsShardIndexFromSource(t *testing.T) {
+	jsonReport := `{"framework": "cypress", "suites": [{"name": "s", "cases": [
+		{"id": "1", "name": "t", "status": "passed", "shardIndex": 2}
+	]}]}`
 	parser := New()
 	suite, err := parser.Parse(strings.NewReader(jsonReport))
 	if err != nil {
 		t.Fatalf("parse error: %v", err)
 	}
-	attachments := suite.Cases[0].Attachments
-	if len(attachments) != 1 {
-		t.Fatalf("expected 1 attachment (storage-key one dropped), got %d", len(attachments))
+	if suite.Cases[0].ShardIndex == nil || *suite.Cases[0].ShardIndex != 2 {
+		t.Errorf("expected ShardIndex 2, got %v", suite.Cases[0].ShardIndex)
 	}
-	if attachments[0].Name != "screenshot" || attachments[0].Content != "aGVsbG8=" {
-		t.Errorf("expected the inline screenshot attachment to survive unchanged, got %+v", attachments[0])
+}
+
+func TestParserOmitsShardIndexWhenSourceOmitsIt(t *testing.T) {
+	jsonReport := `{"framework": "cypress", "suites": [{"name": "s", "cases": [
+		{"id": "1", "name": "t", "status": "passed"}
+	]}]}`
+	parser := New()
+	suite, err := parser.Parse(strings.NewReader(jsonReport))
+	if err != nil {
+		t.Fatalf("parse error: %v", err)
+	}
+	if suite.Cases[0].ShardIndex != nil {
+		t.Errorf("expected nil ShardIndex, got %v", *suite.Cases[0].ShardIndex)
 	}
 }
 
@@ -163,6 +208,10 @@ func TestParserMapsSteps(t *testing.T) {
 	if steps[0].Name != "Given a step" || steps[0].Keyword != "Given" || steps[0].Duration != time.Millisecond {
 		t.Errorf("unexpected step: %+v", steps[0])
 	}
+}
+
+func TestParserSatisfiesPathAwareParser(t *testing.T) {
+	var _ ports.PathAwareParser = New()
 }
 
 func TestParserGetFrameworkAndExtensions(t *testing.T) {

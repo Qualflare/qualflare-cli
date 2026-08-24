@@ -17,6 +17,8 @@ package qualflare
 import (
 	"encoding/json"
 	"io"
+	"os"
+	"path/filepath"
 	"time"
 
 	"qualflare-cli/internal/adapters/parsers/base"
@@ -54,6 +56,7 @@ type Case struct {
 	Duration    int64             `json:"duration"` // nanoseconds
 	RetryCount  *int              `json:"retryCount,omitempty"`
 	IsFlaky     *bool             `json:"isFlaky,omitempty"`
+	ShardIndex  *int              `json:"shardIndex,omitempty"`
 	Error       string            `json:"error,omitempty"`
 	Priority    string            `json:"priority,omitempty"`
 	Tags        []string          `json:"tags,omitempty"`
@@ -76,19 +79,47 @@ type Attachment struct {
 	Path     string `json:"path,omitempty"`
 	MimeType string `json:"mimeType,omitempty"`
 	Content  string `json:"content,omitempty"` // Base64 encoded
-	// StorageKey (video attachments uploaded via the presigned-URL flow —
-	// see launch.Attachment.StorageKey server-side) has NO equivalent in
-	// domain.Attachment and is deliberately dropped, not mapped: an R2
-	// object key is meaningless without the presigned-download machinery
-	// this CLI has no reason to reimplement. A case with only a
-	// storage-key-backed attachment still uploads correctly; it simply
-	// arrives with one fewer attachment than the original file-mode run
-	// recorded. Detected here only so Parse can skip it explicitly rather
-	// than silently emitting a contentless, pathless Attachment.
-	StorageKey string `json:"storageKey,omitempty"`
+	// LocalVideoPath, relative to the report file this Attachment came from —
+	// resolved to an absolute path in ParsePath before it ever reaches
+	// convertCase. See domain.Attachment.LocalVideoPath's doc comment.
+	LocalVideoPath string `json:"localVideoPath,omitempty"`
 }
 
 // Parse decodes one Collect JSON file into a single synthetic wrapper
+// domain.Suite, flattening every real suite's cases into one list — see
+// buildSuite for the flattening details. Called directly by tests exercising
+// fields other than video; every real collect invocation goes through
+// ParsePath instead (see its doc comment), since Parse has no filesystem
+// path to resolve a LocalVideoPath against and leaves it as the raw relative
+// string from the JSON.
+func (p *Parser) Parse(reader io.Reader) (*domain.Suite, error) {
+	var collect Collect
+	if err := json.NewDecoder(reader).Decode(&collect); err != nil {
+		return nil, err
+	}
+	return buildSuite(collect, "")
+}
+
+// ParsePath implements ports.PathAwareParser — report_service.go calls this
+// instead of Parse for this framework specifically, because a video
+// attachment's localVideoPath is relative to THIS file's own directory, not
+// the CLI's cwd (necessary once a merge pulls files from multiple shard
+// subdirectories together — see the design spec).
+func (p *Parser) ParsePath(path string) (*domain.Suite, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = f.Close() }()
+
+	var collect Collect
+	if err := json.NewDecoder(f).Decode(&collect); err != nil {
+		return nil, err
+	}
+	return buildSuite(collect, filepath.Dir(path))
+}
+
+// buildSuite decodes a Collect payload into a single synthetic wrapper
 // domain.Suite, flattening every real suite's cases into one list —
 // domain.Parser's interface returns exactly one *domain.Suite per file,
 // the same constraint every other multi-suite native format in this
@@ -98,13 +129,11 @@ type Attachment struct {
 // mochawesome JSON). Each case's real originating suite name is preserved
 // via domain.Case.ClassName, falling back to the suite name when the case
 // itself carries no className (cypress never sets one; cucumber-js's
-// className is the feature/rule path, when present).
-func (p *Parser) Parse(reader io.Reader) (*domain.Suite, error) {
-	var collect Collect
-	if err := json.NewDecoder(reader).Decode(&collect); err != nil {
-		return nil, err
-	}
-
+// className is the feature/rule path, when present). sourceDir is the
+// directory the report file lives in ("" when called via Parse's plain
+// io.Reader path) — see convertCase for how it's used to resolve
+// LocalVideoPath.
+func buildSuite(collect Collect, sourceDir string) (*domain.Suite, error) {
 	// The reporter that produced this file already resolved its own
 	// framework (cypress/cucumber, both already-registered domain.Framework
 	// values) — using ITS category, not this parser's own, is what makes a
@@ -121,7 +150,7 @@ func (p *Parser) Parse(reader io.Reader) (*domain.Suite, error) {
 	for _, s := range collect.Suites {
 		totalDurationNs += s.Duration
 		for _, c := range s.Cases {
-			suite.Cases = append(suite.Cases, convertCase(c, s.Name))
+			suite.Cases = append(suite.Cases, convertCase(c, s.Name, sourceDir))
 		}
 	}
 	suite.Duration = base.ParseDurationNs(totalDurationNs)
@@ -135,7 +164,7 @@ func (p *Parser) Parse(reader io.Reader) (*domain.Suite, error) {
 	return suite, nil
 }
 
-func convertCase(c Case, suiteName string) domain.Case {
+func convertCase(c Case, suiteName string, sourceDir string) domain.Case {
 	testCase := domain.Case{
 		ID:         c.ID,
 		Name:       c.Name,
@@ -144,6 +173,7 @@ func convertCase(c Case, suiteName string) domain.Case {
 		Duration:   base.ParseDurationNs(c.Duration),
 		RetryCount: c.RetryCount,
 		IsFlaky:    c.IsFlaky,
+		ShardIndex: c.ShardIndex,
 		Error:      c.Error,
 		Priority:   domain.Severity(c.Priority),
 		Tags:       c.Tags,
@@ -151,15 +181,18 @@ func convertCase(c Case, suiteName string) domain.Case {
 	}
 
 	for _, a := range c.Attachments {
-		if a.StorageKey != "" {
-			continue
-		}
-		testCase.Attachments = append(testCase.Attachments, domain.Attachment{
+		attachment := domain.Attachment{
 			Name:     a.Name,
 			Path:     a.Path,
 			MimeType: a.MimeType,
 			Content:  a.Content,
-		})
+		}
+		if a.LocalVideoPath != "" && sourceDir != "" {
+			attachment.LocalVideoPath = filepath.Join(sourceDir, a.LocalVideoPath)
+		} else if a.LocalVideoPath != "" {
+			attachment.LocalVideoPath = a.LocalVideoPath
+		}
+		testCase.Attachments = append(testCase.Attachments, attachment)
 	}
 
 	for _, s := range c.Steps {
