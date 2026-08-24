@@ -44,6 +44,12 @@ const (
 	FrameworkTrivy     Framework = "trivy"
 	FrameworkSnyk      Framework = "snyk"
 	FrameworkSonarQube Framework = "sonarqube"
+
+	// FrameworkQualflareJSON ingests @qualflare/cypress's and
+	// @qualflare/cucumberjs's own Collect JSON output directly (their
+	// `outputFile` config option) — the sharded-CI merge workflow. See
+	// internal/adapters/parsers/native/qualflare.
+	FrameworkQualflareJSON Framework = "qualflare-json"
 )
 
 // AllFrameworks returns all supported frameworks
@@ -72,6 +78,7 @@ func AllFrameworks() []Framework {
 		FrameworkTrivy,
 		FrameworkSnyk,
 		FrameworkSonarQube,
+		FrameworkQualflareJSON,
 	}
 }
 
@@ -87,25 +94,32 @@ const (
 	CategorySecurity FrameworkCategory = "security"
 )
 
-// GetCategory returns the category for a framework
+// GetCategory returns the category for a framework. Every real, specifically
+// identified framework maps to a category NAMED AFTER ITSELF (e.g. Cypress ->
+// "cypress") rather than a shared coarse bucket — one suite's category is
+// then always the exact tool that produced it, which is what lets a "mixed"
+// launch (see resolveLaunchFramework) still show each suite's real identity
+// without any separate field. The handful of coarse buckets below
+// (unit/bdd/e2e/api/security/generic) still exist as valid category values —
+// for backward compatibility with data written before this change, and as
+// the safe fallback for anything this can't identify: echoing back an
+// unrecognized framework string as the category would fail the server's
+// oneof validation and 400 the whole launch, so an unknown/invalid input
+// degrades to CategoryGeneric instead of round-tripping verbatim.
 func (f Framework) GetCategory() FrameworkCategory {
 	switch f {
-	case FrameworkJUnit:
+	case FrameworkQualflareJSON:
+		// The real per-suite category for an ingested file comes from ITS
+		// OWN embedded `framework` field (see the qualflare-json parser's
+		// Parse), not this constant's own identity — this case only exists
+		// so GetCategory() itself never falls through to the (wrong) default
+		// for this framework.
 		return CategoryGeneric
-	case FrameworkPython, FrameworkGolang, FrameworkJest,
-		FrameworkMocha, FrameworkRSpec, FrameworkPHPUnit, FrameworkTestNG:
-		return CategoryUnitTest
-	case FrameworkCucumber, FrameworkKarate:
-		return CategoryBDD
-	case FrameworkPlaywright, FrameworkCypress, FrameworkSelenium, FrameworkTestCafe,
-		FrameworkMaestro, FrameworkXCTest, FrameworkEspresso:
-		return CategoryE2E
-	case FrameworkNewman, FrameworkK6:
-		return CategoryAPI
-	case FrameworkZAP, FrameworkTrivy, FrameworkSnyk, FrameworkSonarQube:
-		return CategorySecurity
 	default:
-		return CategoryUnitTest
+		if f.IsValid() {
+			return FrameworkCategory(f)
+		}
+		return CategoryGeneric
 	}
 }
 
@@ -292,6 +306,19 @@ type Attachment struct {
 	Path     string `json:"path,omitempty"`
 	MimeType string `json:"mimeType,omitempty"`
 	Content  string `json:"content,omitempty"` // Base64 encoded
+	// StorageKey/FileSize mirror the server's launch.Attachment fields of the
+	// same name (video attachments uploaded via the presigned-URL flow) —
+	// set by report_service.go's video-resolution pass, never by a parser
+	// directly.
+	StorageKey string `json:"storageKey,omitempty"`
+	FileSize   int64  `json:"fileSize,omitempty"`
+	// LocalVideoPath is set by the qualflare-native parser only (see
+	// internal/adapters/parsers/native/qualflare) when a report file
+	// references a video it hasn't uploaded itself — an absolute path,
+	// resolved at parse time relative to that source file's own directory.
+	// Never sent to the server: report_service.go's video-resolution pass
+	// consumes it and fills StorageKey/FileSize before SendReport is called.
+	LocalVideoPath string `json:"-"`
 }
 
 // IntPtr returns a pointer to an int value

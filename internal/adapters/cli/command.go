@@ -13,6 +13,7 @@ import (
 	"qualflare-cli/internal/core/domain"
 	"qualflare-cli/internal/core/ports"
 	"qualflare-cli/internal/version"
+	"sort"
 	"strings"
 	"time"
 
@@ -75,7 +76,7 @@ Other:
   version          Print version information
 
 Supported frameworks:
-  Generic (JUnit): junit
+  Generic (JUnit): junit, qualflare-json
   Unit Testing:    python, golang, jest, mocha, rspec, phpunit, testng
   BDD:             cucumber, karate
   UI/E2E/Mobile:   playwright, cypress, selenium, testcafe, maestro, xctest, espresso
@@ -181,7 +182,7 @@ func (c *CLI) createCollectCommand() *cobra.Command {
 		Short: "Collect test results for Qualflare",
 		Long: `Parse test result files and send them to the Qualflare API.
 
-Files can be specified as arguments or using glob patterns.
+Files can be specified as arguments, using glob patterns, or as a directory.
 The format is auto-detected if not specified.`,
 		Example: `  # Collect JUnit XML files for project 'my-app'
   qf my-app collect results.xml --format junit
@@ -191,6 +192,11 @@ The format is auto-detected if not specified.`,
 
   # Collect multiple files
   qf my-app collect *.xml --format junit
+
+  # Collect (and auto-merge, if the files carry their own shardIndex) every
+  # report in a directory — this is what @qualflare/cypress and
+  # @qualflare/cucumberjs's outputDir produces
+  qf my-app collect ./qualflare-results
 
   # Dry run (parse and show what would be sent)
   qf my-app collect results.xml --dry-run
@@ -274,6 +280,40 @@ func expandGlobs(patterns []string) ([]string, error) {
 		if len(matches) == 0 {
 			return nil, fmt.Errorf("no files match pattern %q", p)
 		}
+		out = append(out, matches...)
+	}
+	return out, nil
+}
+
+// expandDirectories expands any argument that is a directory into the *.json
+// files directly inside it (non-recursive — matches the reporters' flat
+// outputDir layout), preserving order and passing a non-directory argument
+// through literally. A directory with no *.json files inside is an error,
+// matching expandGlobs's "no matches = loud error, not a silent empty
+// upload" convention (BUG-28).
+func expandDirectories(paths []string) ([]string, error) {
+	out := make([]string, 0, len(paths))
+	for _, p := range paths {
+		info, err := os.Stat(p)
+		if err != nil {
+			// Let the existing verifyFilesExist give the real "does not
+			// exist" error later — this function only expands directories
+			// it can actually see.
+			out = append(out, p)
+			continue
+		}
+		if !info.IsDir() {
+			out = append(out, p)
+			continue
+		}
+		matches, err := filepath.Glob(filepath.Join(p, "*.json"))
+		if err != nil {
+			return nil, fmt.Errorf("invalid directory %q: %w", p, err)
+		}
+		if len(matches) == 0 {
+			return nil, fmt.Errorf("directory %q contains no .json report files", p)
+		}
+		sort.Strings(matches)
 		out = append(out, matches...)
 	}
 	return out, nil
@@ -368,6 +408,11 @@ func (c *CLI) runCollect(ctx context.Context, files []string, opts collectOption
 	// CLI never expanded them — BUG-28). A pattern that matches nothing is an
 	// error, so a typo'd glob fails loudly instead of uploading nothing.
 	files, err := expandGlobs(files)
+	if err != nil {
+		return err
+	}
+
+	files, err = expandDirectories(files)
 	if err != nil {
 		return err
 	}
@@ -531,7 +576,60 @@ func (c *CLI) createListFormatsCommand() *cobra.Command {
 	return cmd
 }
 
-func (c *CLI) printFormats(categoryFilter string) {
+// frameworkDisplayGroups maps every framework onto the six coarse display
+// buckets list-formats groups its output under (unit/bdd/e2e/api/security/
+// generic). This is DELIBERATELY independent of Framework.GetCategory():
+// since the per-framework category redesign (see GetCategory's doc comment),
+// GetCategory() returns a category named after the framework itself for
+// every specifically-identified framework (e.g. cypress -> "cypress"), which
+// is the right value to send the server but the wrong thing to group a
+// human-facing listing by — grouping on GetCategory() directly silently
+// dropped every framework whose category no longer matched one of the six
+// bucket keys (list-formats showed only "qualflare-json" instead of all 24
+// frameworks). Keep this map in sync with domain.AllFrameworks(): a
+// framework missing from here falls back to CategoryGeneric in
+// buildFrameworkDisplayGroups rather than vanishing from the output, and the
+// TestBuildFrameworkDisplayGroups_IncludesEveryFramework test in
+// list_formats_test.go asserts every framework is actually reachable so a
+// future addition can't silently repeat this bug.
+var frameworkDisplayGroups = map[domain.Framework]domain.FrameworkCategory{
+	domain.FrameworkJUnit:         domain.CategoryGeneric,
+	domain.FrameworkQualflareJSON: domain.CategoryGeneric,
+
+	domain.FrameworkPython:  domain.CategoryUnitTest,
+	domain.FrameworkGolang:  domain.CategoryUnitTest,
+	domain.FrameworkJest:    domain.CategoryUnitTest,
+	domain.FrameworkMocha:   domain.CategoryUnitTest,
+	domain.FrameworkRSpec:   domain.CategoryUnitTest,
+	domain.FrameworkPHPUnit: domain.CategoryUnitTest,
+	domain.FrameworkTestNG:  domain.CategoryUnitTest,
+
+	domain.FrameworkCucumber: domain.CategoryBDD,
+	domain.FrameworkKarate:   domain.CategoryBDD,
+
+	domain.FrameworkPlaywright: domain.CategoryE2E,
+	domain.FrameworkCypress:    domain.CategoryE2E,
+	domain.FrameworkSelenium:   domain.CategoryE2E,
+	domain.FrameworkTestCafe:   domain.CategoryE2E,
+	domain.FrameworkMaestro:    domain.CategoryE2E,
+	domain.FrameworkXCTest:     domain.CategoryE2E,
+	domain.FrameworkEspresso:   domain.CategoryE2E,
+
+	domain.FrameworkNewman: domain.CategoryAPI,
+	domain.FrameworkK6:     domain.CategoryAPI,
+
+	domain.FrameworkZAP:       domain.CategorySecurity,
+	domain.FrameworkTrivy:     domain.CategorySecurity,
+	domain.FrameworkSnyk:      domain.CategorySecurity,
+	domain.FrameworkSonarQube: domain.CategorySecurity,
+}
+
+// buildFrameworkDisplayGroups groups every framework in domain.AllFrameworks()
+// into the six display buckets, via frameworkDisplayGroups rather than
+// Framework.GetCategory() — see that map's doc comment for why. Split out
+// from printFormats so the grouping itself is directly unit-testable without
+// capturing stdout.
+func buildFrameworkDisplayGroups() map[domain.FrameworkCategory][]domain.Framework {
 	categories := map[domain.FrameworkCategory][]domain.Framework{
 		domain.CategoryGeneric:  {},
 		domain.CategoryUnitTest: {},
@@ -542,9 +640,20 @@ func (c *CLI) printFormats(categoryFilter string) {
 	}
 
 	for _, fw := range domain.AllFrameworks() {
-		cat := fw.GetCategory()
+		cat, ok := frameworkDisplayGroups[fw]
+		if !ok {
+			// Should never happen once frameworkDisplayGroups is kept in sync
+			// with domain.AllFrameworks() — fall back to generic rather than
+			// silently dropping the framework from the listing.
+			cat = domain.CategoryGeneric
+		}
 		categories[cat] = append(categories[cat], fw)
 	}
+	return categories
+}
+
+func (c *CLI) printFormats(categoryFilter string) {
+	categories := buildFrameworkDisplayGroups()
 
 	categoryNames := map[domain.FrameworkCategory]string{
 		domain.CategoryGeneric:  "Generic (JUnit-compatible)",
