@@ -76,7 +76,7 @@ Other:
   version          Print version information
 
 Supported frameworks:
-  Generic (JUnit): junit
+  Generic (JUnit): junit, qualflare-json
   Unit Testing:    python, golang, jest, mocha, rspec, phpunit, testng
   BDD:             cucumber, karate
   UI/E2E/Mobile:   playwright, cypress, selenium, testcafe, maestro, xctest, espresso
@@ -576,7 +576,60 @@ func (c *CLI) createListFormatsCommand() *cobra.Command {
 	return cmd
 }
 
-func (c *CLI) printFormats(categoryFilter string) {
+// frameworkDisplayGroups maps every framework onto the six coarse display
+// buckets list-formats groups its output under (unit/bdd/e2e/api/security/
+// generic). This is DELIBERATELY independent of Framework.GetCategory():
+// since the per-framework category redesign (see GetCategory's doc comment),
+// GetCategory() returns a category named after the framework itself for
+// every specifically-identified framework (e.g. cypress -> "cypress"), which
+// is the right value to send the server but the wrong thing to group a
+// human-facing listing by — grouping on GetCategory() directly silently
+// dropped every framework whose category no longer matched one of the six
+// bucket keys (list-formats showed only "qualflare-json" instead of all 24
+// frameworks). Keep this map in sync with domain.AllFrameworks(): a
+// framework missing from here falls back to CategoryGeneric in
+// buildFrameworkDisplayGroups rather than vanishing from the output, and the
+// TestBuildFrameworkDisplayGroups_IncludesEveryFramework test in
+// list_formats_test.go asserts every framework is actually reachable so a
+// future addition can't silently repeat this bug.
+var frameworkDisplayGroups = map[domain.Framework]domain.FrameworkCategory{
+	domain.FrameworkJUnit:         domain.CategoryGeneric,
+	domain.FrameworkQualflareJSON: domain.CategoryGeneric,
+
+	domain.FrameworkPython:  domain.CategoryUnitTest,
+	domain.FrameworkGolang:  domain.CategoryUnitTest,
+	domain.FrameworkJest:    domain.CategoryUnitTest,
+	domain.FrameworkMocha:   domain.CategoryUnitTest,
+	domain.FrameworkRSpec:   domain.CategoryUnitTest,
+	domain.FrameworkPHPUnit: domain.CategoryUnitTest,
+	domain.FrameworkTestNG:  domain.CategoryUnitTest,
+
+	domain.FrameworkCucumber: domain.CategoryBDD,
+	domain.FrameworkKarate:   domain.CategoryBDD,
+
+	domain.FrameworkPlaywright: domain.CategoryE2E,
+	domain.FrameworkCypress:    domain.CategoryE2E,
+	domain.FrameworkSelenium:   domain.CategoryE2E,
+	domain.FrameworkTestCafe:   domain.CategoryE2E,
+	domain.FrameworkMaestro:    domain.CategoryE2E,
+	domain.FrameworkXCTest:     domain.CategoryE2E,
+	domain.FrameworkEspresso:   domain.CategoryE2E,
+
+	domain.FrameworkNewman: domain.CategoryAPI,
+	domain.FrameworkK6:     domain.CategoryAPI,
+
+	domain.FrameworkZAP:       domain.CategorySecurity,
+	domain.FrameworkTrivy:     domain.CategorySecurity,
+	domain.FrameworkSnyk:      domain.CategorySecurity,
+	domain.FrameworkSonarQube: domain.CategorySecurity,
+}
+
+// buildFrameworkDisplayGroups groups every framework in domain.AllFrameworks()
+// into the six display buckets, via frameworkDisplayGroups rather than
+// Framework.GetCategory() — see that map's doc comment for why. Split out
+// from printFormats so the grouping itself is directly unit-testable without
+// capturing stdout.
+func buildFrameworkDisplayGroups() map[domain.FrameworkCategory][]domain.Framework {
 	categories := map[domain.FrameworkCategory][]domain.Framework{
 		domain.CategoryGeneric:  {},
 		domain.CategoryUnitTest: {},
@@ -587,9 +640,20 @@ func (c *CLI) printFormats(categoryFilter string) {
 	}
 
 	for _, fw := range domain.AllFrameworks() {
-		cat := fw.GetCategory()
+		cat, ok := frameworkDisplayGroups[fw]
+		if !ok {
+			// Should never happen once frameworkDisplayGroups is kept in sync
+			// with domain.AllFrameworks() — fall back to generic rather than
+			// silently dropping the framework from the listing.
+			cat = domain.CategoryGeneric
+		}
 		categories[cat] = append(categories[cat], fw)
 	}
+	return categories
+}
+
+func (c *CLI) printFormats(categoryFilter string) {
+	categories := buildFrameworkDisplayGroups()
 
 	categoryNames := map[domain.FrameworkCategory]string{
 		domain.CategoryGeneric:  "Generic (JUnit-compatible)",
