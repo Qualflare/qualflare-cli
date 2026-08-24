@@ -85,6 +85,16 @@ func writeQualflareReport(t *testing.T, dir, filename, caseID string, shardIndex
 // reading each case's own "shardIndex" field), and resolves the one video
 // attachment through the real ReportService.resolveVideoAttachments pass
 // into StorageKey/FileSize with LocalVideoPath cleared.
+//
+// The two files' embedded shardIndex values (9 and 4) are deliberately
+// non-sequential and deliberately inverted relative to the files'
+// alphabetical/glob-processing order (shard-0.json is processed first but
+// carries shardIndex 9; shard-1.json is processed second but carries
+// shardIndex 4). If a regression ever reintroduced file-encounter-order
+// tagging (tagShardsByFile's --shard behavior) in place of reading each
+// case's own embedded field, it would stamp 0 and 1 here — a value mismatch
+// the assertions below would catch. Matching file order to shardIndex order
+// would let exactly that regression pass unnoticed.
 func TestRunCollect_DirectoryMergePreservesShardIndexAndResolvesVideo(t *testing.T) {
 	dir := t.TempDir()
 
@@ -93,8 +103,8 @@ func TestRunCollect_DirectoryMergePreservesShardIndexAndResolvesVideo(t *testing
 		t.Fatal(err)
 	}
 
-	writeQualflareReport(t, dir, "shard-0.json", "case-0", 0, "")
-	writeQualflareReport(t, dir, "shard-1.json", "case-1", 1, videoPath)
+	writeQualflareReport(t, dir, "shard-0.json", "case-0", 9, "")
+	writeQualflareReport(t, dir, "shard-1.json", "case-1", 4, videoPath)
 
 	sender := &collectIntegrationSender{
 		uploadStorageKey: "case-run-attachments/proj/clip.mp4",
@@ -131,16 +141,16 @@ func TestRunCollect_DirectoryMergePreservesShardIndexAndResolvesVideo(t *testing
 	if !ok {
 		t.Fatal("case-0 missing from the merged launch")
 	}
-	if case0.ShardIndex == nil || *case0.ShardIndex != 0 {
-		t.Errorf("case-0 ShardIndex = %v, want 0", case0.ShardIndex)
+	if case0.ShardIndex == nil || *case0.ShardIndex != 9 {
+		t.Errorf("case-0 ShardIndex = %v, want 9 (its own embedded value, not its file's processing order)", case0.ShardIndex)
 	}
 
 	case1, ok := casesByID["case-1"]
 	if !ok {
 		t.Fatal("case-1 missing from the merged launch")
 	}
-	if case1.ShardIndex == nil || *case1.ShardIndex != 1 {
-		t.Errorf("case-1 ShardIndex = %v, want 1", case1.ShardIndex)
+	if case1.ShardIndex == nil || *case1.ShardIndex != 4 {
+		t.Errorf("case-1 ShardIndex = %v, want 4 (its own embedded value, not its file's processing order)", case1.ShardIndex)
 	}
 
 	// Video resolution: exactly one UploadVideo call, for the one video
