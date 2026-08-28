@@ -288,6 +288,32 @@ type Case struct {
 
 	// Nested steps (for BDD/Cucumber)
 	Steps []Step `json:"steps,omitempty"`
+
+	// Labels are Allure-style arbitrary name/value metadata (epic, feature,
+	// story, owner, severity...), written by the @qualflare/* reporters'
+	// qualflare.label() API. Mirrors api-service's launch.Label; the server
+	// caps these at 100 per case.
+	Labels []Label `json:"labels,omitempty"`
+
+	// Links are typed external references (a defect-tracker issue, a TMS
+	// case, or an arbitrary custom URL), written by qualflare.link().
+	// Mirrors api-service's launch.Link; capped at 20 per case server-side.
+	Links []Link `json:"links,omitempty"`
+}
+
+// Label is one Allure-style name/value pair attached to a Case.
+type Label struct {
+	Name  string `json:"name"`
+	Value string `json:"value"`
+}
+
+// Link is a typed external reference attached to a Case. Type is one of
+// "issue", "tms" or "custom" -- the server rejects anything else, so the
+// value is passed through verbatim rather than normalized here.
+type Link struct {
+	Type string `json:"type"`
+	Name string `json:"name,omitempty"`
+	URL  string `json:"url"`
 }
 
 // Step represents a step within a test case (for BDD frameworks)
@@ -298,6 +324,26 @@ type Step struct {
 	Duration time.Duration `json:"duration"`
 	Error    string        `json:"error,omitempty"`
 	Location string        `json:"location,omitempty"`
+
+	// ParentIndex is a 0-based index into the SAME Case.Steps slice,
+	// identifying this step's parent for Allure-style nesting. Nil means a
+	// root step. The server resolves and sanity-checks these itself
+	// (ResolveStepParents drops out-of-range/cyclic values rather than
+	// rejecting the case), so they are passed through unvalidated here.
+	ParentIndex *int `json:"parentIndex,omitempty"`
+
+	// Parameters mirrors Allure's parameter() API. A slice, not a map:
+	// duplicate names are legal (e.g. the same parameter across loop
+	// iterations). Capped at 50 per step server-side.
+	Parameters []Parameter `json:"parameters,omitempty"`
+}
+
+// Parameter is one name/value input recorded against a Step. Masked is a
+// display hint for the UI only -- the server does not redact the value.
+type Parameter struct {
+	Name   string `json:"name"`
+	Value  string `json:"value,omitempty"`
+	Masked bool   `json:"masked,omitempty"`
 }
 
 // Attachment represents a file attachment (screenshot, log, etc.)

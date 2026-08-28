@@ -316,3 +316,126 @@ func TestParserGetFrameworkAndExtensions(t *testing.T) {
 		t.Errorf("expected [\".json\"], got %v", ext)
 	}
 }
+
+// Labels and links are written by every @qualflare/* reporter's metadata API
+// (qualflare.label()/qualflare.link()) and are accepted by /collect, but this
+// parser silently dropped them until now — so a user's epic/story/owner and
+// issue links never reached the server from ANY reporter. Regression test for
+// the whole chain.
+func TestParserPreservesLabelsAndLinks(t *testing.T) {
+	jsonReport := `
+	{
+		"framework": "playwright",
+		"metadata": {},
+		"suites": [
+			{"name": "checkout.spec.ts", "duration": 1000000000, "cases": [
+				{"id": "c1", "name": "checks out", "status": "passed", "duration": 500000000,
+				 "labels": [
+					{"name": "epic", "value": "Billing"},
+					{"name": "owner", "value": "payments-team"}
+				 ],
+				 "links": [
+					{"type": "issue", "name": "QF-1", "url": "https://example.com/issue/1"},
+					{"type": "tms", "url": "https://example.com/tms/9"}
+				 ]}
+			]}
+		]
+	}
+	`
+
+	suite, err := New().Parse(strings.NewReader(jsonReport))
+	if err != nil {
+		t.Fatalf("parse error: %v", err)
+	}
+	if len(suite.Cases) != 1 {
+		t.Fatalf("expected 1 case, got %d", len(suite.Cases))
+	}
+	c := suite.Cases[0]
+
+	if len(c.Labels) != 2 {
+		t.Fatalf("expected 2 labels, got %d", len(c.Labels))
+	}
+	if c.Labels[0].Name != "epic" || c.Labels[0].Value != "Billing" {
+		t.Errorf("label[0] = %+v, want {epic Billing}", c.Labels[0])
+	}
+	if c.Labels[1].Name != "owner" || c.Labels[1].Value != "payments-team" {
+		t.Errorf("label[1] = %+v", c.Labels[1])
+	}
+
+	if len(c.Links) != 2 {
+		t.Fatalf("expected 2 links, got %d", len(c.Links))
+	}
+	if c.Links[0].Type != "issue" || c.Links[0].Name != "QF-1" || c.Links[0].URL != "https://example.com/issue/1" {
+		t.Errorf("link[0] = %+v", c.Links[0])
+	}
+	// name is optional server-side; an omitted one must not become a phantom value.
+	if c.Links[1].Type != "tms" || c.Links[1].Name != "" {
+		t.Errorf("link[1] = %+v, want type tms with empty name", c.Links[1])
+	}
+}
+
+// A case with no labels/links must not gain empty slices — the server treats
+// omitempty absence and [] differently in its validators.
+func TestParserOmitsLabelsAndLinksWhenSourceOmitsThem(t *testing.T) {
+	jsonReport := `
+	{"framework": "playwright", "metadata": {}, "suites": [
+		{"name": "a.spec.ts", "duration": 1, "cases": [
+			{"id": "c1", "name": "t", "status": "passed", "duration": 1}
+		]}
+	]}
+	`
+	suite, err := New().Parse(strings.NewReader(jsonReport))
+	if err != nil {
+		t.Fatalf("parse error: %v", err)
+	}
+	if suite.Cases[0].Labels != nil {
+		t.Errorf("Labels = %v, want nil", suite.Cases[0].Labels)
+	}
+	if suite.Cases[0].Links != nil {
+		t.Errorf("Links = %v, want nil", suite.Cases[0].Links)
+	}
+}
+
+// Step nesting: /collect accepts Step.ParentIndex (case_run_steps.parent_id,
+// migrations 0229/0230) and Step.Parameters, and the reporters emit both — but
+// this parser decoded neither, flattening every step tree on the way through.
+func TestParserPreservesStepParentIndexAndParameters(t *testing.T) {
+	jsonReport := `
+	{
+		"framework": "playwright",
+		"metadata": {},
+		"suites": [
+			{"name": "a.spec.ts", "duration": 1000000000, "cases": [
+				{"id": "c1", "name": "t", "status": "passed", "duration": 1000000,
+				 "steps": [
+					{"name": "outer", "status": "passed", "duration": 1000000},
+					{"name": "inner", "status": "passed", "duration": 500000, "parentIndex": 0,
+					 "parameters": [{"name": "user", "value": "alice"}, {"name": "pw", "value": "x", "masked": true}]}
+				 ]}
+			]}
+		]}
+	`
+	suite, err := New().Parse(strings.NewReader(jsonReport))
+	if err != nil {
+		t.Fatalf("parse error: %v", err)
+	}
+	steps := suite.Cases[0].Steps
+	if len(steps) != 2 {
+		t.Fatalf("expected 2 steps, got %d", len(steps))
+	}
+	if steps[0].ParentIndex != nil {
+		t.Errorf("root step ParentIndex = %v, want nil", *steps[0].ParentIndex)
+	}
+	if steps[1].ParentIndex == nil || *steps[1].ParentIndex != 0 {
+		t.Fatalf("nested step ParentIndex = %v, want 0", steps[1].ParentIndex)
+	}
+	if len(steps[1].Parameters) != 2 {
+		t.Fatalf("expected 2 parameters, got %d", len(steps[1].Parameters))
+	}
+	if steps[1].Parameters[0].Name != "user" || steps[1].Parameters[0].Value != "alice" {
+		t.Errorf("parameters[0] = %+v", steps[1].Parameters[0])
+	}
+	if !steps[1].Parameters[1].Masked {
+		t.Error("parameters[1].Masked = false, want true")
+	}
+}
