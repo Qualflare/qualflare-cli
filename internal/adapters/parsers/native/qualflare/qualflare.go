@@ -80,15 +80,42 @@ type Case struct {
 	Properties  map[string]string `json:"properties,omitempty"`
 	Attachments []Attachment      `json:"attachments,omitempty"`
 	Steps       []Step            `json:"steps,omitempty"`
+	Labels      []Label           `json:"labels,omitempty"`
+	Links       []Link            `json:"links,omitempty"`
+}
+
+// Label mirrors api-service's launch.Label -- Allure-style name/value
+// metadata written by the reporters' qualflare.label() API.
+type Label struct {
+	Name  string `json:"name"`
+	Value string `json:"value"`
+}
+
+// Link mirrors api-service's launch.Link. Type must be one of
+// issue/tms/custom server-side; passed through verbatim so an unknown value
+// is rejected loudly there rather than silently rewritten here.
+type Link struct {
+	Type string `json:"type"`
+	Name string `json:"name,omitempty"`
+	URL  string `json:"url"`
 }
 
 type Step struct {
-	Name     string `json:"name"`
-	Keyword  string `json:"keyword,omitempty"`
-	Status   string `json:"status"`
-	Duration int64  `json:"duration"` // nanoseconds
-	Error    string `json:"error,omitempty"`
-	Location string `json:"location,omitempty"`
+	Name        string      `json:"name"`
+	Keyword     string      `json:"keyword,omitempty"`
+	Status      string      `json:"status"`
+	Duration    int64       `json:"duration"` // nanoseconds
+	Error       string      `json:"error,omitempty"`
+	Location    string      `json:"location,omitempty"`
+	ParentIndex *int        `json:"parentIndex,omitempty"`
+	Parameters  []Parameter `json:"parameters,omitempty"`
+}
+
+// Parameter mirrors api-service's launch.Parameter.
+type Parameter struct {
+	Name   string `json:"name"`
+	Value  string `json:"value,omitempty"`
+	Masked bool   `json:"masked,omitempty"`
 }
 
 type Attachment struct {
@@ -239,14 +266,33 @@ func convertCase(c Case, suiteName string, sourceDir string) domain.Case {
 	}
 
 	for _, s := range c.Steps {
-		testCase.Steps = append(testCase.Steps, domain.Step{
-			Name:     s.Name,
-			Keyword:  s.Keyword,
-			Status:   mapStatus(s.Status),
-			Duration: base.ParseDurationNs(s.Duration),
-			Error:    s.Error,
-			Location: s.Location,
-		})
+		step := domain.Step{
+			Name:        s.Name,
+			Keyword:     s.Keyword,
+			Status:      mapStatus(s.Status),
+			Duration:    base.ParseDurationNs(s.Duration),
+			Error:       s.Error,
+			Location:    s.Location,
+			ParentIndex: s.ParentIndex,
+		}
+		for _, p := range s.Parameters {
+			step.Parameters = append(step.Parameters, domain.Parameter{
+				Name:   p.Name,
+				Value:  p.Value,
+				Masked: p.Masked,
+			})
+		}
+		testCase.Steps = append(testCase.Steps, step)
+	}
+
+	// Labels/links are appended rather than assigned so an absent source
+	// field stays nil instead of becoming an empty slice -- the server
+	// distinguishes omitted from [] in its validators.
+	for _, l := range c.Labels {
+		testCase.Labels = append(testCase.Labels, domain.Label{Name: l.Name, Value: l.Value})
+	}
+	for _, l := range c.Links {
+		testCase.Links = append(testCase.Links, domain.Link{Type: l.Type, Name: l.Name, URL: l.URL})
 	}
 
 	return testCase
