@@ -148,6 +148,37 @@ func TestParserFactory_DetectJSONFramework_ArrayCapableStillMatches(t *testing.T
 	}
 }
 
+// The reporters' own Collect JSON (sharded-CI merge workflow) must
+// auto-detect correctly and not collide with Playwright's own
+// "config"+"suites" detector, which also uses the "suites" key.
+func TestParserFactory_DetectJSONFramework_QualflareJSON(t *testing.T) {
+	f := NewParserFactory()
+
+	content := []byte(`{"framework": "cypress", "metadata": null, "suites": [{"name": "s", "cases": []}]}`)
+
+	fw, err := f.detectJSONFramework(content)
+	if err != nil {
+		t.Fatalf("unexpected error detecting qualflare-json: %v", err)
+	}
+	if fw != domain.FrameworkQualflareJSON {
+		t.Errorf("expected %s, got %s", domain.FrameworkQualflareJSON, fw)
+	}
+}
+
+func TestParserFactory_DetectJSONFramework_PlaywrightStillMatchesWithoutFrameworkKey(t *testing.T) {
+	f := NewParserFactory()
+
+	content := []byte(`{"config": {}, "suites": []}`)
+
+	fw, err := f.detectJSONFramework(content)
+	if err != nil {
+		t.Fatalf("unexpected error detecting playwright: %v", err)
+	}
+	if fw != domain.FrameworkPlaywright {
+		t.Errorf("expected %s, got %s", domain.FrameworkPlaywright, fw)
+	}
+}
+
 func TestParserFactory_GetSupportedFrameworks(t *testing.T) {
 	f := NewParserFactory()
 	frameworks := f.GetSupportedFrameworks()

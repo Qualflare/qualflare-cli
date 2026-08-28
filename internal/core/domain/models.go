@@ -44,6 +44,12 @@ const (
 	FrameworkTrivy     Framework = "trivy"
 	FrameworkSnyk      Framework = "snyk"
 	FrameworkSonarQube Framework = "sonarqube"
+
+	// FrameworkQualflareJSON ingests @qualflare/cypress's and
+	// @qualflare/cucumberjs's own Collect JSON output directly (their
+	// `outputFile` config option) — the sharded-CI merge workflow. See
+	// internal/adapters/parsers/native/qualflare.
+	FrameworkQualflareJSON Framework = "qualflare-json"
 )
 
 // AllFrameworks returns all supported frameworks
@@ -72,6 +78,7 @@ func AllFrameworks() []Framework {
 		FrameworkTrivy,
 		FrameworkSnyk,
 		FrameworkSonarQube,
+		FrameworkQualflareJSON,
 	}
 }
 
@@ -87,25 +94,32 @@ const (
 	CategorySecurity FrameworkCategory = "security"
 )
 
-// GetCategory returns the category for a framework
+// GetCategory returns the category for a framework. Every real, specifically
+// identified framework maps to a category NAMED AFTER ITSELF (e.g. Cypress ->
+// "cypress") rather than a shared coarse bucket — one suite's category is
+// then always the exact tool that produced it, which is what lets a "mixed"
+// launch (see resolveLaunchFramework) still show each suite's real identity
+// without any separate field. The handful of coarse buckets below
+// (unit/bdd/e2e/api/security/generic) still exist as valid category values —
+// for backward compatibility with data written before this change, and as
+// the safe fallback for anything this can't identify: echoing back an
+// unrecognized framework string as the category would fail the server's
+// oneof validation and 400 the whole launch, so an unknown/invalid input
+// degrades to CategoryGeneric instead of round-tripping verbatim.
 func (f Framework) GetCategory() FrameworkCategory {
 	switch f {
-	case FrameworkJUnit:
+	case FrameworkQualflareJSON:
+		// The real per-suite category for an ingested file comes from ITS
+		// OWN embedded `framework` field (see the qualflare-json parser's
+		// Parse), not this constant's own identity — this case only exists
+		// so GetCategory() itself never falls through to the (wrong) default
+		// for this framework.
 		return CategoryGeneric
-	case FrameworkPython, FrameworkGolang, FrameworkJest,
-		FrameworkMocha, FrameworkRSpec, FrameworkPHPUnit, FrameworkTestNG:
-		return CategoryUnitTest
-	case FrameworkCucumber, FrameworkKarate:
-		return CategoryBDD
-	case FrameworkPlaywright, FrameworkCypress, FrameworkSelenium, FrameworkTestCafe,
-		FrameworkMaestro, FrameworkXCTest, FrameworkEspresso:
-		return CategoryE2E
-	case FrameworkNewman, FrameworkK6:
-		return CategoryAPI
-	case FrameworkZAP, FrameworkTrivy, FrameworkSnyk, FrameworkSonarQube:
-		return CategorySecurity
 	default:
-		return CategoryUnitTest
+		if f.IsValid() {
+			return FrameworkCategory(f)
+		}
+		return CategoryGeneric
 	}
 }
 
@@ -274,6 +288,32 @@ type Case struct {
 
 	// Nested steps (for BDD/Cucumber)
 	Steps []Step `json:"steps,omitempty"`
+
+	// Labels are Allure-style arbitrary name/value metadata (epic, feature,
+	// story, owner, severity...), written by the @qualflare/* reporters'
+	// qualflare.label() API. Mirrors api-service's launch.Label; the server
+	// caps these at 100 per case.
+	Labels []Label `json:"labels,omitempty"`
+
+	// Links are typed external references (a defect-tracker issue, a TMS
+	// case, or an arbitrary custom URL), written by qualflare.link().
+	// Mirrors api-service's launch.Link; capped at 20 per case server-side.
+	Links []Link `json:"links,omitempty"`
+}
+
+// Label is one Allure-style name/value pair attached to a Case.
+type Label struct {
+	Name  string `json:"name"`
+	Value string `json:"value"`
+}
+
+// Link is a typed external reference attached to a Case. Type is one of
+// "issue", "tms" or "custom" -- the server rejects anything else, so the
+// value is passed through verbatim rather than normalized here.
+type Link struct {
+	Type string `json:"type"`
+	Name string `json:"name,omitempty"`
+	URL  string `json:"url"`
 }
 
 // Step represents a step within a test case (for BDD frameworks)
@@ -284,6 +324,26 @@ type Step struct {
 	Duration time.Duration `json:"duration"`
 	Error    string        `json:"error,omitempty"`
 	Location string        `json:"location,omitempty"`
+
+	// ParentIndex is a 0-based index into the SAME Case.Steps slice,
+	// identifying this step's parent for Allure-style nesting. Nil means a
+	// root step. The server resolves and sanity-checks these itself
+	// (ResolveStepParents drops out-of-range/cyclic values rather than
+	// rejecting the case), so they are passed through unvalidated here.
+	ParentIndex *int `json:"parentIndex,omitempty"`
+
+	// Parameters mirrors Allure's parameter() API. A slice, not a map:
+	// duplicate names are legal (e.g. the same parameter across loop
+	// iterations). Capped at 50 per step server-side.
+	Parameters []Parameter `json:"parameters,omitempty"`
+}
+
+// Parameter is one name/value input recorded against a Step. Masked is a
+// display hint for the UI only -- the server does not redact the value.
+type Parameter struct {
+	Name   string `json:"name"`
+	Value  string `json:"value,omitempty"`
+	Masked bool   `json:"masked,omitempty"`
 }
 
 // Attachment represents a file attachment (screenshot, log, etc.)
@@ -292,6 +352,19 @@ type Attachment struct {
 	Path     string `json:"path,omitempty"`
 	MimeType string `json:"mimeType,omitempty"`
 	Content  string `json:"content,omitempty"` // Base64 encoded
+	// StorageKey/FileSize mirror the server's launch.Attachment fields of the
+	// same name (video attachments uploaded via the presigned-URL flow) —
+	// set by report_service.go's video-resolution pass, never by a parser
+	// directly.
+	StorageKey string `json:"storageKey,omitempty"`
+	FileSize   int64  `json:"fileSize,omitempty"`
+	// LocalVideoPath is set by the qualflare-native parser only (see
+	// internal/adapters/parsers/native/qualflare) when a report file
+	// references a video it hasn't uploaded itself — an absolute path,
+	// resolved at parse time relative to that source file's own directory.
+	// Never sent to the server: report_service.go's video-resolution pass
+	// consumes it and fills StorageKey/FileSize before SendReport is called.
+	LocalVideoPath string `json:"-"`
 }
 
 // IntPtr returns a pointer to an int value

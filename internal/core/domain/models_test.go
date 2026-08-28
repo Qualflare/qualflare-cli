@@ -1,6 +1,9 @@
 package domain
 
-import "testing"
+import (
+	"encoding/json"
+	"testing"
+)
 
 // TestSeverityToCasePriority guards the CLI half of the P0 fix: security parsers
 // emit "info"/"unknown" severities, which the API's `priority` enum rejects.
@@ -77,29 +80,32 @@ func TestCaseDefaultIsFlaky(t *testing.T) {
 	}
 }
 
-// TestFrameworkGetCategory pins the framework->category mapping that drives parser
-// selection. Note the default arm returns CategoryUnitTest rather than CategoryGeneric,
-// so an unrecognized framework is silently treated as a unit-test framework — asserted
-// here so the behaviour is a decision rather than an accident.
+// TestFrameworkGetCategory pins the framework->category mapping: every valid,
+// specifically identified framework maps to a category named after itself, so a
+// suite's category always says exactly which tool produced it. An
+// unrecognized/invalid framework must NOT round-trip verbatim — that would fail
+// the server's oneof validation and 400 the whole launch — so it degrades to
+// CategoryGeneric instead.
 func TestFrameworkGetCategory(t *testing.T) {
 	tests := []struct {
 		in   Framework
 		want FrameworkCategory
 	}{
-		{FrameworkJUnit, CategoryGeneric},
-		{FrameworkPython, CategoryUnitTest},
-		{FrameworkGolang, CategoryUnitTest},
-		{FrameworkTestNG, CategoryUnitTest},
-		{FrameworkCucumber, CategoryBDD},
-		{FrameworkKarate, CategoryBDD},
-		{FrameworkPlaywright, CategoryE2E},
-		{FrameworkEspresso, CategoryE2E},
-		{FrameworkNewman, CategoryAPI},
-		{FrameworkK6, CategoryAPI},
-		{FrameworkZAP, CategorySecurity},
-		{FrameworkSonarQube, CategorySecurity},
-		{"nope", CategoryUnitTest},
-		{"", CategoryUnitTest},
+		{FrameworkJUnit, FrameworkCategory(FrameworkJUnit)},
+		{FrameworkPython, FrameworkCategory(FrameworkPython)},
+		{FrameworkGolang, FrameworkCategory(FrameworkGolang)},
+		{FrameworkTestNG, FrameworkCategory(FrameworkTestNG)},
+		{FrameworkCucumber, FrameworkCategory(FrameworkCucumber)},
+		{FrameworkKarate, FrameworkCategory(FrameworkKarate)},
+		{FrameworkPlaywright, FrameworkCategory(FrameworkPlaywright)},
+		{FrameworkEspresso, FrameworkCategory(FrameworkEspresso)},
+		{FrameworkNewman, FrameworkCategory(FrameworkNewman)},
+		{FrameworkK6, FrameworkCategory(FrameworkK6)},
+		{FrameworkZAP, FrameworkCategory(FrameworkZAP)},
+		{FrameworkSonarQube, FrameworkCategory(FrameworkSonarQube)},
+		{FrameworkQualflareJSON, CategoryGeneric},
+		{"nope", CategoryGeneric},
+		{"", CategoryGeneric},
 	}
 	for _, tt := range tests {
 		if got := tt.in.GetCategory(); got != tt.want {
@@ -109,9 +115,11 @@ func TestFrameworkGetCategory(t *testing.T) {
 }
 
 // TestAllFrameworksAreValidAndCategorised guards the list itself: every framework
-// AllFrameworks advertises must round-trip through IsValid and must be explicitly
-// categorised rather than falling through to the default arm. A framework added to the
-// Framework constants but forgotten in AllFrameworks fails here.
+// AllFrameworks advertises must round-trip through IsValid, and (except for the
+// qualflare-json passthrough, which deliberately maps to CategoryGeneric — see
+// GetCategory's own comment) must categorise as itself, not fall back to
+// CategoryGeneric. A framework added to the Framework constants but forgotten in
+// AllFrameworks — or a typo in the constant itself — fails here.
 func TestAllFrameworksAreValidAndCategorised(t *testing.T) {
 	all := AllFrameworks()
 	if len(all) == 0 {
@@ -131,11 +139,12 @@ func TestAllFrameworksAreValidAndCategorised(t *testing.T) {
 		if f.String() != string(f) {
 			t.Errorf("Framework(%q).String() = %q", f, f.String())
 		}
-		// Every listed framework should be deliberately categorised. Only the unit-test
-		// frameworks may legitimately return CategoryUnitTest, so a non-unit framework
-		// landing there means it fell through the switch.
-		if f.GetCategory() == "" {
-			t.Errorf("Framework(%q).GetCategory() returned empty", f)
+		want := FrameworkCategory(f)
+		if f == FrameworkQualflareJSON {
+			want = CategoryGeneric
+		}
+		if got := f.GetCategory(); got != want {
+			t.Errorf("Framework(%q).GetCategory() = %q, want %q", f, got, want)
 		}
 	}
 }
@@ -308,4 +317,41 @@ func TestPtrHelpers(t *testing.T) {
 	if got := BoolPtr(false); got == nil || *got != false {
 		t.Errorf("BoolPtr(false) = %v, want pointer to false", got)
 	}
+}
+
+func TestAttachmentLocalVideoPathNeverSerializes(t *testing.T) {
+	a := Attachment{Name: "clip", LocalVideoPath: "/tmp/should-not-appear.mp4"}
+	b, err := json.Marshal(a)
+	if err != nil {
+		t.Fatalf("marshal error: %v", err)
+	}
+	if got := string(b); containsSubstring(got, "should-not-appear") {
+		t.Fatalf("LocalVideoPath leaked into wire JSON: %s", got)
+	}
+}
+
+func TestAttachmentStorageKeyAndFileSizeSerialize(t *testing.T) {
+	a := Attachment{Name: "clip", StorageKey: "case-run-attachments/proj/1.mp4", FileSize: 12345}
+	b, err := json.Marshal(a)
+	if err != nil {
+		t.Fatalf("marshal error: %v", err)
+	}
+	got := string(b)
+	if !containsSubstring(got, `"storageKey":"case-run-attachments/proj/1.mp4"`) {
+		t.Fatalf("storageKey missing from wire JSON: %s", got)
+	}
+	if !containsSubstring(got, `"fileSize":12345`) {
+		t.Fatalf("fileSize missing from wire JSON: %s", got)
+	}
+}
+
+func containsSubstring(s, substr string) bool {
+	return len(s) >= len(substr) && (func() bool {
+		for i := 0; i+len(substr) <= len(s); i++ {
+			if s[i:i+len(substr)] == substr {
+				return true
+			}
+		}
+		return false
+	})()
 }

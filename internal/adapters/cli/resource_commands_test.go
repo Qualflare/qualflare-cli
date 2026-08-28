@@ -38,6 +38,10 @@ func (s *stubAPIClient) Get(_ context.Context, path string, params url.Values) (
 
 func (s *stubAPIClient) SendReport(context.Context, *domain.Launch) error { return nil }
 
+func (s *stubAPIClient) UploadVideo(context.Context, string, string) (string, int64, error) {
+	return "", 0, nil
+}
+
 // newAPICLI wires a CLI with a token present so fetchAndPrint gets past its auth guard.
 func newAPICLI(t *testing.T) (*CLI, *stubAPIClient) {
 	t.Helper()

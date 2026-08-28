@@ -32,6 +32,9 @@ import (
 	// Generic parsers
 	"qualflare-cli/internal/adapters/parsers/generic/junit"
 
+	// Native Qualflare JSON parser (sharded-CI merge workflow)
+	"qualflare-cli/internal/adapters/parsers/native/qualflare"
+
 	// Security parsers
 	"qualflare-cli/internal/adapters/parsers/security/snyk"
 	"qualflare-cli/internal/adapters/parsers/security/sonarqube"
@@ -61,6 +64,9 @@ func NewParserFactory() *ParserFactory {
 
 	// Generic (JUnit-compatible) Parsers
 	f.RegisterParser(junit.New())
+
+	// Native Qualflare JSON (sharded-CI merge workflow)
+	f.RegisterParser(qualflare.New())
 
 	// Unit Testing Parsers
 	f.RegisterParser(pytest.New())
@@ -292,6 +298,17 @@ type jsonDetector struct {
 }
 
 var jsonDetectors = []jsonDetector{
+	// @qualflare/cypress's and @qualflare/cucumberjs's own Collect JSON
+	// (their `outputFile` mode — see internal/adapters/parsers/native/
+	// qualflare). Checked first: "framework"+"metadata"+"suites" together is
+	// distinctive enough that ordering relative to the other detectors below
+	// doesn't matter in practice, but leading with it keeps the sharded-CI
+	// merge workflow's own format visually next to nothing it could ever be
+	// confused with (Playwright's "config"+"suites" detector, in
+	// particular, is the one entry here that also uses "suites").
+	{func(obj map[string]interface{}, _ bool) bool {
+		return hasKeys(obj, "framework", "metadata", "suites")
+	}, domain.FrameworkQualflareJSON, false},
 	{func(obj map[string]interface{}, _ bool) bool { return hasKey(obj, "testResults") }, domain.FrameworkJest, false},
 	{func(obj map[string]interface{}, _ bool) bool { return hasKey(obj, "numTotalTests") }, domain.FrameworkJest, false},
 	{func(obj map[string]interface{}, _ bool) bool { return hasKeys(obj, "config", "suites") }, domain.FrameworkPlaywright, false},

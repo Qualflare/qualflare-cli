@@ -55,6 +55,10 @@ type ParserFactory interface {
 type ReportSender interface {
 	// SendReport sends a report to the API
 	SendReport(ctx context.Context, report *domain.Launch) error
+	// UploadVideo uploads a local video file via the presigned-URL flow
+	// (POST /api/v1/attachments/upload-url, then PUT the bytes) and returns
+	// the resulting storageKey and the file's byte size.
+	UploadVideo(ctx context.Context, localPath, mimeType string) (storageKey string, fileSize int64, err error)
 }
 
 // APIClient defines the interface for API communication (read + write)

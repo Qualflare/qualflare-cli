@@ -118,6 +118,10 @@ func (s *stubSender) SendReport(_ context.Context, report *domain.Launch) error 
 	return s.err
 }
 
+func (s *stubSender) UploadVideo(_ context.Context, _, _ string) (string, int64, error) {
+	return "", 0, nil
+}
+
 func writeFile(t *testing.T, dir, name, content string) string {
 	t.Helper()
 	p := filepath.Join(dir, name)
@@ -459,6 +463,63 @@ func TestParseTestResults_LaunchFrameworkLabel(t *testing.T) {
 				t.Errorf("Framework = %q, want %q", report.Framework, tt.want)
 			}
 		})
+	}
+}
+
+// A "mixed" launch (BUG-41) must still let each suite say which real tool
+// produced it. Since GetCategory() now names a category after its own
+// framework (see models.go), this is carried entirely by each real parser's
+// own Category assignment -- report_service.go's orchestration layer never
+// touches Category at all. This test pins that the orchestration layer
+// (dedup, shard tagging, the launch-level "mixed" resolution) doesn't
+// accidentally clobber a per-suite Category a parser already set, the way an
+// earlier version briefly discarded a per-suite Framework field.
+func TestParseTestResults_PerSuiteCategorySurvivesMixedLaunch(t *testing.T) {
+	junitSuite := onePassing(domain.FrameworkJUnit)
+	junitSuite.Category = domain.FrameworkJUnit.GetCategory()
+	golangSuite := onePassing(domain.FrameworkGolang)
+	golangSuite.Category = domain.FrameworkGolang.GetCategory()
+
+	junit := &stubParser{framework: domain.FrameworkJUnit, suite: junitSuite}
+	golang := &stubParser{framework: domain.FrameworkGolang, suite: golangSuite}
+
+	dir := t.TempDir()
+	a := writeFile(t, dir, "a.xml", "{}")
+	b := writeFile(t, dir, "b.json", "{}")
+
+	fac := &stubFactory{
+		parsers: map[domain.Framework]ports.Parser{
+			domain.FrameworkJUnit:  junit,
+			domain.FrameworkGolang: golang,
+		},
+		detect: map[string]domain.Framework{"a.xml": domain.FrameworkJUnit, "b.json": domain.FrameworkGolang},
+	}
+	s := NewReportService(fac, &stubSender{}, config.DefaultConfig())
+
+	report, err := s.ParseTestResults(context.Background(), []string{a, b}, "")
+	if err != nil {
+		t.Fatalf("ParseTestResults() = %v", err)
+	}
+	if report.Framework != "mixed" {
+		t.Fatalf("Framework = %q, want %q", report.Framework, "mixed")
+	}
+
+	want := map[string]domain.FrameworkCategory{
+		junitSuite.Name:  domain.FrameworkCategory(domain.FrameworkJUnit),
+		golangSuite.Name: domain.FrameworkCategory(domain.FrameworkGolang),
+	}
+	if len(report.Suites) != len(want) {
+		t.Fatalf("Suites = %d, want %d", len(report.Suites), len(want))
+	}
+	for _, suite := range report.Suites {
+		wantCat, ok := want[suite.Name]
+		if !ok {
+			t.Errorf("unexpected suite %q in report", suite.Name)
+			continue
+		}
+		if suite.Category != wantCat {
+			t.Errorf("suite %q Category = %q, want %q", suite.Name, suite.Category, wantCat)
+		}
 	}
 }
 

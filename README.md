@@ -9,7 +9,7 @@
 [![Docker](https://img.shields.io/docker/v/qualflare/qf?logo=docker&label=docker&sort=semver)](https://hub.docker.com/r/qualflare/qf)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
 
-Upload test results to [Qualflare](https://qualflare.com) from any CI pipeline or local machine. Supports 23 testing frameworks with automatic format detection.
+Upload test results to [Qualflare](https://qualflare.com) from any CI pipeline or local machine. Supports 24 testing frameworks with automatic format detection.
 
 ## Installation
 
@@ -146,7 +146,7 @@ Run `qf <command> --help` for flags and examples.
 
 | Category | Frameworks |
 |----------|-----------|
-| **Generic (JUnit-compatible)** | JUnit |
+| **Generic (JUnit-compatible)** | JUnit, `qualflare-json` (the @qualflare/cypress / @qualflare/cucumberjs reporters' own Collect JSON, for merging sharded-CI output) |
 | **Unit Testing** | pytest, Go testing, Jest/Vitest, Mocha, RSpec, PHPUnit, TestNG |
 | **BDD** | Cucumber, Karate |
 | **UI / E2E / Mobile** | Playwright, Cypress, Selenium, TestCafe, Maestro, XCTest, Espresso |
