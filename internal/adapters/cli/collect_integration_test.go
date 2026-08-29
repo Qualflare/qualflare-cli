@@ -44,7 +44,7 @@ func (s *collectIntegrationSender) UploadVideo(_ context.Context, localPath, mim
 // videoPath is non-empty, a video attachment referencing it via
 // localVideoPath (relative to dir, matching how the reporter itself would
 // write it).
-func writeQualflareReport(t *testing.T, dir, filename, caseID string, shardIndex int, videoPath string) string {
+func writeQualflareReport(t *testing.T, dir, filename, caseID string, shardIndex int, videoPath string) {
 	t.Helper()
 
 	attachments := ""
@@ -69,11 +69,9 @@ func writeQualflareReport(t *testing.T, dir, filename, caseID string, shardIndex
 		}]
 	}`, caseID, caseID, shardIndex, attachments)
 
-	path := filepath.Join(dir, filename)
-	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, filename), []byte(content), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	return path
 }
 
 // TestRunCollect_DirectoryMergePreservesShardIndexAndResolvesVideo is the
