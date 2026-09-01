@@ -400,7 +400,20 @@ func (s *ReportService) createReport(testSuites []domain.Suite, framework domain
 	// allowlist consideration is needed for THIS producer specifically. A future
 	// producer of user-authored Launch.Properties (e.g. a --property flag) would
 	// need its own allowlist, same as stripUserAuthoredSuiteProperties's pytest case.
-	launchProps := promoteConsistentSuiteProperties(testSuites, "browser", "platform")
+	launchProps := promoteConsistentSuiteProperties(testSuites, "browser", "platform", "environment")
+
+	// The qualflare-json reporters write the environment they were configured
+	// with into their report. Until this was read, it went nowhere and the
+	// launch landed in the CLI's default environment instead — silently, and
+	// wherever "development" existed, in the wrong place rather than nowhere.
+	// A --environment flag or QF_ENVIRONMENT still wins: the person running
+	// the upload outranks the file being uploaded.
+	//
+	// It is deleted from launchProps afterwards because Environment is a
+	// first-class Launch field the server validates and displays; leaving a
+	// duplicate "environment" property would just be noise in the UI.
+	s.config.SetEnvironmentFallback(launchProps["environment"])
+	delete(launchProps, "environment")
 
 	return &domain.Launch{
 		Framework:   string(framework),

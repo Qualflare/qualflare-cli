@@ -26,16 +26,17 @@ type stubConfig struct {
 	retryMax int
 }
 
-func (c *stubConfig) GetAPIKey() string      { return c.apiKey }
-func (c *stubConfig) GetAPIEndpoint() string { return c.endpoint }
-func (c *stubConfig) GetEnvironment() string { return "test" }
-func (c *stubConfig) GetLanguage() string    { return "en-US" }
-func (c *stubConfig) GetPlatform() string    { return "linux" }
-func (c *stubConfig) GetMilestone() int64    { return 0 }
-func (c *stubConfig) GetMaxFileSize() int64  { return 1 << 20 }
-func (c *stubConfig) GetCLIVersion() string  { return "test" }
-func (c *stubConfig) GetBranch() string      { return "main" }
-func (c *stubConfig) GetCommit() string      { return "abc123" }
+func (c *stubConfig) GetAPIKey() string             { return c.apiKey }
+func (c *stubConfig) GetAPIEndpoint() string        { return c.endpoint }
+func (c *stubConfig) GetEnvironment() string        { return "test" }
+func (c *stubConfig) SetEnvironmentFallback(string) {}
+func (c *stubConfig) GetLanguage() string           { return "en-US" }
+func (c *stubConfig) GetPlatform() string           { return "linux" }
+func (c *stubConfig) GetMilestone() int64           { return 0 }
+func (c *stubConfig) GetMaxFileSize() int64         { return 1 << 20 }
+func (c *stubConfig) GetCLIVersion() string         { return "test" }
+func (c *stubConfig) GetBranch() string             { return "main" }
+func (c *stubConfig) GetCommit() string             { return "abc123" }
 func (c *stubConfig) GetRetryConfig() (int, time.Duration, time.Duration) {
 	return c.retryMax, time.Millisecond, 2 * time.Millisecond
 }

@@ -75,6 +75,11 @@ type ConfigProvider interface {
 
 	// Project settings
 	GetEnvironment() string
+	// SetEnvironmentFallback applies an environment recovered from a report
+	// file, yielding to a --environment flag or QF_ENVIRONMENT. Without it a
+	// reporter's configured environment is silently discarded and the launch
+	// goes to the CLI's default instead.
+	SetEnvironmentFallback(env string)
 	GetLanguage() string
 	GetPlatform() string
 	GetMilestone() int64
