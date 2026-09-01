@@ -17,6 +17,7 @@ const (
 	FrameworkPython  Framework = "python"
 	FrameworkGolang  Framework = "golang"
 	FrameworkJest    Framework = "jest"
+	FrameworkVitest  Framework = "vitest"
 	FrameworkMocha   Framework = "mocha"
 	FrameworkRSpec   Framework = "rspec"
 	FrameworkPHPUnit Framework = "phpunit"
@@ -59,6 +60,7 @@ func AllFrameworks() []Framework {
 		FrameworkPython,
 		FrameworkGolang,
 		FrameworkJest,
+		FrameworkVitest,
 		FrameworkMocha,
 		FrameworkRSpec,
 		FrameworkPHPUnit,

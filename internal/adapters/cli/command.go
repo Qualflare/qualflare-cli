@@ -599,6 +599,7 @@ var frameworkDisplayGroups = map[domain.Framework]domain.FrameworkCategory{
 	domain.FrameworkPython:  domain.CategoryUnitTest,
 	domain.FrameworkGolang:  domain.CategoryUnitTest,
 	domain.FrameworkJest:    domain.CategoryUnitTest,
+	domain.FrameworkVitest:  domain.CategoryUnitTest,
 	domain.FrameworkMocha:   domain.CategoryUnitTest,
 	domain.FrameworkRSpec:   domain.CategoryUnitTest,
 	domain.FrameworkPHPUnit: domain.CategoryUnitTest,

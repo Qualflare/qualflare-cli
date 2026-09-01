@@ -72,6 +72,11 @@ func NewParserFactory() *ParserFactory {
 	f.RegisterParser(pytest.New())
 	f.RegisterParser(golang.New())
 	f.RegisterParser(jest.New())
+	// Vitest emits Jest-compatible JSON, so the Jest parser serves both. The
+	// map is keyed by GetFramework(), which can only name one slug, so the
+	// alias is registered directly — without it `--format vitest` fails with
+	// "unsupported framework" even though the enum accepts the value.
+	f.parsers[domain.FrameworkVitest] = jest.New()
 	f.RegisterParser(mocha.New())
 	f.RegisterParser(rspec.New())
 	f.RegisterParser(phpunit.New())
