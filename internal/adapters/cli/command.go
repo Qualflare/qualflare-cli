@@ -76,7 +76,7 @@ Other:
   version          Print version information
 
 Supported frameworks:
-  Generic (JUnit): junit, qualflare-json
+  Generic (JUnit): junit, ctrf, qualflare-json
   Unit Testing:    python, golang, jest, mocha, rspec, phpunit, testng
   BDD:             cucumber, karate
   UI/E2E/Mobile:   playwright, cypress, selenium, testcafe, maestro, xctest, espresso
@@ -594,6 +594,7 @@ func (c *CLI) createListFormatsCommand() *cobra.Command {
 // future addition can't silently repeat this bug.
 var frameworkDisplayGroups = map[domain.Framework]domain.FrameworkCategory{
 	domain.FrameworkJUnit:         domain.CategoryGeneric,
+	domain.FrameworkCTRF:          domain.CategoryGeneric,
 	domain.FrameworkQualflareJSON: domain.CategoryGeneric,
 
 	domain.FrameworkPython:  domain.CategoryUnitTest,

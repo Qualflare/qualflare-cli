@@ -13,6 +13,17 @@ const (
 	// Generic (JUnit-compatible) — any tool that emits standard JUnit XML
 	FrameworkJUnit Framework = "junit"
 
+	// FrameworkCTRF ingests the Common Test Report Format (https://ctrf.io), a
+	// tool-agnostic JSON interchange format. Generic for the same reason JUnit
+	// is: roughly fifteen producers and no single owning tool.
+	//
+	// It is mostly about reach. CTRF has first-party reporters for wdio,
+	// jasmine, nightwatch, codeceptjs and the .NET runners (MSTest, NUnit,
+	// xUnit) — none of which Qualflare supports directly, and .NET in
+	// particular can otherwise only arrive as generic JUnit XML.
+	// See internal/adapters/parsers/generic/ctrf.
+	FrameworkCTRF Framework = "ctrf"
+
 	// Unit Testing Frameworks
 	FrameworkPython  Framework = "python"
 	FrameworkGolang  Framework = "golang"
@@ -57,6 +68,7 @@ const (
 func AllFrameworks() []Framework {
 	return []Framework{
 		FrameworkJUnit,
+		FrameworkCTRF,
 		FrameworkPython,
 		FrameworkGolang,
 		FrameworkJest,
@@ -110,12 +122,17 @@ const (
 // degrades to CategoryGeneric instead of round-tripping verbatim.
 func (f Framework) GetCategory() FrameworkCategory {
 	switch f {
-	case FrameworkQualflareJSON:
-		// The real per-suite category for an ingested file comes from ITS
-		// OWN embedded `framework` field (see the qualflare-json parser's
-		// Parse), not this constant's own identity — this case only exists
-		// so GetCategory() itself never falls through to the (wrong) default
-		// for this framework.
+	case FrameworkQualflareJSON, FrameworkCTRF:
+		// Both are PASSTHROUGH formats: the real per-suite category comes from
+		// the file's own embedded producer identity — qualflare-json from its
+		// `framework` field, CTRF from `results.tool.name` — not from this
+		// constant.
+		//
+		// This case is load-bearing, not cosmetic. Without it the default arm
+		// would return FrameworkCategory("ctrf"), which the SERVER's
+		// Suite.Category oneof does not accept: the launch would fail
+		// validation entirely. The default arm's own comment describes exactly
+		// this hazard.
 		return CategoryGeneric
 	default:
 		if f.IsValid() {
