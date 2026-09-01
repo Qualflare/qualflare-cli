@@ -360,3 +360,78 @@ func containsSubstring(s, substr string) bool {
 		return false
 	})()
 }
+
+// domain.Status must cover everything the SERVER accepts and the @qualflare/*
+// reporters emit. All three surfaces carried seven values; only this enum was
+// short, which is why timeout and aborted used to be folded away by the parsers.
+func TestStatusCoversTheFullServerSet(t *testing.T) {
+	// Mirrors launch.Case.Status's oneof in api-service and the CaseStatus union
+	// in frameworks/qualflare-*/src/shared/types.ts. A value present there and
+	// missing here means a parser has to fold, and folding is silent data loss.
+	want := []Status{
+		StatusPassed, StatusFailed, StatusSkipped, StatusError,
+		StatusTimeout, StatusAborted, StatusPending,
+	}
+	seen := make(map[Status]bool, len(want))
+	for _, s := range want {
+		if s == "" {
+			t.Fatal("a status constant is empty")
+		}
+		if seen[s] {
+			t.Errorf("duplicate status %q", s)
+		}
+		seen[s] = true
+	}
+	if len(seen) != 7 {
+		t.Errorf("expected 7 distinct statuses, got %d", len(seen))
+	}
+}
+
+// The four suite counters are a LOCAL rollup, so the three non-passing statuses
+// that have no counter of their own fold into the nearest one. The case's own
+// Status keeps the precise value and is what reaches the server.
+func TestRecomputeCountsBucketsEveryStatus(t *testing.T) {
+	suite := &Suite{Cases: []Case{
+		{Status: StatusPassed},
+		{Status: StatusFailed},
+		{Status: StatusTimeout},
+		{Status: StatusError},
+		{Status: StatusAborted},
+		{Status: StatusSkipped},
+		{Status: StatusPending},
+	}}
+	suite.RecomputeCounts()
+
+	if suite.TotalTests != 7 {
+		t.Errorf("total = %d, want 7", suite.TotalTests)
+	}
+	if suite.Passed != 1 {
+		t.Errorf("passed = %d, want 1", suite.Passed)
+	}
+	if suite.Failed != 2 {
+		t.Errorf("failed = %d, want 2 (failed + timeout)", suite.Failed)
+	}
+	if suite.Errors != 2 {
+		t.Errorf("errors = %d, want 2 (error + aborted)", suite.Errors)
+	}
+	if suite.Skipped != 2 {
+		t.Errorf("skipped = %d, want 2 (skipped + pending)", suite.Skipped)
+	}
+
+	// Every case must land in exactly one bucket, or the rollup silently
+	// under-reports.
+	if got := suite.Passed + suite.Failed + suite.Errors + suite.Skipped; got != suite.TotalTests {
+		t.Errorf("buckets total %d but there are %d cases; a status fell through", got, suite.TotalTests)
+	}
+}
+
+// A timeout or an abort must never roll a suite up green.
+func TestGetStatusTreatsTimeoutAndAbortAsNotPassing(t *testing.T) {
+	for _, s := range []Status{StatusTimeout, StatusAborted} {
+		suite := &Suite{Cases: []Case{{Status: StatusPassed}, {Status: s}}}
+		suite.RecomputeCounts()
+		if got := suite.GetStatus(); got == StatusPassed {
+			t.Errorf("a suite containing %q reported %q; it must not read as a pass", s, got)
+		}
+	}
+}

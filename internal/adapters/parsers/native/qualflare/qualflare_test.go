@@ -83,13 +83,20 @@ func TestParserStatusMapping(t *testing.T) {
 	}{
 		{"passed", domain.StatusPassed},
 		{"failed", domain.StatusFailed},
-		{"timeout", domain.StatusFailed},
+		{"timeout", domain.StatusTimeout},
 		{"error", domain.StatusError},
-		{"aborted", domain.StatusError},
+		// timeout and aborted pass straight through now that domain.Status
+		// carries all seven. They used to fold into failed/error, which
+		// discarded a distinction the reporters' own CaseStatus union has
+		// always drawn and the server has always been able to store.
+		{"aborted", domain.StatusAborted},
 		{"skipped", domain.StatusSkipped},
-		// Deliberately StatusSkipped, not StatusPending — see mapStatus's
-		// doc comment (mirrors cypress.go's BUG-08 fix: StatusPending
-		// out-ranks passed at the suite level server-side).
+		// STILL deliberately StatusSkipped, and for a semantic reason rather
+		// than a missing constant: in Mocha, `pending` is what an it.skip
+		// fires, so it MEANS skipped. StatusPending out-ranks passed at the
+		// suite level server-side, so taking it literally would flip a green
+		// launch pending for one skipped test (BUG-08). Contrast the CTRF
+		// parser, where pending is a distinct status and is NOT folded.
 		{"pending", domain.StatusSkipped},
 		{"some-unrecognized-future-status", domain.StatusError},
 	}

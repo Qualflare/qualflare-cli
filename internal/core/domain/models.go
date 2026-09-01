@@ -166,6 +166,18 @@ const (
 	StatusSkipped Status = "skipped"
 	StatusError   Status = "error"
 	StatusPending Status = "pending"
+
+	// StatusTimeout and StatusAborted complete the set the SERVER accepts and
+	// the @qualflare/* reporters already emit — their own CaseStatus union has
+	// carried all seven for as long as it has existed.
+	//
+	// Before these existed the parsers folded them (timeout -> failed,
+	// aborted -> error), which silently discarded a distinction the reporter
+	// deliberately drew and the server can store. "The suite timed out" and
+	// "the suite failed an assertion" are different findings, and only one of
+	// them is usually the test's fault.
+	StatusTimeout Status = "timeout"
+	StatusAborted Status = "aborted"
 )
 
 // Launch represents the complete test launch/run
@@ -255,9 +267,14 @@ func (s *Suite) RecomputeCounts() {
 		switch c.Status {
 		case StatusPassed:
 			passed++
-		case StatusFailed:
+		// A timeout is a failure and an abort is an error FOR THIS SUMMARY only.
+		// The case's own Status keeps the precise value and is what reaches the
+		// server, which has counters for all seven; these four buckets exist for
+		// the CLI's local rollup and for GetStatus below, neither of which needs
+		// the finer distinction.
+		case StatusFailed, StatusTimeout:
 			failed++
-		case StatusError:
+		case StatusError, StatusAborted:
 			errors++
 		case StatusSkipped, StatusPending:
 			skipped++

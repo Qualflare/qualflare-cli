@@ -186,7 +186,7 @@ func TestPlaywrightParserFailedAfterRetries(t *testing.T) {
 	}
 }
 
-func TestPlaywrightParserInterruptedStatusIsError(t *testing.T) {
+func TestPlaywrightParserInterruptedStatusIsAborted(t *testing.T) {
 	// CLI-H4: Playwright emits "interrupted" on --max-failures / SIGINT. It fell
 	// through the status switch's `default` and was uploaded as PASSED — an
 	// interrupted (aborted) test must surface as an error, never a green pass.
@@ -219,8 +219,8 @@ func TestPlaywrightParserInterruptedStatusIsError(t *testing.T) {
 	if len(suite.Cases) != 1 {
 		t.Fatalf("expected 1 case, got %d", len(suite.Cases))
 	}
-	if got := suite.Cases[0].Status; got != domain.StatusError {
-		t.Errorf("expected StatusError for interrupted result, got %q", got)
+	if got := suite.Cases[0].Status; got != domain.StatusAborted {
+		t.Errorf("expected StatusAborted for interrupted result, got %q", got)
 	}
 	if suite.Errors != 1 {
 		t.Errorf("expected suite.Errors 1, got %d", suite.Errors)

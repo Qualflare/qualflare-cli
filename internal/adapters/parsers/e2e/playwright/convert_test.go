@@ -21,10 +21,15 @@ func TestConvertTest_ResultStatusArms(t *testing.T) {
 	}{
 		{"passed", "passed", domain.StatusPassed},
 		{"failed", "failed", domain.StatusFailed},
-		{"timedOut is a failure", "timedOut", domain.StatusFailed},
+		// timedOut and interrupted keep their own identity now that domain.Status
+		// carries all seven values. They used to fold into failed and error
+		// respectively, which was pure loss: Playwright draws the distinction,
+		// and so do the server and the reporters. Both remain fail-visible,
+		// which is what CLI-H4 actually required.
+		{"timedOut is a timeout, not a generic failure", "timedOut", domain.StatusTimeout},
 		{"skipped", "skipped", domain.StatusSkipped},
-		// Emitted on --max-failures / SIGINT: an aborted test, not a pass.
-		{"interrupted is an error", "interrupted", domain.StatusError},
+		// Emitted on --max-failures / SIGINT: the run was cut short.
+		{"interrupted is an abort, not a generic error", "interrupted", domain.StatusAborted},
 		{"unknown status is an error", "somethingNew", domain.StatusError},
 		{"empty status is an error", "", domain.StatusError},
 	}
@@ -93,12 +98,14 @@ func TestConvertTest_ExpectedFailure(t *testing.T) {
 	})
 
 	t.Run("does not rescue a non-failed status", func(t *testing.T) {
-		// interrupted maps to error, and the BUG-09 override only applies to failures.
+		// interrupted maps to aborted, and the BUG-09 override only applies to
+		// failures. What matters is that the override does not turn a
+		// non-passing result green, not which non-passing status it is.
 		test := testWithResult(Result{Status: "interrupted"})
 		test.ExpectedStatus = "interrupted"
 		got := p.convertTest(Spec{Title: "spec"}, test, "a.spec.ts", "")
-		if got.Status != domain.StatusError {
-			t.Errorf("status = %q, want error — the override must not rescue an abort", got.Status)
+		if got.Status != domain.StatusAborted {
+			t.Errorf("status = %q, want aborted — the override must not rescue an abort", got.Status)
 		}
 	})
 

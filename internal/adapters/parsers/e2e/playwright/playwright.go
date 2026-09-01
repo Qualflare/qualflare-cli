@@ -297,12 +297,19 @@ func statusFromResult(r Result) (domain.Status, string) {
 	switch r.Status {
 	case "passed":
 		return domain.StatusPassed, ""
-	case "failed", "timedOut":
-		var msg string
-		if r.Error != nil {
-			msg = domain.FormatError(r.Error.Message, r.Error.Stack, "")
-		}
-		return domain.StatusFailed, msg
+	case "timedOut":
+		// Playwright distinguishes a timeout from an assertion failure, and so
+		// do the server and the reporters; folding it into failed discarded
+		// that. A timeout still carries its error text, which is usually the
+		// most useful thing about it.
+		return domain.StatusTimeout, resultError(r)
+	case "interrupted":
+		// Emitted on --max-failures or SIGINT: the run was cut short, so this
+		// test never really got to fail. It was already fail-visible via the
+		// default arm; now it says what actually happened.
+		return domain.StatusAborted, resultError(r)
+	case "failed":
+		return domain.StatusFailed, resultError(r)
 	case "skipped":
 		return domain.StatusSkipped, ""
 	default:
@@ -380,4 +387,12 @@ func (p *Parser) GetFramework() domain.Framework {
 // SupportedFileExtensions returns supported file extensions
 func (p *Parser) SupportedFileExtensions() []string {
 	return []string{".json"}
+}
+
+// resultError renders a Playwright result error, if it carries one.
+func resultError(r Result) string {
+	if r.Error == nil {
+		return ""
+	}
+	return domain.FormatError(r.Error.Message, r.Error.Stack, "")
 }

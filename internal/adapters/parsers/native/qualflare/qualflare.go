@@ -299,21 +299,36 @@ func convertCase(c Case, suiteName string, sourceDir string) domain.Case {
 }
 
 // mapStatus maps the reporters' 7-value CaseStatus (shared/types.ts) onto
-// domain.Status's 5 values. `timeout`/`aborted` have no direct equivalent
-// and fold into the closest real outcome (a timeout is a failure; an
-// aborted run is closer to an error than a clean pass/skip). `pending`
-// deliberately maps to StatusSkipped, not domain.StatusPending — mirroring
-// cypress.go's BUG-08 fix: StatusPending out-ranks passed at the
-// suite/launch level server-side, so one pending case would flip an
-// otherwise-green merged launch pending.
+// domain.Status, which now carries all seven too — so timeout and aborted pass
+// straight through instead of folding into failed/error as they used to. That
+// fold was pure loss: both ends could always express the distinction, only this
+// enum could not.
+//
+// `pending` is the one value still deliberately mapped to StatusSkipped, and
+// for a semantic reason rather than a missing constant — mirroring cypress.go's
+// BUG-08 fix. In Mocha, `pending` is what an `it.skip` fires, so it MEANS
+// skipped; StatusPending out-ranks passed at the suite/launch level
+// server-side, and treating it literally would flip an otherwise-green merged
+// launch pending for one skipped test.
+//
+// The CTRF parser does NOT fold pending, because CTRF's enum carries skipped
+// and pending as separate values and a document saying pending means pending.
+// Same word, two meanings, decided by the source.
 func mapStatus(status string) domain.Status {
 	switch status {
 	case "passed":
 		return domain.StatusPassed
-	case "failed", "timeout":
+	case "failed":
 		return domain.StatusFailed
-	case "error", "aborted":
+	case "error":
 		return domain.StatusError
+	// Passed through rather than folded. The reporters' own CaseStatus union has
+	// always carried these two, and the server stores them, so collapsing them
+	// into failed/error here discarded a distinction both ends could express.
+	case "timeout":
+		return domain.StatusTimeout
+	case "aborted":
+		return domain.StatusAborted
 	case "skipped", "pending":
 		return domain.StatusSkipped
 	default:
