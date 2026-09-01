@@ -86,9 +86,11 @@ func TestMapStatus(t *testing.T) {
 		{"failed", "failed", "", domain.StatusFailed},
 		{"skipped", "skipped", "", domain.StatusSkipped},
 
-		// The CLI's wire model has no pending; the native parser folds it the
-		// same way.
-		{"pending folds to skipped", "pending", "", domain.StatusSkipped},
+		// NOT folded to skipped, unlike the mocha-family parsers. CTRF's enum
+		// carries skipped and pending as separate values, so a document saying
+		// pending means pending — folding it would discard a distinction the
+		// format draws on purpose.
+		{"pending stays pending", "pending", "", domain.StatusPending},
 
 		// other is fail-visible: it carries broken/errored/interrupted in
 		// practice, and anything green would let a bad run report clean.
@@ -99,9 +101,13 @@ func TestMapStatus(t *testing.T) {
 		// rawStatus recovers what CTRF's five-value enum flattened away.
 		{"rawStatus recovers error", "failed", "error", domain.StatusError},
 		{"rawStatus broken means error", "other", "broken", domain.StatusError},
-		{"rawStatus aborted means error", "failed", "aborted", domain.StatusError},
-		{"rawStatus timeout folds to failed", "other", "timeout", domain.StatusFailed},
-		{"rawStatus is matched case-insensitively", "failed", "  TIMEDOUT ", domain.StatusFailed},
+		{"rawStatus recovers aborted", "failed", "aborted", domain.StatusAborted},
+		{"rawStatus recovers timeout", "other", "timeout", domain.StatusTimeout},
+		{"rawStatus is matched case-insensitively", "failed", "  TIMEDOUT ", domain.StatusTimeout},
+		{"interrupted is an abort", "other", "interrupted", domain.StatusAborted},
+		// "excluded from the run" and "has not run yet" are different things.
+		{"todo is skipped", "other", "todo", domain.StatusSkipped},
+		{"notrun is pending", "other", "notrun", domain.StatusPending},
 		{"an unknown rawStatus falls through to the status", "passed", "weird", domain.StatusPassed},
 	}
 	for _, tt := range tests {

@@ -140,9 +140,16 @@ func (p *Parser) convertTest(test Test, suiteName string) domain.Case {
 		testCase.Status = domain.StatusFailed
 	case "skipped", "skip", "SKIPPED", "pending":
 		testCase.Status = domain.StatusSkipped
-	// CLI-H5: Allure-style "broken"/"timeout"/"aborted" mean the test errored
-	// (setup/WebDriver failure), not passed.
-	case "error", "ERROR", "broken", "timeout", "aborted":
+	// CLI-H5: Allure-style "broken"/"timeout"/"aborted" mean the test did not
+	// pass, and must never be treated as a pass. timeout and aborted now keep
+	// their own identity rather than folding into error: the server stores both
+	// and the reporters emit both, so collapsing them here discarded a real
+	// distinction. "broken" has no counterpart and stays an error.
+	case "timeout":
+		testCase.Status = domain.StatusTimeout
+	case "aborted":
+		testCase.Status = domain.StatusAborted
+	case "error", "ERROR", "broken":
 		testCase.Status = domain.StatusError
 	default:
 		// CLI-H5: an unknown status must fail-visible as Error, never silently

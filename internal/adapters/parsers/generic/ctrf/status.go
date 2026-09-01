@@ -7,26 +7,26 @@ import (
 )
 
 // mapStatus maps CTRF's five-value status, refined by the optional
-// pre-normalization rawStatus, onto the five this CLI's wire model has.
+// pre-normalization rawStatus, onto domain.Status's seven.
 //
 // # rawStatus first
 //
 // CTRF flattens every outcome into passed/failed/skipped/pending/other, but
 // rawStatus preserves what the producing tool actually reported. Consulting it
-// first is what recovers `error` from tools that HAD an error outcome before
-// CTRF collapsed it into `failed`.
+// first is what recovers error, timeout and aborted from tools that HAD those
+// outcomes before CTRF collapsed them.
 //
-// # The mapping matches the native parser exactly
+// # pending is NOT folded here, unlike in the mocha-family parsers
 //
-// timeout -> failed, aborted -> error and pending -> skipped are not choices
-// made here; they are the conventions native/qualflare's mapStatus already
-// applies to the very same status words. Diverging would mean the same input
-// produced different results depending on which file extension it arrived in.
+// cypress.go and native/qualflare deliberately map `pending` to skipped, because
+// in Mocha `pending` is what an `it.skip` fires — it means skipped, and treating
+// it as StatusPending would flip a whole green launch pending for one skipped
+// test (BUG-08).
 //
-// Worth knowing: the SERVER has seven statuses including timeout, aborted and a
-// first-class pending, so the api-service's own CTRF endpoint preserves all
-// three. This CLI's wire model has five, so it cannot — the value is kept in
-// ctrfRawStatus either way, but the typed status is folded.
+// CTRF is different: its enum carries `skipped` AND `pending` as separate
+// values, so a document saying pending means pending. Folding it here would
+// discard a distinction the format draws on purpose and the server can store.
+// Same word, two meanings, decided by the source.
 //
 // # Unknown is fail-visible
 //
@@ -44,8 +44,10 @@ func mapStatus(status, rawStatus string) domain.Status {
 		return domain.StatusPassed
 	case "failed":
 		return domain.StatusFailed
-	case "skipped", "pending":
+	case "skipped":
 		return domain.StatusSkipped
+	case "pending":
+		return domain.StatusPending
 	default:
 		return domain.StatusError
 	}
@@ -58,28 +60,31 @@ var rawStatusMap = map[string]domain.Status{
 	"passed":  domain.StatusPassed,
 	"failed":  domain.StatusFailed,
 	"skipped": domain.StatusSkipped,
-	"pending": domain.StatusSkipped,
+	"pending": domain.StatusPending,
 
 	"error":   domain.StatusError,
 	"errored": domain.StatusError,
 	"broken":  domain.StatusError,
 	"crashed": domain.StatusError,
 
-	// The native parser folds these the same way; see the doc comment.
-	"timeout":   domain.StatusFailed,
-	"timedout":  domain.StatusFailed,
-	"timed_out": domain.StatusFailed,
+	"timeout":   domain.StatusTimeout,
+	"timedout":  domain.StatusTimeout,
+	"timed_out": domain.StatusTimeout,
 
-	"aborted":     domain.StatusError,
-	"cancelled":   domain.StatusError,
-	"canceled":    domain.StatusError,
-	"interrupted": domain.StatusError,
+	"aborted":     domain.StatusAborted,
+	"cancelled":   domain.StatusAborted,
+	"canceled":    domain.StatusAborted,
+	"interrupted": domain.StatusAborted,
 
+	// Deliberately skipped, not pending: all three describe a test that was
+	// EXCLUDED from the run, which is what skipped means.
 	"todo":     domain.StatusSkipped,
 	"disabled": domain.StatusSkipped,
 	"ignored":  domain.StatusSkipped,
-	"notrun":   domain.StatusSkipped,
-	"not_run":  domain.StatusSkipped,
+
+	// These describe a test that has not run YET, which is what pending means.
+	"notrun":  domain.StatusPending,
+	"not_run": domain.StatusPending,
 }
 
 // categoryForTool maps a CTRF results.tool.name onto the category the imported
