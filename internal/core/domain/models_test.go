@@ -139,8 +139,13 @@ func TestAllFrameworksAreValidAndCategorised(t *testing.T) {
 		if f.String() != string(f) {
 			t.Errorf("Framework(%q).String() = %q", f, f.String())
 		}
+		// The passthrough formats deliberately categorise as generic: their real
+		// per-suite category comes from the file's own embedded producer
+		// identity. For CTRF this is not merely a convention — categorising as
+		// FrameworkCategory("ctrf") would fail the server's oneof and reject the
+		// whole launch, so this expectation is what pins the safe behaviour.
 		want := FrameworkCategory(f)
-		if f == FrameworkQualflareJSON {
+		if f == FrameworkQualflareJSON || f == FrameworkCTRF {
 			want = CategoryGeneric
 		}
 		if got := f.GetCategory(); got != want {

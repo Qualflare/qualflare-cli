@@ -30,6 +30,7 @@ import (
 	"qualflare-cli/internal/adapters/parsers/e2e/xctest"
 
 	// Generic parsers
+	"qualflare-cli/internal/adapters/parsers/generic/ctrf"
 	"qualflare-cli/internal/adapters/parsers/generic/junit"
 
 	// Native Qualflare JSON parser (sharded-CI merge workflow)
@@ -64,6 +65,7 @@ func NewParserFactory() *ParserFactory {
 
 	// Generic (JUnit-compatible) Parsers
 	f.RegisterParser(junit.New())
+	f.RegisterParser(ctrf.New())
 
 	// Native Qualflare JSON (sharded-CI merge workflow)
 	f.RegisterParser(qualflare.New())
@@ -164,6 +166,14 @@ func (f *ParserFactory) DetectFramework(filename string) (domain.Framework, erro
 
 	// Try to detect based on filename patterns
 	switch {
+	// CTRF is an interchange format, so files are routinely named after BOTH the
+	// producing tool and the format ("ctrf-playwright.json",
+	// "playwright-ctrf.json"). Checked first so the ctrf token wins: the content
+	// really is CTRF, not native Playwright JSON, and routing it to the
+	// Playwright parser would fail on a document that is perfectly valid.
+	case strings.Contains(base, "ctrf"):
+		return domain.FrameworkCTRF, nil
+
 	// Security tools
 	case strings.Contains(base, "trivy"):
 		return domain.FrameworkTrivy, nil
@@ -317,6 +327,20 @@ var jsonDetectors = []jsonDetector{
 	{func(obj map[string]interface{}, _ bool) bool { return hasKey(obj, "testResults") }, domain.FrameworkJest, false},
 	{func(obj map[string]interface{}, _ bool) bool { return hasKey(obj, "numTotalTests") }, domain.FrameworkJest, false},
 	{func(obj map[string]interface{}, _ bool) bool { return hasKeys(obj, "config", "suites") }, domain.FrameworkPlaywright, false},
+	// CTRF. Two shapes must both match:
+	//
+	//   current: {"reportFormat":"CTRF", "specVersion":"0.0.0", "results":{...}}
+	//   legacy:  {"results":{"tool":{...},"summary":{...},"tests":[...]}}
+	//
+	// The legacy shape has no root-level discriminator at all -- results.tool +
+	// results.summary + results.tests together ARE the discriminator -- and it
+	// is what every published README and every reporter pinned to an older ctrf
+	// release still emits, so it cannot be treated as an edge case.
+	//
+	// Ordered above the Cypress "stats"+"results" entry below. CTRF's root never
+	// carries "stats" today, so they cannot both match; leading with this keeps
+	// that true regardless of what a future producer adds.
+	{func(obj map[string]interface{}, _ bool) bool { return isCTRF(obj) }, domain.FrameworkCTRF, false},
 	{func(obj map[string]interface{}, _ bool) bool { return hasKeys(obj, "stats", "results") }, domain.FrameworkCypress, false},
 	{func(obj map[string]interface{}, _ bool) bool { return hasKey(obj, "collection") }, domain.FrameworkNewman, false},
 	{func(obj map[string]interface{}, _ bool) bool { return hasKeys(obj, "run", "collection") }, domain.FrameworkNewman, false},
@@ -382,4 +406,22 @@ func (f *ParserFactory) detectXMLFramework(content []byte) (domain.Framework, er
 	}
 
 	return "", errors.New("unable to detect framework from XML content")
+}
+
+// isCTRF recognises a Common Test Report Format document from its root object.
+//
+// Nested inspection is fine here: jsonDetector.detect receives the fully decoded
+// map, and the legacy shape has no root-level marker at all, so the nested trio
+// is the only thing that can identify it.
+func isCTRF(obj map[string]interface{}) bool {
+	if v, ok := obj["reportFormat"].(string); ok && strings.EqualFold(v, "CTRF") {
+		return true
+	}
+	results, ok := obj["results"].(map[string]interface{})
+	if !ok {
+		return false
+	}
+	// "tests" may legitimately be an empty array (a run with no tests), so
+	// PRESENCE is the test, not non-emptiness.
+	return hasKeys(results, "tool", "summary", "tests")
 }

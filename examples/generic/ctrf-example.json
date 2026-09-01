@@ -1,0 +1,103 @@
+{
+  "reportFormat": "CTRF",
+  "specVersion": "0.0.0",
+  "reportId": "6f2b6b5e-0b1e-4a3a-9f0e-2c9d5a1b7c31",
+  "runId": "run-4821",
+  "timestamp": "2026-09-01T10:00:00Z",
+  "generatedBy": "playwright-ctrf-json-reporter",
+  "results": {
+    "tool": { "name": "playwright", "version": "1.47.0" },
+    "environment": {
+      "reportName": "Checkout regression",
+      "appName": "storefront",
+      "appVersion": "3.2.1",
+      "buildName": "nightly",
+      "buildNumber": "1042",
+      "buildUrl": "https://github.com/acme/storefront/actions/runs/1042",
+      "repositoryName": "acme/storefront",
+      "repositoryUrl": "https://github.com/acme/storefront",
+      "branchName": "main",
+      "commit": "9c1f3ad",
+      "osPlatform": "linux",
+      "osRelease": "6.8.0",
+      "testEnvironment": "staging",
+      "shardId": "2"
+    },
+    "summary": {
+      "tests": 5,
+      "passed": 2,
+      "failed": 1,
+      "skipped": 1,
+      "pending": 1,
+      "other": 0,
+      "flaky": 1,
+      "suites": 2,
+      "start": 1756720800000,
+      "stop": 1756720812000
+    },
+    "tests": [
+      {
+        "name": "pays with a saved card",
+        "status": "passed",
+        "duration": 3200,
+        "testId": "checkout-pays-with-saved-card",
+        "suite": ["Checkout", "Payment"],
+        "filePath": "tests/checkout/payment.spec.ts",
+        "start": 1756720800000,
+        "stop": 1756720803200,
+        "browser": "chromium",
+        "threadId": "worker-2",
+        "tags": ["smoke", "checkout"],
+        "labels": { "owner": ["ana", "bo"], "tier": 1 },
+        "retries": 1,
+        "flaky": true,
+        "retryAttempts": [
+          { "attempt": 1, "status": "failed", "duration": 2900, "message": "payment gateway timed out" }
+        ],
+        "steps": [
+          { "name": "open the cart", "status": "passed" },
+          { "name": "submit payment", "status": "passed" }
+        ]
+      },
+      {
+        "name": "rejects an expired card",
+        "status": "failed",
+        "duration": 2100,
+        "testId": "checkout-rejects-expired-card",
+        "suite": ["Checkout", "Payment"],
+        "filePath": "tests/checkout/payment.spec.ts",
+        "start": 1756720803200,
+        "message": "expected the error banner to be visible",
+        "trace": "Error: expected the error banner to be visible\n    at payment.spec.ts:84:12",
+        "snippet": "await expect(page.getByRole('alert')).toBeVisible()",
+        "line": 84,
+        "browser": "chromium",
+        "screenshot": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==",
+        "attachments": [
+          { "name": "trace.zip", "contentType": "application/zip", "path": "https://ci.example.com/artifacts/trace.zip" }
+        ]
+      },
+      {
+        "name": "applies a discount code",
+        "status": "other",
+        "rawStatus": "broken",
+        "duration": 400,
+        "suite": ["Checkout", "Discounts"],
+        "message": "fixture failed to load",
+        "browser": "chromium"
+      },
+      {
+        "name": "shows the loyalty banner",
+        "status": "skipped",
+        "duration": 0,
+        "suite": ["Checkout", "Discounts"]
+      },
+      {
+        "name": "supports gift cards",
+        "status": "pending",
+        "duration": 0,
+        "suite": ["Checkout", "Discounts"]
+      }
+    ]
+  }
+}
