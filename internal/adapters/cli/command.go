@@ -173,6 +173,7 @@ func (c *CLI) createCollectCommand() *cobra.Command {
 		commit      string
 		timeout     time.Duration
 		dryRun      bool
+		allowMixed  bool
 		shard       bool
 		output      string
 	)
@@ -217,6 +218,7 @@ The format is auto-detected if not specified.`,
 				dryRun:      dryRun,
 				shard:       shard,
 				output:      output,
+				allowMixed:  allowMixed,
 			})
 		},
 	}
@@ -238,6 +240,9 @@ The format is auto-detected if not specified.`,
 	cmd.Flags().BoolVar(&shard, "shard", false,
 		"Treat each input file as one parallel shard of the same run, numbered by argument position starting at 0 (requires 2+ files). Does not apply to a single file. WARNING: with a glob, files are numbered in lexical filename order (t1, t10, t100, t2, ...), which is NOT a stable per-shard identity — adding, renaming or losing a file shifts every later index. List the files explicitly, in shard order, when the index has to be stable across runs.")
 	cmd.Flags().StringVarP(&output, "output", "o", "", "Output format for dry-run (json)")
+	cmd.Flags().BoolVar(&allowMixed, "allow-mixed-runs", false,
+		"Upload even when the report files come from different runs (by default this is refused, "+
+			"because a stale file from an earlier run would be merged into this launch)")
 
 	return cmd
 }
@@ -254,6 +259,7 @@ type collectOptions struct {
 	dryRun      bool
 	shard       bool
 	output      string
+	allowMixed  bool
 }
 
 // validPlatforms mirrors the server's launch platform enum
@@ -346,6 +352,100 @@ func applyCollectOptions(cfg *config.Config, opts collectOptions) {
 	cfg.SetShard(opts.shard)
 }
 
+// runGroups buckets report files by the `metadata.runId` their reporter wrote.
+// Files without one — every report produced before reporters started stamping
+// it — land under "" and are deliberately NOT treated as a distinct run, so an
+// older reporter keeps working exactly as before.
+func runGroups(files []string) map[string][]string {
+	groups := make(map[string][]string)
+	for _, f := range files {
+		groups[readRunID(f)] = append(groups[readRunID(f)], f)
+	}
+	return groups
+}
+
+// readRunID pulls metadata.runId out of a report, returning "" for anything it
+// cannot read or parse. A malformed file is not this function's problem: the
+// parser reports it properly a moment later, and failing here would turn a
+// clear parse error into a confusing run-identity one.
+func readRunID(path string) string {
+	data, err := os.ReadFile(path) //nolint:gosec // path comes from the user's own argument list
+	if err != nil {
+		return ""
+	}
+	var probe struct {
+		Metadata struct {
+			RunID string `json:"runId"`
+		} `json:"metadata"`
+	}
+	if err := json.Unmarshal(data, &probe); err != nil {
+		return ""
+	}
+	return probe.Metadata.RunID
+}
+
+// verifySingleRun refuses to upload reports that came from two different runs.
+//
+// WHY THIS EXISTS
+// `collect <dir>` uploads every *.json it finds, which is what lets N sharded
+// jobs write into one directory and merge into a single Launch. The same
+// behaviour silently merges a file left over from a PREVIOUS run — the launch
+// looks entirely plausible and contains results nobody ran, which corrupts the
+// history flaky-detection is built on.
+//
+// Failing is deliberate. Picking the newest group silently is the behaviour
+// being removed; an error costs one re-run, whereas a wrong launch is never
+// noticed.
+func verifySingleRun(files []string, allowMixed bool) error {
+	groups := runGroups(files)
+	// One known run, or none at all (older reporters), is the normal case.
+	known := 0
+	for id := range groups {
+		if id != "" {
+			known++
+		}
+	}
+	if known <= 1 {
+		return nil
+	}
+
+	ids := make([]string, 0, len(groups))
+	for id := range groups {
+		if id != "" {
+			ids = append(ids, id)
+		}
+	}
+	sort.Strings(ids)
+
+	var b strings.Builder
+	fmt.Fprintf(&b, "%d different runs found in the report files:\n", known)
+	for _, id := range ids {
+		fmt.Fprintf(&b, "    run %s: %d file(s)", id, len(groups[id]))
+		if len(groups[id]) <= 2 {
+			// Base names only: the user passed a directory, and full paths here
+			// wrap over several lines and bury the part they need to act on.
+			names := make([]string, 0, len(groups[id]))
+			for _, f := range groups[id] {
+				names = append(names, filepath.Base(f))
+			}
+			fmt.Fprintf(&b, "  (%s)", strings.Join(names, ", "))
+		}
+		b.WriteString("\n")
+	}
+	if n := len(groups[""]); n > 0 {
+		fmt.Fprintf(&b, "    no runId: %d file(s) (reporter predates runId; not counted as a run)\n", n)
+	}
+
+	if allowMixed {
+		fmt.Fprintf(os.Stderr, "warning: %s  Uploading anyway (--allow-mixed-runs).\n", b.String())
+		return nil
+	}
+	return fmt.Errorf(
+		"%s  A stale file from an earlier run would be merged into this launch.\n"+
+			"  Clear the output directory before each run, or pass --allow-mixed-runs to upload anyway",
+		b.String())
+}
+
 // verifyFilesExist fails on the first missing path rather than uploading a partial set.
 func verifyFilesExist(files []string) error {
 	for _, file := range files {
@@ -418,6 +518,12 @@ func (c *CLI) runCollect(ctx context.Context, files []string, opts collectOption
 	}
 
 	if err := verifyFilesExist(files); err != nil {
+		return err
+	}
+
+	// Guards the one hazard of collecting a whole directory: a report left over
+	// from a previous run merging silently into this launch.
+	if err := verifySingleRun(files, opts.allowMixed); err != nil {
 		return err
 	}
 
