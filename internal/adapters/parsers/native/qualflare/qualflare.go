@@ -49,14 +49,23 @@ type Collect struct {
 	// synthetic wrapper Suite's Properties in buildSuite, so
 	// report_service.go's existing promoteConsistentSuiteProperties picks
 	// "browser" (and, if ever consistent across merged shards, "platform")
-	// back up into Launch.Properties automatically. Every other Collect field
-	// (branch, commit, environment, language, milestone, CI metadata, os) is
-	// deliberately still NOT decoded here — recovering those needs a
-	// ports.Parser interface change to carry launch-level fields, out of scope
-	// for this stopgap.
-	Platform string  `json:"platform,omitempty"`
-	Browser  string  `json:"browser,omitempty"`
-	Suites   []Suite `json:"suites"`
+	// back up into Launch.Properties automatically.
+	//
+	// Environment rides the same channel, for a sharper reason: it is not
+	// cosmetic. Left undecoded, every reporter's `environment` option was
+	// dropped on the floor and the launch silently went to the CLI's own
+	// default ("development") — a wrong destination rather than a missing
+	// label, and one nothing reported. It yields to --environment and
+	// QF_ENVIRONMENT; see Config.SetEnvironmentFallback.
+	//
+	// The remaining Collect fields (branch, commit, language, milestone, CI
+	// metadata, os) are deliberately still NOT decoded here — recovering those
+	// needs a ports.Parser interface change to carry launch-level fields, out
+	// of scope for this stopgap.
+	Platform    string  `json:"platform,omitempty"`
+	Browser     string  `json:"browser,omitempty"`
+	Environment string  `json:"environment,omitempty"`
+	Suites      []Suite `json:"suites"`
 }
 
 type Suite struct {
@@ -206,13 +215,16 @@ func buildSuite(collect Collect, sourceDir string) (*domain.Suite, error) {
 	// (report_service.go) reads these same two keys off every merged suite and
 	// promotes them to Launch.Properties when every suite that sets them agrees
 	// — unchanged by this parser, it just needed something to read.
-	if collect.Browser != "" || collect.Platform != "" {
-		suite.Properties = make(map[string]string, 2)
+	if collect.Browser != "" || collect.Platform != "" || collect.Environment != "" {
+		suite.Properties = make(map[string]string, 3)
 		if collect.Browser != "" {
 			suite.Properties["browser"] = collect.Browser
 		}
 		if collect.Platform != "" {
 			suite.Properties["platform"] = collect.Platform
+		}
+		if collect.Environment != "" {
+			suite.Properties["environment"] = collect.Environment
 		}
 	}
 

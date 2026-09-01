@@ -25,9 +25,15 @@ type Config struct {
 
 	// Project settings
 	Environment string
-	Language    string
-	Platform    string
-	Milestone   int64
+	// environmentSet records that the user chose the environment themselves —
+	// a --environment flag or QF_ENVIRONMENT — rather than it still holding
+	// DefaultConfig's "development". A report file's own environment fills in
+	// only when the user did NOT choose, so this is what keeps an explicit
+	// choice winning over whatever the reporter happened to write.
+	environmentSet bool
+	Language       string
+	Platform       string
+	Milestone      int64
 
 	// Git information
 	Branch string
@@ -91,6 +97,9 @@ func NewConfig() *Config {
 // Note: QF_API_KEY is intentionally NOT read here — tokens come from the
 // auth store via `qf login <identifier> <token>`.
 func (c *Config) LoadFromEnv() {
+	if os.Getenv("QF_ENVIRONMENT") != "" {
+		c.environmentSet = true
+	}
 	envString(&c.Environment, "QF_ENVIRONMENT")
 	envString(&c.Language, "QF_LANGUAGE")
 	envString(&c.Platform, "QF_PLATFORM")
@@ -190,6 +199,7 @@ func (c *Config) SetAPIKey(key string) {
 func (c *Config) SetEnvironment(env string) {
 	if env != "" {
 		c.Environment = env
+		c.environmentSet = true
 	}
 }
 
@@ -269,6 +279,21 @@ func (c *Config) GetAPIEndpoint() string {
 // GetEnvironment returns the environment
 func (c *Config) GetEnvironment() string {
 	return c.Environment
+}
+
+// IsEnvironmentSet reports whether the environment came from the user (flag or
+// QF_ENVIRONMENT) rather than the built-in default.
+func (c *Config) IsEnvironmentSet() bool {
+	return c.environmentSet
+}
+
+// SetEnvironmentFallback applies an environment discovered in a report file.
+// It yields to a flag or QF_ENVIRONMENT, which is the whole point: the person
+// running the upload outranks the file being uploaded.
+func (c *Config) SetEnvironmentFallback(env string) {
+	if env != "" && !c.environmentSet {
+		c.Environment = env
+	}
 }
 
 // GetLanguage returns the language

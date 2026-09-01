@@ -167,6 +167,7 @@ Key environment variables:
 |----------|-------------|
 | `QF_VERBOSE` | Set to `true` for debug request/response logging |
 | `QF_BRANCH` / `QF_COMMIT` | Git context (auto-detected from common CI vars if unset) |
+| `QF_ENVIRONMENT` | Environment uid to upload into. Overrides the environment recorded in a `qualflare-json` report; `--environment` overrides both. Falls back to `development`. |
 
 Run `qf --help` for the full list of flags and environment variables.
 
