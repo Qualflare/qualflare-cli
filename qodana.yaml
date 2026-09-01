@@ -76,3 +76,18 @@ exclude:
   - name: DuplicatedCode
     paths:
       - internal/adapters/parsers
+
+  # ctrf.Number mixes a pointer receiver (UnmarshalJSON) with value receivers
+  # (IsSet/Int64/Float/String), which is what this inspection flags — once per method.
+  # The mix is not a choice: encoding/json only calls UnmarshalJSON through a pointer,
+  # while Number is a small immutable value read via explicit accessors on addressable
+  # struct fields. time.Time in the standard library has the same shape for the same
+  # reason.
+  #
+  # Converting the accessors to pointer receivers to satisfy the rule would cost
+  # something real: Number would stop implementing fmt.Stringer, so a later
+  # fmt.Sprintf("%v", n) would silently print the struct instead of the number. Scoped to
+  # this package so a genuine mix anywhere else still fails the scan.
+  - name: GoMixedReceiverTypes
+    paths:
+      - internal/adapters/parsers/generic/ctrf
