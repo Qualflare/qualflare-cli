@@ -265,12 +265,47 @@ func (f *ParserFactory) DetectFrameworkFromContent(filename string, content []by
 	return f.DetectFramework(filename)
 }
 
+// detectNDJSONFramework detects the framework from newline-delimited JSON by
+// examining the FIRST record only.
+//
+// One line is enough: the object-key registry that classifies a JSON document
+// looks at top-level keys, and every record in an NDJSON stream shares a shape.
+// Reading only the first also keeps this cheap on a large go-test log, which can
+// run to tens of megabytes.
+//
+// Deliberately no more permissive than the single-document path — it hands the
+// parsed object to the same detectJSONObjectFramework registry, so NDJSON cannot
+// match anything a single JSON object would not.
+func (f *ParserFactory) detectNDJSONFramework(content []byte) (domain.Framework, error) {
+	line := content
+	if i := bytes.IndexByte(content, '\n'); i >= 0 {
+		line = content[:i]
+	}
+	line = bytes.TrimSpace(line)
+	// A single unparseable document is not NDJSON; only an object per line is.
+	if len(line) == 0 || line[0] != '{' {
+		return "", errors.New("content is neither a JSON document nor NDJSON")
+	}
+
+	var obj map[string]interface{}
+	if err := json.Unmarshal(line, &obj); err != nil {
+		return "", err
+	}
+	return f.detectJSONObjectFramework(obj, false)
+}
+
 // detectJSONFramework detects the framework from JSON content
 func (f *ParserFactory) detectJSONFramework(content []byte) (domain.Framework, error) {
 	// Try to parse as JSON and look for characteristic keys
 	var data interface{}
 	if err := json.Unmarshal(content, &data); err != nil {
-		return "", err
+		// Not a single JSON document. `go test -json` emits NDJSON — one object
+		// per line — so the whole-file unmarshal above always fails on it and
+		// detection used to fall through to the filename, which knows "go-test"
+		// and a bare "go" token but not "golang". The practical effect was that
+		// `go test -json > results.json`, the form every Go project actually
+		// produces, could not be detected at all and demanded --format golang.
+		return f.detectNDJSONFramework(content)
 	}
 
 	switch v := data.(type) {
