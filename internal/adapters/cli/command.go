@@ -107,6 +107,14 @@ Supported frameworks:
 	cmd.AddCommand(c.createProjectsCommand())
 	cmd.AddCommand(c.createVersionCommand())
 	cmd.AddCommand(c.createListFormatsCommand())
+	// validate parses files locally and never calls the API, so requiring a saved
+	// identifier for it was wrong: `qf validate results.xml` used to fail with
+	// `no identifier "validate" configured`, because cobra read the subcommand
+	// name as the project. It stays in buildAuthedSubtree too, so the documented
+	// `qf <id> validate` form keeps working -- createValidateCommand returns a
+	// fresh *cobra.Command per call, which is what makes registering it in both
+	// places safe (see buildAuthedSubtree's note on not sharing pointers).
+	cmd.AddCommand(c.createValidateCommand())
 
 	// One identifier-scoped subtree per saved project
 	for _, id := range c.store.List() {
