@@ -28,15 +28,24 @@ func (v *videoStubSender) UploadVideo(_ context.Context, localPath, _ string) (s
 	return v.storageKeyOut, v.fileSizeOut, nil
 }
 
+// uploadsVideo is the config these tests run under: they exercise the upload
+// mechanics, which only run for a kind the user opted into. The gate itself is
+// covered separately in report_service_artifact_gate_test.go.
+func uploadsVideo() *config.Config {
+	cfg := config.DefaultConfig()
+	cfg.SetUploadArtifacts(map[string]bool{domain.ArtifactKindVideo: true})
+	return cfg
+}
+
 func TestResolveVideoAttachmentsFillsStorageKeyAndClearsLocalPath(t *testing.T) {
 	sender := &videoStubSender{storageKeyOut: "case-run-attachments/proj/1.mp4", fileSizeOut: 999}
-	svc := &ReportService{sender: sender}
+	svc := &ReportService{sender: sender, config: uploadsVideo()}
 
 	launch := &domain.Launch{Suites: []domain.Suite{{Cases: []domain.Case{{
-		Attachments: []domain.Attachment{{Name: "video", LocalVideoPath: "/tmp/clip.mp4"}},
+		Attachments: []domain.Attachment{{Name: "video", LocalPath: "/tmp/clip.mp4", ArtifactKind: domain.ArtifactKindVideo}},
 	}}}}}
 
-	svc.resolveVideoAttachments(context.Background(), launch)
+	svc.resolveArtifactAttachments(context.Background(), launch)
 
 	att := launch.Suites[0].Cases[0].Attachments[0]
 	if att.StorageKey != "case-run-attachments/proj/1.mp4" {
@@ -45,8 +54,8 @@ func TestResolveVideoAttachmentsFillsStorageKeyAndClearsLocalPath(t *testing.T) 
 	if att.FileSize != 999 {
 		t.Errorf("FileSize = %d", att.FileSize)
 	}
-	if att.LocalVideoPath != "" {
-		t.Errorf("expected LocalVideoPath cleared, got %q", att.LocalVideoPath)
+	if att.LocalPath != "" {
+		t.Errorf("expected LocalPath cleared, got %q", att.LocalPath)
 	}
 	if len(sender.uploadCalls) != 1 || sender.uploadCalls[0] != "/tmp/clip.mp4" {
 		t.Errorf("uploadCalls = %v", sender.uploadCalls)
@@ -55,16 +64,16 @@ func TestResolveVideoAttachmentsFillsStorageKeyAndClearsLocalPath(t *testing.T) 
 
 func TestResolveVideoAttachmentsFailsOpenOnUploadError(t *testing.T) {
 	sender := &videoStubSender{uploadErr: errors.New("network down")}
-	svc := &ReportService{sender: sender, warn: io.Discard}
+	svc := &ReportService{sender: sender, warn: io.Discard, config: uploadsVideo()}
 
 	launch := &domain.Launch{Suites: []domain.Suite{{Cases: []domain.Case{{
 		Attachments: []domain.Attachment{
-			{Name: "video", LocalVideoPath: "/tmp/clip.mp4"},
+			{Name: "video", LocalPath: "/tmp/clip.mp4", ArtifactKind: domain.ArtifactKindVideo},
 			{Name: "screenshot", Content: "aGVsbG8="},
 		},
 	}}}}}
 
-	svc.resolveVideoAttachments(context.Background(), launch)
+	svc.resolveArtifactAttachments(context.Background(), launch)
 
 	cases := launch.Suites[0].Cases[0]
 	if len(cases.Attachments) != 2 {
@@ -80,13 +89,13 @@ func TestResolveVideoAttachmentsFailsOpenOnUploadError(t *testing.T) {
 
 func TestResolveVideoAttachmentsSkipsAttachmentsWithNoLocalPath(t *testing.T) {
 	sender := &videoStubSender{}
-	svc := &ReportService{sender: sender}
+	svc := &ReportService{sender: sender, config: uploadsVideo()}
 
 	launch := &domain.Launch{Suites: []domain.Suite{{Cases: []domain.Case{{
 		Attachments: []domain.Attachment{{Name: "screenshot", Content: "aGVsbG8="}},
 	}}}}}
 
-	svc.resolveVideoAttachments(context.Background(), launch)
+	svc.resolveArtifactAttachments(context.Background(), launch)
 
 	if len(sender.uploadCalls) != 0 {
 		t.Errorf("expected no upload calls for a non-video attachment, got %v", sender.uploadCalls)
@@ -98,14 +107,14 @@ func TestResolveVideoAttachmentsSkipsAttachmentsWithNoLocalPath(t *testing.T) {
 // with every attachment reusing the first upload's StorageKey/FileSize.
 func TestResolveVideoAttachmentsUploadsSameLocalPathOnlyOnce(t *testing.T) {
 	sender := &videoStubSender{storageKeyOut: "case-run-attachments/proj/shared.mp4", fileSizeOut: 4242}
-	svc := &ReportService{sender: sender}
+	svc := &ReportService{sender: sender, config: uploadsVideo()}
 
 	launch := &domain.Launch{Suites: []domain.Suite{{Cases: []domain.Case{
-		{Name: "a", Attachments: []domain.Attachment{{Name: "spec video", LocalVideoPath: "/tmp/shared.mp4"}}},
-		{Name: "b", Attachments: []domain.Attachment{{Name: "spec video", LocalVideoPath: "/tmp/shared.mp4"}}},
+		{Name: "a", Attachments: []domain.Attachment{{Name: "spec video", LocalPath: "/tmp/shared.mp4", ArtifactKind: domain.ArtifactKindVideo}}},
+		{Name: "b", Attachments: []domain.Attachment{{Name: "spec video", LocalPath: "/tmp/shared.mp4", ArtifactKind: domain.ArtifactKindVideo}}},
 	}}}}
 
-	svc.resolveVideoAttachments(context.Background(), launch)
+	svc.resolveArtifactAttachments(context.Background(), launch)
 
 	if len(sender.uploadCalls) != 1 || sender.uploadCalls[0] != "/tmp/shared.mp4" {
 		t.Fatalf("expected exactly 1 UploadVideo call for a video shared by 2 attachments, got %v", sender.uploadCalls)
@@ -115,8 +124,8 @@ func TestResolveVideoAttachmentsUploadsSameLocalPathOnlyOnce(t *testing.T) {
 		if att.StorageKey != "case-run-attachments/proj/shared.mp4" || att.FileSize != 4242 {
 			t.Errorf("case %q: expected the memoized upload result, got StorageKey=%q FileSize=%d", c.Name, att.StorageKey, att.FileSize)
 		}
-		if att.LocalVideoPath != "" {
-			t.Errorf("case %q: expected LocalVideoPath cleared, got %q", c.Name, att.LocalVideoPath)
+		if att.LocalPath != "" {
+			t.Errorf("case %q: expected LocalPath cleared, got %q", c.Name, att.LocalPath)
 		}
 	}
 }
@@ -177,12 +186,12 @@ func TestProcessTestResultsGivesVideoUploadAnIndependentContext(t *testing.T) {
 	f := writeFile(t, dir, "r.xml", "<x/>")
 
 	suite := onePassing(domain.FrameworkJUnit)
-	suite.Cases[0].Attachments = []domain.Attachment{{Name: "video", LocalVideoPath: "/tmp/clip.mp4"}}
+	suite.Cases[0].Attachments = []domain.Attachment{{Name: "video", LocalPath: "/tmp/clip.mp4", ArtifactKind: domain.ArtifactKindVideo}}
 	parser := &slowParser{delay: 100 * time.Millisecond, suite: suite}
 	fac := &stubFactory{parsers: map[domain.Framework]ports.Parser{domain.FrameworkJUnit: parser}}
 
 	sender := &ctxCapturingVideoSender{storageKeyOut: "k", fileSizeOut: 1}
-	svc := NewReportService(fac, sender, config.DefaultConfig())
+	svc := NewReportService(fac, sender, uploadsVideo())
 	svc.warn = io.Discard
 
 	// A deadline much shorter than the parser's artificial delay: by the time

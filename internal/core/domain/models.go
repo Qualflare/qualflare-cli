@@ -394,14 +394,32 @@ type Attachment struct {
 	// directly.
 	StorageKey string `json:"storageKey,omitempty"`
 	FileSize   int64  `json:"fileSize,omitempty"`
-	// LocalVideoPath is set by the qualflare-native parser only (see
+	// LocalPath is set by the qualflare-native parser only (see
 	// internal/adapters/parsers/native/qualflare) when a report file
-	// references a video it hasn't uploaded itself — an absolute path,
-	// resolved at parse time relative to that source file's own directory.
-	// Never sent to the server: report_service.go's video-resolution pass
-	// consumes it and fills StorageKey/FileSize before SendReport is called.
-	LocalVideoPath string `json:"-"`
+	// references a heavy artifact it hasn't uploaded itself — an absolute
+	// path, resolved at parse time relative to that source file's own
+	// directory. Never sent to the server: report_service.go's artifact
+	// resolution pass consumes it and fills StorageKey/FileSize before
+	// SendReport is called.
+	LocalPath string `json:"-"`
+	// ArtifactKind names what LocalPath points at, so `qf collect` can gate
+	// each kind separately (--upload-artifacts). One of the ArtifactKind*
+	// constants; empty whenever LocalPath is empty.
+	ArtifactKind string `json:"-"`
 }
+
+// Artifact kinds carried by Attachment.ArtifactKind. These are the values
+// --upload-artifacts accepts, and the reason the flag takes a list rather than
+// a bool: a trace and a video are both heavy, but wanting one is not wanting
+// the other.
+const (
+	ArtifactKindVideo = "video"
+	ArtifactKindTrace = "trace"
+)
+
+// AllArtifactKinds is the set --upload-artifacts validates against, so a typo
+// is rejected with the valid list rather than silently uploading nothing.
+func AllArtifactKinds() []string { return []string{ArtifactKindVideo, ArtifactKindTrace} }
 
 // IntPtr returns a pointer to an int value
 func IntPtr(v int) *int { return &v }

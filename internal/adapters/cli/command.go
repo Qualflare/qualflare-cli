@@ -172,18 +172,19 @@ func (c *CLI) buildAuthedSubtree() []*cobra.Command {
 // createCollectCommand creates the collect subcommand
 func (c *CLI) createCollectCommand() *cobra.Command {
 	var (
-		format      string
-		environment string
-		language    string
-		platform    string
-		milestone   int64
-		branch      string
-		commit      string
-		timeout     time.Duration
-		dryRun      bool
-		allowMixed  bool
-		shard       bool
-		output      string
+		format          string
+		environment     string
+		language        string
+		platform        string
+		milestone       int64
+		branch          string
+		commit          string
+		timeout         time.Duration
+		dryRun          bool
+		allowMixed      bool
+		uploadArtifacts string
+		shard           bool
+		output          string
 	)
 
 	cmd := &cobra.Command{
@@ -215,18 +216,19 @@ The format is auto-detected if not specified.`,
 		Args: cobra.MinimumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return c.runCollect(cmd.Context(), args, collectOptions{
-				format:      format,
-				environment: environment,
-				language:    language,
-				platform:    platform,
-				milestone:   milestone,
-				branch:      branch,
-				commit:      commit,
-				timeout:     timeout,
-				dryRun:      dryRun,
-				shard:       shard,
-				output:      output,
-				allowMixed:  allowMixed,
+				format:          format,
+				environment:     environment,
+				language:        language,
+				platform:        platform,
+				milestone:       milestone,
+				branch:          branch,
+				commit:          commit,
+				timeout:         timeout,
+				dryRun:          dryRun,
+				shard:           shard,
+				output:          output,
+				allowMixed:      allowMixed,
+				uploadArtifacts: uploadArtifacts,
 			})
 		},
 	}
@@ -248,6 +250,10 @@ The format is auto-detected if not specified.`,
 	cmd.Flags().BoolVar(&shard, "shard", false,
 		"Treat each input file as one parallel shard of the same run, numbered by argument position starting at 0 (requires 2+ files). Does not apply to a single file. WARNING: with a glob, files are numbered in lexical filename order (t1, t10, t100, t2, ...), which is NOT a stable per-shard identity — adding, renaming or losing a file shifts every later index. List the files explicitly, in shard order, when the index has to be stable across runs.")
 	cmd.Flags().StringVarP(&output, "output", "o", "", "Output format for dry-run (json)")
+	cmd.Flags().StringVar(&uploadArtifacts, "upload-artifacts", "",
+		"Comma-separated heavy artifact kinds to upload: "+strings.Join(domain.AllArtifactKinds(), ", ")+
+			". Default uploads NONE — a video or Playwright trace is the largest thing in a report, so "+
+			"uploading one is opt-in. Also settable via QF_UPLOAD_ARTIFACTS.")
 	cmd.Flags().BoolVar(&allowMixed, "allow-mixed-runs", false,
 		"Upload even when the report files come from different runs (by default this is refused, "+
 			"because a stale file from an earlier run would be merged into this launch)")
@@ -268,6 +274,9 @@ type collectOptions struct {
 	shard       bool
 	output      string
 	allowMixed  bool
+	// uploadArtifacts is the raw --upload-artifacts value, validated into a
+	// set by config.ParseArtifactKinds in applyCollectOptions.
+	uploadArtifacts string
 }
 
 // validPlatforms mirrors the server's launch platform enum
@@ -348,7 +357,16 @@ func validatePlatform(platform string) error {
 
 // applyCollectOptions folds the command-line overrides into the config. The setters
 // ignore empty/zero values, so an unset flag leaves whatever env detection supplied.
-func applyCollectOptions(cfg *config.Config, opts collectOptions) {
+func applyCollectOptions(cfg *config.Config, opts collectOptions) error {
+	// Validated before anything else in the collect path runs: a typo'd
+	// --upload-artifacts=vidoe must fail with the valid list, not silently
+	// upload nothing and look like the gate working as intended.
+	kinds, err := config.ParseArtifactKinds(opts.uploadArtifacts, domain.AllArtifactKinds())
+	if err != nil {
+		return err
+	}
+	cfg.SetUploadArtifacts(kinds)
+
 	cfg.SetEnvironment(opts.environment)
 	cfg.SetLanguage(opts.language)
 	cfg.SetPlatform(opts.platform)
@@ -358,6 +376,7 @@ func applyCollectOptions(cfg *config.Config, opts collectOptions) {
 	cfg.SetTimeout(opts.timeout)
 	cfg.SetDryRun(opts.dryRun)
 	cfg.SetShard(opts.shard)
+	return nil
 }
 
 // runGroups buckets report files by the `metadata.runId` their reporter wrote.
@@ -503,7 +522,9 @@ func (c *CLI) runCollect(ctx context.Context, files []string, opts collectOption
 		return err
 	}
 
-	applyCollectOptions(c.config, opts)
+	if err := applyCollectOptions(c.config, opts); err != nil {
+		return err
+	}
 	// Fill branch/commit from local git only now (collect is the sole consumer),
 	// after explicit flags/CI env vars have had their say (BUG-39).
 	c.config.DetectGit()
