@@ -84,9 +84,37 @@ qf myapp collect report.json --format playwright
 
 # Parse and preview locally without sending (no auth required)
 qf myapp collect results.xml --dry-run --output json
+
+# Upload videos and Playwright traces too (opt-in — see below)
+qf myapp collect ./qualflare-results --upload-artifacts=video,trace
 ```
 
 Run `qf myapp collect --help` for the full flag list (`--branch`, `--commit`, `--environment`, `--timeout`, etc.).
+
+### Heavy artifacts are opt-in
+
+The report itself always uploads. A **video or Playwright trace** only uploads when you ask for it:
+
+| | |
+|---|---|
+| flag | `--upload-artifacts=video`, `=trace`, or `=video,trace` |
+| env | `QF_UPLOAD_ARTIFACTS=video,trace` |
+| default | neither — nothing heavy is uploaded |
+
+A video is the largest thing in a report by an order of magnitude, and before v0.1.20 every one a
+reporter wrote was uploaded with no way to decline. Nothing is dropped quietly: `collect` reports
+what it skipped and the exact flag to include it.
+
+```
+skipped 2 video, 1 trace attachment(s): upload them with --upload-artifacts=trace,video
+```
+
+A skipped artifact is left out of the launch entirely rather than uploaded as an empty row, so a
+gated run shows no unopenable placeholders. An artifact that was asked for but *failed* to upload is
+different — it stays, so the failure is visible rather than hidden.
+
+Traces additionally need an api-service that accepts `application/zip` on the attachment-upload
+endpoint.
 
 ### Validate before uploading
 
