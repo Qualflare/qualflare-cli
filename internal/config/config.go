@@ -3,8 +3,10 @@ package config
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 
 	"qualflare-cli/internal/git"
@@ -25,6 +27,12 @@ type Config struct {
 
 	// Project settings
 	Environment string
+	// UploadArtifacts is the set of heavy artifact kinds `collect` may upload
+	// (domain.ArtifactKind*). Empty by default: a video or trace is the largest
+	// thing in a report by an order of magnitude, and uploading one should be a
+	// choice rather than a surprise on the bill. --upload-artifacts /
+	// QF_UPLOAD_ARTIFACTS opt in.
+	UploadArtifacts map[string]bool
 	// environmentSet records that the user chose the environment themselves —
 	// a --environment flag or QF_ENVIRONMENT — rather than it still holding
 	// DefaultConfig's "development". A report file's own environment fills in
@@ -101,6 +109,7 @@ func (c *Config) LoadFromEnv() {
 		c.environmentSet = true
 	}
 	envString(&c.Environment, "QF_ENVIRONMENT")
+	envArtifactKinds(&c.UploadArtifacts, "QF_UPLOAD_ARTIFACTS")
 	envString(&c.Language, "QF_LANGUAGE")
 	envString(&c.Platform, "QF_PLATFORM")
 	// A milestone sequence number is 1-based, so 0 and negatives are rejected.
@@ -414,4 +423,56 @@ func getFirstEnv(keys ...string) string {
 		}
 	}
 	return ""
+}
+
+// SetUploadArtifacts records the kinds --upload-artifacts asked for. A nil or
+// empty set means upload nothing, which is the default.
+func (c *Config) SetUploadArtifacts(kinds map[string]bool) {
+	if len(kinds) > 0 {
+		c.UploadArtifacts = kinds
+	}
+}
+
+// IsArtifactUploadEnabled reports whether `collect` may upload this artifact
+// kind. Unknown kinds are false — the flag parser rejects a typo up front, so
+// reaching here with one means a caller invented it.
+func (c *Config) IsArtifactUploadEnabled(kind string) bool {
+	return c.UploadArtifacts[kind]
+}
+
+// ParseArtifactKinds turns a comma-separated --upload-artifacts value into a
+// set, rejecting anything not in valid. A typo must fail loudly: silently
+// uploading nothing because someone wrote "vidoe" is the exact surprise this
+// flag exists to prevent.
+func ParseArtifactKinds(raw string, valid []string) (map[string]bool, error) {
+	if strings.TrimSpace(raw) == "" {
+		return nil, nil
+	}
+	allowed := make(map[string]bool, len(valid))
+	for _, v := range valid {
+		allowed[v] = true
+	}
+	out := make(map[string]bool)
+	for _, part := range strings.Split(raw, ",") {
+		kind := strings.ToLower(strings.TrimSpace(part))
+		if kind == "" {
+			continue
+		}
+		if !allowed[kind] {
+			return nil, fmt.Errorf("unknown artifact kind %q: must be one of %s", kind, strings.Join(valid, ", "))
+		}
+		out[kind] = true
+	}
+	return out, nil
+}
+
+// envArtifactKinds mirrors envString for the artifact set. An unparseable value
+// is ignored rather than fatal, matching envInt64: an env var is often set once
+// in CI and a hard failure there is worse than the documented default.
+func envArtifactKinds(dst *map[string]bool, key string) {
+	if v := os.Getenv(key); v != "" {
+		if kinds, err := ParseArtifactKinds(v, []string{"video", "trace"}); err == nil && len(kinds) > 0 {
+			*dst = kinds
+		}
+	}
 }

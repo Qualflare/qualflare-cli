@@ -132,7 +132,7 @@ func TestParserRetryCountAndIsFlakyPassThrough(t *testing.T) {
 	}
 }
 
-func TestParserResolvesLocalVideoPathToAbsolute(t *testing.T) {
+func TestParserResolvesLocalPathToAbsolute(t *testing.T) {
 	dir := t.TempDir()
 	videoFile := filepath.Join(dir, "clip.mp4")
 	if err := os.WriteFile(videoFile, []byte("x"), 0o600); err != nil {
@@ -160,15 +160,15 @@ func TestParserResolvesLocalVideoPathToAbsolute(t *testing.T) {
 		t.Fatalf("expected 2 attachments (inline + video), got %d", len(attachments))
 	}
 	video := attachments[1]
-	if video.LocalVideoPath != videoFile {
-		t.Errorf("expected LocalVideoPath %q (resolved relative to report.json's directory), got %q", videoFile, video.LocalVideoPath)
+	if video.LocalPath != videoFile {
+		t.Errorf("expected LocalPath %q (resolved relative to report.json's directory), got %q", videoFile, video.LocalPath)
 	}
 	if attachments[0].Content != "aGVsbG8=" {
 		t.Errorf("expected inline screenshot to survive unchanged, got %+v", attachments[0])
 	}
 }
 
-func TestParserResolvesLocalVideoPathToAbsoluteFromRelativeInputPath(t *testing.T) {
+func TestParserResolvesLocalPathToAbsoluteFromRelativeInputPath(t *testing.T) {
 	dir := t.TempDir()
 	videoFile := filepath.Join(dir, "clip.mp4")
 	if err := os.WriteFile(videoFile, []byte("x"), 0o600); err != nil {
@@ -214,11 +214,11 @@ func TestParserResolvesLocalVideoPathToAbsoluteFromRelativeInputPath(t *testing.
 	}
 
 	video := suite.Cases[0].Attachments[0]
-	if !filepath.IsAbs(video.LocalVideoPath) {
-		t.Errorf("expected LocalVideoPath to be absolute, got %q", video.LocalVideoPath)
+	if !filepath.IsAbs(video.LocalPath) {
+		t.Errorf("expected LocalPath to be absolute, got %q", video.LocalPath)
 	}
-	if video.LocalVideoPath != wantVideoFile {
-		t.Errorf("expected LocalVideoPath %q, got %q", wantVideoFile, video.LocalVideoPath)
+	if video.LocalPath != wantVideoFile {
+		t.Errorf("expected LocalPath %q, got %q", wantVideoFile, video.LocalPath)
 	}
 }
 
