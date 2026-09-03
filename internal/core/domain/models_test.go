@@ -324,14 +324,14 @@ func TestPtrHelpers(t *testing.T) {
 	}
 }
 
-func TestAttachmentLocalVideoPathNeverSerializes(t *testing.T) {
-	a := Attachment{Name: "clip", LocalVideoPath: "/tmp/should-not-appear.mp4"}
+func TestAttachmentLocalPathNeverSerializes(t *testing.T) {
+	a := Attachment{Name: "clip", LocalPath: "/tmp/should-not-appear.mp4"}
 	b, err := json.Marshal(a)
 	if err != nil {
 		t.Fatalf("marshal error: %v", err)
 	}
 	if got := string(b); containsSubstring(got, "should-not-appear") {
-		t.Fatalf("LocalVideoPath leaked into wire JSON: %s", got)
+		t.Fatalf("LocalPath leaked into wire JSON: %s", got)
 	}
 }
 

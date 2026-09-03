@@ -82,7 +82,7 @@ func writeQualflareReport(t *testing.T, dir, filename, caseID string, shardIndex
 // never runs — the values here come straight from the qualflare parser
 // reading each case's own "shardIndex" field), and resolves the one video
 // attachment through the real ReportService.resolveVideoAttachments pass
-// into StorageKey/FileSize with LocalVideoPath cleared.
+// into StorageKey/FileSize with LocalPath cleared.
 //
 // The two files' embedded shardIndex values (9 and 4) are deliberately
 // non-sequential and deliberately inverted relative to the files'
@@ -114,7 +114,12 @@ func TestRunCollect_DirectoryMergePreservesShardIndexAndResolvesVideo(t *testing
 	svc := services.NewReportService(factory.NewParserFactory(), sender, cfg)
 	c := NewCLI(svc, cfg, nil, nil, nil)
 
-	if err := c.runCollect(context.Background(), []string{dir}, baseOpts()); err != nil {
+	// This test asserts the video RESOLUTION path, which only runs for a kind
+	// the user opted into — the gate defaults to uploading nothing. The gate's
+	// own behaviour is covered in collect_artifact_gate_test.go.
+	opts := baseOpts()
+	opts.uploadArtifacts = "video"
+	if err := c.runCollect(context.Background(), []string{dir}, opts); err != nil {
 		t.Fatalf("runCollect() = %v", err)
 	}
 
@@ -153,7 +158,7 @@ func TestRunCollect_DirectoryMergePreservesShardIndexAndResolvesVideo(t *testing
 
 	// Video resolution: exactly one UploadVideo call, for the one video
 	// attachment, and its resulting attachment carries StorageKey/FileSize
-	// with LocalVideoPath cleared.
+	// with LocalPath cleared.
 	if len(sender.uploadCalls) != 1 {
 		t.Fatalf("UploadVideo called %d times, want 1", len(sender.uploadCalls))
 	}
@@ -174,8 +179,8 @@ func TestRunCollect_DirectoryMergePreservesShardIndexAndResolvesVideo(t *testing
 	if att.FileSize != 12345 {
 		t.Errorf("FileSize = %d, want 12345", att.FileSize)
 	}
-	if att.LocalVideoPath != "" {
-		t.Errorf("LocalVideoPath = %q, want cleared after resolution", att.LocalVideoPath)
+	if att.LocalPath != "" {
+		t.Errorf("LocalPath = %q, want cleared after resolution", att.LocalPath)
 	}
 
 	// case-0 never referenced a video, so it must carry no attachments and

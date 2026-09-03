@@ -11,6 +11,7 @@ import (
 	"qualflare-cli/internal/core/domain"
 	"qualflare-cli/internal/core/ports"
 	"runtime"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -72,34 +73,44 @@ func (s *ReportService) ProcessTestResults(ctx context.Context, files []string, 
 	// video upload is fail-open, the failure is silent (a warning, but collect
 	// still exits 0). Using context.Background() here lets UploadVideo's own
 	// internal timeout be the only deadline governing upload duration.
-	s.resolveVideoAttachments(context.Background(), report)
+	s.resolveArtifactAttachments(context.Background(), report)
 
 	return s.sender.SendReport(ctx, report)
 }
 
-// resolveVideoAttachments walks every attachment in the merged launch and
-// resolves any LocalVideoPath (set by the qualflare-native parser's
-// ParsePath — see internal/adapters/parsers/native/qualflare) into a real
-// StorageKey/FileSize via the presigned-URL flow. Fail-open per attachment,
-// matching the policy the reporters themselves used before this
-// responsibility moved here: a failed upload is logged and the attachment is
-// left with neither StorageKey nor LocalVideoPath set. This does NOT drop the
-// attachment server-side: the server persists a row from the attachment's
-// Name field alone (it does not filter out an attachment with both Content
-// and StorageKey empty), so a failed upload instead produces an
-// undownloadable placeholder "video" entry in the UI, not a fully-dropped
-// attachment.
+// resolveArtifactAttachments walks every attachment in the merged launch and
+// resolves any LocalPath (set by the qualflare-native parser's ParsePath — see
+// internal/adapters/parsers/native/qualflare) into a real StorageKey/FileSize
+// via the presigned-URL flow.
+//
+// GATING. An artifact kind is only uploaded when --upload-artifacts asked for
+// it; the default uploads nothing. A video or a Playwright trace is the largest
+// thing in a report by an order of magnitude, and the previous behaviour
+// uploaded every one automatically with no way to decline.
+//
+// A gated-out artifact is REMOVED from the payload, not merely left unresolved.
+// That distinction is load-bearing: the server persists an attachment row from
+// its Name alone — it does not filter out one with both Content and StorageKey
+// empty — so leaving it would put an undownloadable placeholder in the UI for
+// every skipped artifact. Dropping it means a gated run simply has no video
+// rows, which is what the user asked for.
+//
+// A FAILED upload is deliberately not dropped, and keeps the old behaviour of
+// leaving the placeholder: a fault is worth seeing in the UI, a deliberate skip
+// is not.
+//
+// Fail-open per attachment otherwise, matching the policy the reporters
+// themselves used before this responsibility moved here.
 //
 // The ctx passed in by ProcessTestResults is deliberately NOT the
 // deadline-bearing --timeout ctx — see the call site's comment — so a caller
-// whose ctx is already expired or near-expired does not, by itself, prevent
-// an upload from being attempted here.
-func (s *ReportService) resolveVideoAttachments(ctx context.Context, launch *domain.Launch) {
-	// Memoizes one upload's result per distinct absolute LocalVideoPath, so a
-	// video referenced by more than one attachment (e.g. a spec-level
+// whose ctx is already expired or near-expired does not, by itself, prevent an
+// upload from being attempted here.
+func (s *ReportService) resolveArtifactAttachments(ctx context.Context, launch *domain.Launch) {
+	// Memoizes one upload's result per distinct absolute LocalPath, so an
+	// artifact referenced by more than one attachment (e.g. a spec-level
 	// recording attached to several test cases) is uploaded once, not once per
-	// attachment. Scoped to a single resolveVideoAttachments call — there is no
-	// reason to persist it further, and ReportService instances are reused
+	// attachment. Scoped to a single call — ReportService instances are reused
 	// across unrelated ProcessTestResults calls (in tests, at least) where a
 	// stale entry would be wrong.
 	type uploadResult struct {
@@ -108,16 +119,27 @@ func (s *ReportService) resolveVideoAttachments(ctx context.Context, launch *dom
 		err        error
 	}
 	uploaded := make(map[string]uploadResult)
+	skipped := make(map[string]int)
 
 	for i := range launch.Suites {
 		for j := range launch.Suites[i].Cases {
 			attachments := launch.Suites[i].Cases[j].Attachments
+			kept := attachments[:0]
+
 			for k := range attachments {
-				if attachments[k].LocalVideoPath == "" {
+				if attachments[k].LocalPath == "" {
+					kept = append(kept, attachments[k])
 					continue
 				}
-				localPath := attachments[k].LocalVideoPath
 
+				kind := attachments[k].ArtifactKind
+				if !s.config.IsArtifactUploadEnabled(kind) {
+					// Dropped, not kept — see the placeholder note above.
+					skipped[kind]++
+					continue
+				}
+
+				localPath := attachments[k].LocalPath
 				result, ok := uploaded[localPath]
 				if !ok {
 					storageKey, fileSize, err := s.sender.UploadVideo(ctx, localPath, attachments[k].MimeType)
@@ -126,16 +148,54 @@ func (s *ReportService) resolveVideoAttachments(ctx context.Context, launch *dom
 				}
 
 				if result.err != nil {
-					fmt.Fprintf(s.warnWriter(), "skipping video attachment %q (%s): %v\n", attachments[k].Name, localPath, result.err)
-					attachments[k].LocalVideoPath = ""
+					fmt.Fprintf(s.warnWriter(), "skipping %s attachment %q (%s): %v\n",
+						kind, attachments[k].Name, localPath, result.err)
+					attachments[k].LocalPath = ""
+					attachments[k].ArtifactKind = ""
+					kept = append(kept, attachments[k])
 					continue
 				}
 				attachments[k].StorageKey = result.storageKey
 				attachments[k].FileSize = result.fileSize
-				attachments[k].LocalVideoPath = ""
+				attachments[k].LocalPath = ""
+				attachments[k].ArtifactKind = ""
+				kept = append(kept, attachments[k])
 			}
+			launch.Suites[i].Cases[j].Attachments = kept
 		}
 	}
+
+	s.warnSkippedArtifacts(skipped)
+}
+
+// warnSkippedArtifacts tells the user exactly what was left out and how to
+// include it. Silence here would be the worst outcome of the gate: videos used
+// to upload automatically, so someone upgrading loses them, and must be told
+// why rather than discovering it in the UI.
+func (s *ReportService) warnSkippedArtifacts(skipped map[string]int) {
+	if len(skipped) == 0 {
+		return
+	}
+	kinds := make([]string, 0, len(skipped))
+	for _, kind := range domain.AllArtifactKinds() {
+		if skipped[kind] > 0 {
+			kinds = append(kinds, fmt.Sprintf("%d %s", skipped[kind], kind))
+		}
+	}
+	fmt.Fprintf(s.warnWriter(),
+		"skipped %s attachment(s): upload them with --upload-artifacts=%s\n",
+		strings.Join(kinds, ", "), strings.Join(sortedKeys(skipped), ","))
+}
+
+// sortedKeys keeps the suggested flag value deterministic, so the message is
+// the same across runs and copy-pasteable from any of them.
+func sortedKeys(m map[string]int) []string {
+	out := make([]string, 0, len(m))
+	for k := range m {
+		out = append(out, k)
+	}
+	sort.Strings(out)
+	return out
 }
 
 // ParseTestResults parses files and returns the parsed report without sending

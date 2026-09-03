@@ -45,7 +45,7 @@ func TestValidatePlatform(t *testing.T) {
 func TestApplyCollectOptions(t *testing.T) {
 	t.Run("applies set values", func(t *testing.T) {
 		cfg := config.DefaultConfig()
-		applyCollectOptions(cfg, collectOptions{
+		_ = applyCollectOptions(cfg, collectOptions{
 			environment: "staging",
 			language:    "en-GB",
 			platform:    "web",
@@ -76,7 +76,7 @@ func TestApplyCollectOptions(t *testing.T) {
 		cfg.Commit = "abc"
 		before := cfg.GetTimeout()
 
-		applyCollectOptions(cfg, collectOptions{}) // every field zero
+		_ = applyCollectOptions(cfg, collectOptions{}) // every field zero
 
 		if cfg.GetEnvironment() != "from-ci" || cfg.GetBranch() != "main" || cfg.GetCommit() != "abc" {
 			t.Errorf("detected values clobbered: env=%q branch=%q commit=%q",

@@ -104,6 +104,12 @@ type ConfigProvider interface {
 	// IsNoCaptureOutput reports whether captured stdout/stderr (system-out/
 	// system-err) must be stripped from the report before sending (SEC-04).
 	IsNoCaptureOutput() bool
+	// IsArtifactUploadEnabled reports whether `collect` may upload this heavy
+	// artifact kind (domain.ArtifactKind*). Default is false for every kind:
+	// --upload-artifacts / QF_UPLOAD_ARTIFACTS opt in. A gated-out artifact is
+	// dropped from the payload rather than sent unresolved, since the server
+	// would otherwise persist an undownloadable placeholder row.
+	IsArtifactUploadEnabled(kind string) bool
 	// IsShard reports whether --shard mode is enabled: every case from input
 	// file i is tagged shard_index = i, overwriting any other mechanism's value.
 	IsShard() bool

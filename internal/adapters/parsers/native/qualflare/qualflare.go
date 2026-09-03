@@ -132,10 +132,17 @@ type Attachment struct {
 	Path     string `json:"path,omitempty"`
 	MimeType string `json:"mimeType,omitempty"`
 	Content  string `json:"content,omitempty"` // Base64 encoded
-	// LocalVideoPath, relative to the report file this Attachment came from —
-	// resolved to an absolute path in ParsePath before it ever reaches
-	// convertCase. See domain.Attachment.LocalVideoPath's doc comment.
+	// LocalVideoPath and LocalTracePath are relative to the report file this
+	// Attachment came from — resolved to an absolute path in ParsePath before
+	// either reaches convertCase. See domain.Attachment.LocalPath's doc
+	// comment.
+	//
+	// Two fields rather than one generic path because the wire contract is
+	// append-only: reporters already published write `localVideoPath`, and
+	// renaming it would strand every one of them. `localTracePath` is additive,
+	// and an older CLI simply ignores it.
 	LocalVideoPath string `json:"localVideoPath,omitempty"`
+	LocalTracePath string `json:"localTracePath,omitempty"`
 }
 
 // Parse decodes one Collect JSON file into a single synthetic wrapper
@@ -246,6 +253,17 @@ func buildSuite(collect Collect, sourceDir string) (*domain.Suite, error) {
 	return suite, nil
 }
 
+// resolveArtifactPath makes a report-relative artifact path absolute against
+// the directory the report file itself came from. sourceDir is empty when Parse
+// was called with a bare io.Reader (tests, and the non-ParsePath entry point),
+// in which case the path is left exactly as written.
+func resolveArtifactPath(rel, sourceDir string) string {
+	if sourceDir == "" {
+		return rel
+	}
+	return filepath.Join(sourceDir, rel)
+}
+
 func convertCase(c Case, suiteName string, sourceDir string) domain.Case {
 	testCase := domain.Case{
 		ID:         c.ID,
@@ -269,10 +287,13 @@ func convertCase(c Case, suiteName string, sourceDir string) domain.Case {
 			MimeType: a.MimeType,
 			Content:  a.Content,
 		}
-		if a.LocalVideoPath != "" && sourceDir != "" {
-			attachment.LocalVideoPath = filepath.Join(sourceDir, a.LocalVideoPath)
-		} else if a.LocalVideoPath != "" {
-			attachment.LocalVideoPath = a.LocalVideoPath
+		// A trace and a video are mutually exclusive on one attachment; if a
+		// report somehow carries both, the video wins, matching the field that
+		// has existed longer.
+		if rel, kind := a.LocalVideoPath, domain.ArtifactKindVideo; rel != "" {
+			attachment.LocalPath, attachment.ArtifactKind = resolveArtifactPath(rel, sourceDir), kind
+		} else if rel, kind := a.LocalTracePath, domain.ArtifactKindTrace; rel != "" {
+			attachment.LocalPath, attachment.ArtifactKind = resolveArtifactPath(rel, sourceDir), kind
 		}
 		testCase.Attachments = append(testCase.Attachments, attachment)
 	}
