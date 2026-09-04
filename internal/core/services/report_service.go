@@ -185,6 +185,42 @@ const maxInlineBodyWarnBytes = 8 << 20
 // collect time; unbounded would open a socket per attachment.
 const attachmentUploadConcurrency = 8
 
+// offloadableExtensions is the MIME set the attachment-upload endpoint accepts
+// for inline content, mapped to the extension its cross-check demands.
+//
+// Anything else — text/plain logs, text/markdown error context, application/json
+// — stays inline exactly as before. Attempting those would spend a presign
+// round-trip per attachment to earn a 400 and a warning, which is worse than the
+// inlining it was meant to avoid.
+//
+// Video and zip are absent deliberately: those never arrive as inline content.
+// They come in as LocalPath and are handled by resolveArtifactAttachments, which
+// runs first.
+var offloadableExtensions = map[string]string{
+	"image/png":  ".png",
+	"image/jpeg": ".jpg",
+	"image/gif":  ".gif",
+}
+
+// offloadFilename builds the name sent to the presign call.
+//
+// It must not be the attachment's display name. Reporters name attachments for
+// humans — Playwright's screenshots arrive as "screenshot", with no extension at
+// all — while the server cross-checks the extension against the declared MIME
+// type and rejects a mismatch. Deriving the name from the MIME is the only way
+// the two can agree.
+func offloadFilename(name, mimeType string) (string, bool) {
+	ext, ok := offloadableExtensions[mimeType]
+	if !ok {
+		return "", false
+	}
+	base := strings.TrimSuffix(filepath.Base(name), filepath.Ext(name))
+	if base == "" || base == "." || base == string(filepath.Separator) {
+		base = "attachment"
+	}
+	return base + ext, true
+}
+
 // offloadInlineAttachments moves every base64 `content` attachment out of the
 // request body and into blob storage, replacing it with a storageKey.
 //
@@ -207,6 +243,7 @@ func (s *ReportService) offloadInlineAttachments(ctx context.Context, launch *do
 	type target struct {
 		suite, kase, att int
 		data             []byte
+		filename         string
 	}
 
 	var targets []target
@@ -217,13 +254,18 @@ func (s *ReportService) offloadInlineAttachments(ctx context.Context, launch *do
 				if atts[k].Content == "" || atts[k].StorageKey != "" {
 					continue
 				}
+				filename, ok := offloadFilename(atts[k].Name, atts[k].MimeType)
+				if !ok {
+					// Not a type this endpoint accepts; leave it inline.
+					continue
+				}
 				data, err := base64.StdEncoding.DecodeString(atts[k].Content)
 				if err != nil {
 					// Not ours to report: the parser accepted this content, and a
 					// decode failure here would be a confusing place to surface it.
 					continue
 				}
-				targets = append(targets, target{i, j, k, data})
+				targets = append(targets, target{i, j, k, data, filename})
 			}
 		}
 	}
@@ -268,7 +310,7 @@ func (s *ReportService) offloadInlineAttachments(ctx context.Context, launch *do
 			defer wg.Done()
 			defer func() { <-sem }()
 			att := launch.Suites[t.suite].Cases[t.kase].Attachments[t.att]
-			key, size, err := s.sender.UploadAttachment(ctx, t.data, att.MimeType, att.Name)
+			key, size, err := s.sender.UploadAttachment(ctx, t.data, att.MimeType, t.filename)
 			mu.Lock()
 			byHash[h] = &uploaded{storageKey: key, size: size, err: err}
 			mu.Unlock()

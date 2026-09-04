@@ -174,3 +174,72 @@ func inlineBytes(l *domain.Launch) int {
 	}
 	return n
 }
+
+// Reporters name attachments for humans. Playwright's screenshots arrive as
+// "screenshot" with no extension, while the server cross-checks the extension
+// against the declared MIME and rejects a mismatch — so passing the display name
+// through would 400 every real screenshot, fall back to inlining, and leave the
+// feature quietly doing nothing.
+func TestOffload_SendsAMimeDerivedFilenameNotTheDisplayName(t *testing.T) {
+	sender := &videoStubSender{}
+	svc := offloadSvc(sender)
+	l := launchWithAttachments(domain.Attachment{
+		Name:     "screenshot", // exactly what Playwright emits
+		MimeType: "image/png",
+		Content:  base64.StdEncoding.EncodeToString([]byte("PNGBYTES")),
+	})
+
+	svc.offloadInlineAttachments(context.Background(), l)
+
+	if len(sender.attachmentCalls) != 1 {
+		t.Fatalf("expected one upload, got %+v", sender.attachmentCalls)
+	}
+	if got := sender.attachmentCalls[0].name; got != "screenshot.png" {
+		t.Errorf("filename = %q, want %q — the server requires the extension to match the MIME", got, "screenshot.png")
+	}
+}
+
+func TestOffloadFilename_DerivesFromMimeAndSurvivesOddNames(t *testing.T) {
+	for _, tc := range []struct{ name, mime, want string }{
+		{"screenshot", "image/png", "screenshot.png"},
+		{"shot.png", "image/png", "shot.png"},     // already correct, not doubled
+		{"photo.jpeg", "image/jpeg", "photo.jpg"}, // normalised to one spelling
+		{"anim", "image/gif", "anim.gif"},
+		{"", "image/png", "attachment.png"}, // no name at all
+		{"a/b/c.png", "image/png", "c.png"}, // path components stripped
+	} {
+		got, ok := offloadFilename(tc.name, tc.mime)
+		if !ok || got != tc.want {
+			t.Errorf("offloadFilename(%q, %q) = (%q, %v), want %q", tc.name, tc.mime, got, ok, tc.want)
+		}
+	}
+}
+
+// text/plain logs and text/markdown error-context are not types this endpoint
+// accepts. Attempting them would spend a presign round-trip each to earn a 400
+// and a warning — worse than the inlining it was meant to avoid.
+func TestOffload_LeavesNonUploadableTypesInline(t *testing.T) {
+	sender := &videoStubSender{}
+	warn := &strings.Builder{}
+	svc := &ReportService{sender: sender, config: config.DefaultConfig(), warn: warn}
+	l := launchWithAttachments(
+		domain.Attachment{Name: "note", MimeType: "text/plain",
+			Content: base64.StdEncoding.EncodeToString([]byte("a log line"))},
+		domain.Attachment{Name: "error-context", MimeType: "text/markdown",
+			Content: base64.StdEncoding.EncodeToString([]byte("# context"))},
+	)
+
+	svc.offloadInlineAttachments(context.Background(), l)
+
+	if len(sender.attachmentCalls) != 0 {
+		t.Errorf("no upload should be attempted for these types, got %+v", sender.attachmentCalls)
+	}
+	for _, a := range l.Suites[0].Cases[0].Attachments {
+		if a.Content == "" {
+			t.Errorf("%s must stay inline", a.Name)
+		}
+	}
+	if warn.String() != "" {
+		t.Errorf("leaving them inline is normal, not a warning; got %q", warn.String())
+	}
+}
