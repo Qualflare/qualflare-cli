@@ -319,10 +319,14 @@ func (s *ReportService) offloadInlineAttachments(ctx context.Context, launch *do
 	wg.Wait()
 
 	failed := 0
+	var firstErr error
 	for i, t := range targets {
 		res := byHash[hashes[i]]
 		if res == nil || res.err != nil {
 			failed++
+			if firstErr == nil && res != nil {
+				firstErr = res.err
+			}
 			continue
 		}
 		att := &launch.Suites[t.suite].Cases[t.kase].Attachments[t.att]
@@ -331,9 +335,18 @@ func (s *ReportService) offloadInlineAttachments(ctx context.Context, launch *do
 		att.Content = ""
 	}
 	if failed > 0 {
+		// The cause, not just the count. "could not be uploaded" alone sends the
+		// reader to the server logs for something the client already knows — and
+		// the likeliest cause is a server too old to accept image uploads, which
+		// this makes obvious rather than mysterious.
+		reason := "unknown error"
+		if firstErr != nil {
+			reason = firstErr.Error()
+		}
 		fmt.Fprintf(s.warnWriter(),
-			"%d attachment(s) could not be uploaded and were left inline; they still count against the request size\n",
-			failed)
+			"%d attachment(s) could not be uploaded and were left inline; they still count against the "+
+				"request size. First failure: %s\n",
+			failed, reason)
 	}
 }
 
