@@ -126,6 +126,12 @@ func TestOffload_FailedUploadLeavesTheAttachmentInline(t *testing.T) {
 	if !strings.Contains(warn.String(), "could not be uploaded") {
 		t.Errorf("the failure should be reported; got %q", warn.String())
 	}
+	// The count alone sends the reader to the server logs for something the
+	// client already knows. This was found the hard way: diagnosing a real 400
+	// meant patching a temporary print into the binary, which a user cannot do.
+	if !strings.Contains(warn.String(), "network down") {
+		t.Errorf("the warning must name the underlying cause; got %q", warn.String())
+	}
 }
 
 // An attachment already carrying a storageKey (a video resolved moments earlier)
