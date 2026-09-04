@@ -3,18 +3,22 @@ package services
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
-	"qualflare-cli/internal/core/domain"
-	"qualflare-cli/internal/core/ports"
 	"runtime"
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
+
+	"qualflare-cli/internal/core/domain"
+	"qualflare-cli/internal/core/ports"
 )
 
 // ReportService handles test report processing
@@ -74,6 +78,8 @@ func (s *ReportService) ProcessTestResults(ctx context.Context, files []string, 
 	// still exits 0). Using context.Background() here lets UploadVideo's own
 	// internal timeout be the only deadline governing upload duration.
 	s.resolveArtifactAttachments(context.Background(), report)
+	s.offloadInlineAttachments(context.Background(), report)
+	s.warnIfBodyLooksTooLarge(report)
 
 	return s.sender.SendReport(ctx, report)
 }
@@ -166,6 +172,146 @@ func (s *ReportService) resolveArtifactAttachments(ctx context.Context, launch *
 	}
 
 	s.warnSkippedArtifacts(skipped)
+}
+
+// maxInlineBodyWarnBytes is the point past which the assembled request is close
+// enough to /collect's 10MB server-side limit to be worth saying so. The server
+// answers an oversized body with a bare 413 before parsing anything, which
+// reaches the user as an unexplained failure with the whole launch lost.
+const maxInlineBodyWarnBytes = 8 << 20
+
+// attachmentUploadConcurrency bounds how many attachment PUTs are in flight.
+// Serial uploads would make a suite with hundreds of screenshots unusable at
+// collect time; unbounded would open a socket per attachment.
+const attachmentUploadConcurrency = 8
+
+// offloadInlineAttachments moves every base64 `content` attachment out of the
+// request body and into blob storage, replacing it with a storageKey.
+//
+// WHY THIS EXISTS
+// An inlined attachment competes with the test results for /collect's single
+// 10MB body budget. Reporters guard that with a per-run inline cap, but the cap
+// is PER PROCESS and collect merges every shard into ONE request, so it does not
+// compose: eleven shards each honouring a 750KB budget still assemble a body
+// over the limit, and the server answers with a 413 that loses the entire
+// launch. Nobody has to raise a cap for this to happen.
+//
+// Videos and traces already avoid the body this way. This puts screenshots on
+// the same path.
+//
+// Fail-open per attachment, matching resolveArtifactAttachments: an upload that
+// fails leaves the attachment inline and warns. Dropping a user's screenshot to
+// save a request would be the wrong trade — worst case we are back to today's
+// behaviour for that one file.
+func (s *ReportService) offloadInlineAttachments(ctx context.Context, launch *domain.Launch) {
+	type target struct {
+		suite, kase, att int
+		data             []byte
+	}
+
+	var targets []target
+	for i := range launch.Suites {
+		for j := range launch.Suites[i].Cases {
+			atts := launch.Suites[i].Cases[j].Attachments
+			for k := range atts {
+				if atts[k].Content == "" || atts[k].StorageKey != "" {
+					continue
+				}
+				data, err := base64.StdEncoding.DecodeString(atts[k].Content)
+				if err != nil {
+					// Not ours to report: the parser accepted this content, and a
+					// decode failure here would be a confusing place to surface it.
+					continue
+				}
+				targets = append(targets, target{i, j, k, data})
+			}
+		}
+	}
+	if len(targets) == 0 {
+		return
+	}
+
+	// One upload per distinct payload. The same screenshot attached to several
+	// cases is one object in storage, mirroring how resolveArtifactAttachments
+	// memoises by path.
+	type uploaded struct {
+		storageKey string
+		size       int64
+		err        error
+	}
+	var mu sync.Mutex
+	byHash := make(map[string]*uploaded)
+	order := make([]string, 0, len(targets))
+	hashes := make([]string, len(targets))
+	for i, t := range targets {
+		h := fmt.Sprintf("%x", sha256.Sum256(t.data))
+		hashes[i] = h
+		if _, seen := byHash[h]; !seen {
+			byHash[h] = nil
+			order = append(order, h)
+		}
+	}
+	firstFor := make(map[string]target, len(order))
+	for i, t := range targets {
+		if _, ok := firstFor[hashes[i]]; !ok {
+			firstFor[hashes[i]] = t
+		}
+	}
+
+	sem := make(chan struct{}, attachmentUploadConcurrency)
+	var wg sync.WaitGroup
+	for _, h := range order {
+		h, t := h, firstFor[h]
+		wg.Add(1)
+		sem <- struct{}{}
+		go func() {
+			defer wg.Done()
+			defer func() { <-sem }()
+			att := launch.Suites[t.suite].Cases[t.kase].Attachments[t.att]
+			key, size, err := s.sender.UploadAttachment(ctx, t.data, att.MimeType, att.Name)
+			mu.Lock()
+			byHash[h] = &uploaded{storageKey: key, size: size, err: err}
+			mu.Unlock()
+		}()
+	}
+	wg.Wait()
+
+	failed := 0
+	for i, t := range targets {
+		res := byHash[hashes[i]]
+		if res == nil || res.err != nil {
+			failed++
+			continue
+		}
+		att := &launch.Suites[t.suite].Cases[t.kase].Attachments[t.att]
+		att.StorageKey = res.storageKey
+		att.FileSize = res.size
+		att.Content = ""
+	}
+	if failed > 0 {
+		fmt.Fprintf(s.warnWriter(),
+			"%d attachment(s) could not be uploaded and were left inline; they still count against the request size\n",
+			failed)
+	}
+}
+
+// warnIfBodyLooksTooLarge says plainly what the server would otherwise answer
+// with a bare 413. Nothing here prevents the failure — it only stops it being
+// mysterious when an attachment could not be offloaded.
+func (s *ReportService) warnIfBodyLooksTooLarge(launch *domain.Launch) {
+	inline := 0
+	for i := range launch.Suites {
+		for j := range launch.Suites[i].Cases {
+			for _, a := range launch.Suites[i].Cases[j].Attachments {
+				inline += len(a.Content)
+			}
+		}
+	}
+	if inline > maxInlineBodyWarnBytes {
+		fmt.Fprintf(s.warnWriter(),
+			"warning: %d MB of attachments are still inline; /collect rejects a body over 10MB outright, "+
+				"which fails the whole launch\n", inline>>20)
+	}
 }
 
 // warnSkippedArtifacts tells the user exactly what was left out and how to

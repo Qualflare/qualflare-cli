@@ -146,25 +146,43 @@ type uploadURLResponse struct {
 // (report_service.go) treats any error here as fail-open: log and skip,
 // never fail the whole collect.
 func (c *Client) UploadVideo(ctx context.Context, localPath, mimeType string) (string, int64, error) {
-	info, err := os.Stat(localPath)
+	// Read rather than stat-then-read: uploadBytes declares the size from the
+	// bytes it actually has, so a separate stat would only add a window in which
+	// the two could disagree.
+	body, err := os.ReadFile(localPath) //nolint:gosec // path comes from a report this user just produced
 	if err != nil {
-		return "", 0, fmt.Errorf("stat video file: %w", err)
+		return "", 0, fmt.Errorf("read video file: %w", err)
 	}
-	fileSize := info.Size()
+	return c.uploadBytes(ctx, body, mimeType, filepath.Base(localPath))
+}
 
-	// The presign POST and the PUT share a generous, independent budget derived
-	// from ctx, not the raw ctx itself: command.go wraps the whole
-	// ProcessTestResults call in a single context.WithTimeout(ctx, opts.timeout)
-	// (default 30s, the --timeout flag) meant for lightweight metadata POSTs,
-	// and that same budget is otherwise shared with parsing, SendReport, this
-	// presign request, os.ReadFile of the full video, AND the PUT — for
-	// anything but a tiny clip, 30s is easily exhausted by network transfer
-	// alone. Deriving from ctx (rather than context.Background()) means a
-	// caller-supplied deadline tighter than 5 minutes still wins, since
-	// context.WithTimeout takes the earlier of the two deadlines. 5 minutes
-	// matches a 50-100MB file (maxVideoBytes' cap) over a slow-but-real
-	// connection, mirroring the reporters' AbortSignal.timeout(timeoutMs) scoped
-	// to just the upload.
+// UploadAttachment uploads one in-memory attachment (a screenshot decoded from a
+// report's base64 `content`) through the same presigned-URL flow as UploadVideo.
+//
+// It exists because inlining is what makes /collect's 10MB body a shared budget
+// between attachments and results — and since collect merges every shard into
+// ONE request, enough shards exceed it with no single reporter having passed its
+// own cap. Sending bytes out of band removes attachments from that budget
+// entirely.
+func (c *Client) UploadAttachment(ctx context.Context, data []byte, mimeType, filename string) (string, int64, error) {
+	return c.uploadBytes(ctx, data, mimeType, filepath.Base(filename))
+}
+
+// uploadBytes is the presigned-URL flow both callers share: POST for a URL, then
+// PUT the bytes straight to R2.
+//
+// The presign POST and the PUT share a generous, independent budget derived from
+// ctx, not the raw ctx itself: command.go wraps the whole ProcessTestResults call
+// in a single context.WithTimeout(ctx, opts.timeout) (default 30s, the --timeout
+// flag) meant for lightweight metadata POSTs, and that same budget is otherwise
+// shared with parsing, SendReport, this presign request AND the PUT — for
+// anything but a tiny file, 30s is easily exhausted by network transfer alone.
+// Deriving from ctx (rather than context.Background()) means a caller-supplied
+// deadline tighter than 5 minutes still wins, since context.WithTimeout takes the
+// earlier of the two deadlines.
+func (c *Client) uploadBytes(ctx context.Context, body []byte, mimeType, filename string) (string, int64, error) {
+	size := int64(len(body))
+
 	uploadCtx, cancel := context.WithTimeout(ctx, 5*time.Minute)
 	defer cancel()
 
@@ -173,9 +191,9 @@ func (c *Client) UploadVideo(ctx context.Context, localPath, mimeType string) (s
 	resp, err := c.resty.R().
 		SetContext(uploadCtx).
 		SetBody(uploadURLRequest{
-			Filename: filepath.Base(localPath),
+			Filename: filename,
 			MimeType: mimeType,
-			FileSize: fileSize,
+			FileSize: size,
 		}).
 		SetResult(&presign).
 		Post(reqURL)
@@ -186,11 +204,6 @@ func (c *Client) UploadVideo(ctx context.Context, localPath, mimeType string) (s
 		return "", 0, c.buildAPIError("upload-url", resp)
 	}
 
-	body, err := os.ReadFile(localPath)
-	if err != nil {
-		return "", 0, fmt.Errorf("read video file: %w", err)
-	}
-
 	// A bare resty.New() client, not c.resty: the PUT target is R2, not the
 	// Qualflare API, and must not carry the QF_TOKEN auth middleware that
 	// c.resty's request middleware attaches to every request — the presigned
@@ -199,7 +212,7 @@ func (c *Client) UploadVideo(ctx context.Context, localPath, mimeType string) (s
 	//
 	// Assigned to a variable and closed explicitly (mirroring Client.Close's own
 	// c.resty.Close()) rather than chained inline — an ad-hoc client that is never
-	// closed leaks its connection pool on every video upload.
+	// closed leaks its connection pool on every upload.
 	putClient := resty.New()
 	defer func() { _ = putClient.Close() }()
 
@@ -209,13 +222,13 @@ func (c *Client) UploadVideo(ctx context.Context, localPath, mimeType string) (s
 		SetBody(body).
 		Put(presign.UploadURL)
 	if err != nil {
-		return "", 0, &APIError{Op: "upload-put", Message: "failed to PUT video bytes", Err: err}
+		return "", 0, &APIError{Op: "upload-put", Message: "failed to PUT bytes", Err: err}
 	}
 	if !putResp.IsStatusSuccess() {
 		return "", 0, &APIError{Op: "upload-put", Message: fmt.Sprintf("PUT failed with status %d", putResp.StatusCode())}
 	}
 
-	return presign.StorageKey, fileSize, nil
+	return presign.StorageKey, size, nil
 }
 
 // newIdempotencyKey returns a random RFC 4122 v4 UUID string (≤255 chars, the
