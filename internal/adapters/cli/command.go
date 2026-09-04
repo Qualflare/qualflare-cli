@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"qualflare-cli/internal/auth"
@@ -379,98 +380,160 @@ func applyCollectOptions(cfg *config.Config, opts collectOptions) error {
 	return nil
 }
 
+// runMeta is what one report file says about the run it belongs to.
+type runMeta struct {
+	runID     string
+	timestamp time.Time
+	modTime   time.Time
+	path      string
+}
+
 // runGroups buckets report files by the `metadata.runId` their reporter wrote.
 // Files without one — every report produced before reporters started stamping
 // it — land under "" and are deliberately NOT treated as a distinct run, so an
 // older reporter keeps working exactly as before.
-func runGroups(files []string) map[string][]string {
-	groups := make(map[string][]string)
+func runGroups(files []string) map[string][]runMeta {
+	groups := make(map[string][]runMeta)
 	for _, f := range files {
-		groups[readRunID(f)] = append(groups[readRunID(f)], f)
+		m := readRunMeta(f)
+		groups[m.runID] = append(groups[m.runID], m)
 	}
 	return groups
 }
 
-// readRunID pulls metadata.runId out of a report, returning "" for anything it
-// cannot read or parse. A malformed file is not this function's problem: the
-// parser reports it properly a moment later, and failing here would turn a
-// clear parse error into a confusing run-identity one.
-func readRunID(path string) string {
+// readRunMeta pulls metadata.runId and metadata.timestamp out of a report,
+// returning zero values for anything it cannot read or parse. A malformed file
+// is not this function's problem: the parser reports it properly a moment
+// later, and failing here would turn a clear parse error into a confusing
+// run-identity one.
+//
+// modTime is carried as the ordering fallback for a report whose timestamp is
+// missing or unparseable, so selection stays total — see selectCurrentRun.
+func readRunMeta(path string) runMeta {
+	m := runMeta{path: path}
+	if info, err := os.Stat(path); err == nil {
+		m.modTime = info.ModTime()
+	}
 	data, err := os.ReadFile(path) //nolint:gosec // path comes from the user's own argument list
 	if err != nil {
-		return ""
+		return m
 	}
 	var probe struct {
 		Metadata struct {
-			RunID string `json:"runId"`
+			RunID     string `json:"runId"`
+			Timestamp string `json:"timestamp"`
 		} `json:"metadata"`
 	}
 	if err := json.Unmarshal(data, &probe); err != nil {
-		return ""
+		return m
 	}
-	return probe.Metadata.RunID
+	m.runID = probe.Metadata.RunID
+	if ts, err := time.Parse(time.RFC3339, probe.Metadata.Timestamp); err == nil {
+		m.timestamp = ts
+	}
+	return m
 }
 
-// verifySingleRun refuses to upload reports that came from two different runs.
+// selectCurrentRun narrows a directory's report files to the run that just
+// finished, and returns the files to upload.
 //
 // WHY THIS EXISTS
 // `collect <dir>` uploads every *.json it finds, which is what lets N sharded
 // jobs write into one directory and merge into a single Launch. The same
-// behaviour silently merges a file left over from a PREVIOUS run — the launch
-// looks entirely plausible and contains results nobody ran, which corrupts the
-// history flaky-detection is built on.
+// behaviour once merged a file left over from a PREVIOUS run — the launch
+// looked entirely plausible and contained results nobody ran, which corrupts
+// the history flaky-detection is built on.
 //
-// Failing is deliberate. Picking the newest group silently is the behaviour
-// being removed; an error costs one re-run, whereas a wrong launch is never
-// noticed.
-func verifySingleRun(files []string, allowMixed bool) error {
+// Refusing to upload was the first fix for that, and it traded a silent-wrong
+// launch for a broken one: the user had to go and clear the directory, on every
+// project, in CI and locally, forever. Now that reports carry a runId there is
+// no need to ask. The newest run is the one that just produced these files;
+// anything older is by definition stale, and dropping it needs no confirmation
+// because nothing is deleted — the files stay on disk, they are simply not
+// uploaded.
+//
+// Files with NO runId are always included. They come from reporters released
+// before the field existed and, the case that actually matters, from a
+// mixed-version directory where an updated reporter and an older one both
+// describe one real run. Excluding them to guard against stale data would drop
+// live results.
+func selectCurrentRun(files []string, allowMixed bool, warn io.Writer) []string {
 	groups := runGroups(files)
-	// One known run, or none at all (older reporters), is the normal case.
-	known := 0
+
+	known := make([]string, 0, len(groups))
 	for id := range groups {
 		if id != "" {
-			known++
+			known = append(known, id)
 		}
 	}
-	if known <= 1 {
-		return nil
+	// One known run, or none at all (older reporters), is the normal case and
+	// needs no narrowing.
+	if len(known) <= 1 || allowMixed {
+		if len(known) > 1 && allowMixed {
+			fmt.Fprintf(warn, "merging %d runs into one launch (--allow-mixed-runs)\n", len(known))
+		}
+		return files
 	}
 
-	ids := make([]string, 0, len(groups))
-	for id := range groups {
-		if id != "" {
-			ids = append(ids, id)
+	current := newestRun(groups, known)
+
+	// Filter IN THE CALLER'S ORDER rather than rebuilding from the groups.
+	// --shard numbers files by their position in this slice (tagShardsByFile),
+	// and its own help tells users to list them explicitly in shard order when
+	// the index has to be stable — so reordering here would silently renumber
+	// every shard. Input order is already deterministic, so this also keeps the
+	// selection reproducible without sorting.
+	selected := make(map[string]bool, len(groups[current])+len(groups[""]))
+	for _, m := range groups[current] {
+		selected[m.path] = true
+	}
+	// Unattributable files ride along, as documented above.
+	for _, m := range groups[""] {
+		selected[m.path] = true
+	}
+	kept := make([]string, 0, len(selected))
+	for _, f := range files {
+		if selected[f] {
+			kept = append(kept, f)
 		}
 	}
-	sort.Strings(ids)
 
-	var b strings.Builder
-	fmt.Fprintf(&b, "%d different runs found in the report files:\n", known)
-	for _, id := range ids {
-		fmt.Fprintf(&b, "    run %s: %d file(s)", id, len(groups[id]))
-		if len(groups[id]) <= 2 {
-			// Base names only: the user passed a directory, and full paths here
-			// wrap over several lines and bury the part they need to act on.
-			names := make([]string, 0, len(groups[id]))
-			for _, f := range groups[id] {
-				names = append(names, filepath.Base(f))
-			}
-			fmt.Fprintf(&b, "  (%s)", strings.Join(names, ", "))
+	fmt.Fprintf(warn, "ignored %d file(s) from %d earlier run(s) (--allow-mixed-runs to include them)\n",
+		len(files)-len(kept), len(known)-1)
+	return kept
+}
+
+// newestRun picks the run whose most recent report is newest. Ordering must be
+// TOTAL: two shards can write in the same millisecond, and a report may carry no
+// parseable timestamp at all, so ties fall through to file mtime and finally to
+// the run id itself — never to map iteration order, which would make the choice
+// differ between runs on identical input.
+func newestRun(groups map[string][]runMeta, known []string) string {
+	sort.Strings(known)
+	best := known[0]
+	bestTS, bestMod := groupHigh(groups[best])
+	for _, id := range known[1:] {
+		ts, mod := groupHigh(groups[id])
+		if ts.After(bestTS) || (ts.Equal(bestTS) && mod.After(bestMod)) {
+			best, bestTS, bestMod = id, ts, mod
 		}
-		b.WriteString("\n")
 	}
-	if n := len(groups[""]); n > 0 {
-		fmt.Fprintf(&b, "    no runId: %d file(s) (reporter predates runId; not counted as a run)\n", n)
-	}
+	return best
+}
 
-	if allowMixed {
-		fmt.Fprintf(os.Stderr, "warning: %s  Uploading anyway (--allow-mixed-runs).\n", b.String())
-		return nil
+// groupHigh is a run's high-water mark: the newest timestamp and mtime any of
+// its files carries.
+func groupHigh(ms []runMeta) (time.Time, time.Time) {
+	var ts, mod time.Time
+	for _, m := range ms {
+		if m.timestamp.After(ts) {
+			ts = m.timestamp
+		}
+		if m.modTime.After(mod) {
+			mod = m.modTime
+		}
 	}
-	return fmt.Errorf(
-		"%s  A stale file from an earlier run would be merged into this launch.\n"+
-			"  Clear the output directory before each run, or pass --allow-mixed-runs to upload anyway",
-		b.String())
+	return ts, mod
 }
 
 // verifyFilesExist fails on the first missing path rather than uploading a partial set.
@@ -551,10 +614,11 @@ func (c *CLI) runCollect(ctx context.Context, files []string, opts collectOption
 	}
 
 	// Guards the one hazard of collecting a whole directory: a report left over
-	// from a previous run merging silently into this launch.
-	if err := verifySingleRun(files, opts.allowMixed); err != nil {
-		return err
-	}
+	// from a previous run merging silently into this launch. Narrowed rather
+	// than refused — see selectCurrentRun.
+	// os.Stderr, not printInfo: --quiet must not hide the fact that files
+	// were left out of the upload.
+	files = selectCurrentRun(files, opts.allowMixed, os.Stderr)
 
 	framework, err := resolveFramework(opts.format)
 	if err != nil {

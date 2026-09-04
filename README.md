@@ -91,6 +91,26 @@ qf myapp collect ./qualflare-results --upload-artifacts=video,trace
 
 Run `qf myapp collect --help` for the full flag list (`--branch`, `--commit`, `--environment`, `--timeout`, etc.).
 
+### Collecting a directory with leftovers
+
+`collect <dir>` uploads every report in the directory, which is what lets N sharded jobs write into
+one place and merge into a single Launch. Reports carry a `runId` that every shard of one run shares
+and different runs do not, so a file left over from an earlier run is recognised rather than merged:
+
+```
+$ qf myproj collect ./qualflare-results
+ignored 1 file(s) from 1 earlier run(s) (--allow-mixed-runs to include them)
+Processing 2 test result file(s)...
+OK Test results collected successfully
+```
+
+The run that just finished is uploaded; older files stay on disk untouched. There is nothing to
+clear between runs. Pass `--allow-mixed-runs` to merge every run in the directory into one Launch
+instead.
+
+Reports written by a reporter too old to stamp a `runId` carry no run identity, so they are always
+included — a mixed-version directory never loses live results.
+
 ### Heavy artifacts are opt-in
 
 The report itself always uploads. A **video or Playwright trace** only uploads when you ask for it:
