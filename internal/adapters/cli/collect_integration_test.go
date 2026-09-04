@@ -33,6 +33,10 @@ func (s *collectIntegrationSender) SendReport(_ context.Context, report *domain.
 	return nil
 }
 
+func (s *collectIntegrationSender) UploadAttachment(_ context.Context, data []byte, _, _ string) (string, int64, error) {
+	return "att-key", int64(len(data)), nil
+}
+
 func (s *collectIntegrationSender) UploadVideo(_ context.Context, localPath, mimeType string) (string, int64, error) {
 	s.uploadCalls = append(s.uploadCalls, struct{ localPath, mimeType string }{localPath, mimeType})
 	return s.uploadStorageKey, s.uploadFileSize, nil

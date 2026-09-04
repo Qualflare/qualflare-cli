@@ -3,7 +3,9 @@ package services
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
+	"sync"
 	"testing"
 	"time"
 
@@ -12,12 +14,31 @@ import (
 	"qualflare-cli/internal/core/ports"
 )
 
+type attachmentUpload struct {
+	name     string
+	mimeType string
+	size     int
+}
+
 type videoStubSender struct {
 	stubSender
-	uploadCalls   []string
-	uploadErr     error
-	storageKeyOut string
-	fileSizeOut   int64
+	mu              sync.Mutex
+	attachmentCalls []attachmentUpload
+	attachmentErr   error
+	uploadCalls     []string
+	uploadErr       error
+	storageKeyOut   string
+	fileSizeOut     int64
+}
+
+func (v *videoStubSender) UploadAttachment(_ context.Context, data []byte, mimeType, name string) (string, int64, error) {
+	v.mu.Lock()
+	defer v.mu.Unlock()
+	v.attachmentCalls = append(v.attachmentCalls, attachmentUpload{name: name, mimeType: mimeType, size: len(data)})
+	if v.attachmentErr != nil {
+		return "", 0, v.attachmentErr
+	}
+	return fmt.Sprintf("att-key-%d", len(v.attachmentCalls)), int64(len(data)), nil
 }
 
 func (v *videoStubSender) UploadVideo(_ context.Context, localPath, _ string) (string, int64, error) {
@@ -139,6 +160,10 @@ type ctxCapturingVideoSender struct {
 	capturedCtxErr error
 	storageKeyOut  string
 	fileSizeOut    int64
+}
+
+func (v *ctxCapturingVideoSender) UploadAttachment(_ context.Context, data []byte, _, _ string) (string, int64, error) {
+	return "k", int64(len(data)), nil
 }
 
 func (v *ctxCapturingVideoSender) UploadVideo(ctx context.Context, localPath, _ string) (string, int64, error) {

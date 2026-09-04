@@ -118,6 +118,10 @@ func (s *stubSender) SendReport(_ context.Context, report *domain.Launch) error 
 	return s.err
 }
 
+func (s *stubSender) UploadAttachment(_ context.Context, data []byte, _, _ string) (string, int64, error) {
+	return "attachment-key", int64(len(data)), nil
+}
+
 func (s *stubSender) UploadVideo(_ context.Context, _, _ string) (string, int64, error) {
 	return "", 0, nil
 }

@@ -59,6 +59,16 @@ type ReportSender interface {
 	// (POST /api/v1/attachments/upload-url, then PUT the bytes) and returns
 	// the resulting storageKey and the file's byte size.
 	UploadVideo(ctx context.Context, localPath, mimeType string) (storageKey string, fileSize int64, err error)
+
+	// UploadAttachment uploads one in-memory attachment through the same
+	// presigned-URL flow and returns its storageKey and byte size.
+	//
+	// Screenshots arrive from a reporter as base64 `content` inside the report,
+	// which puts them in /collect's 10MB body budget alongside the results.
+	// Because collect merges every shard into ONE request, that budget is
+	// exceeded by enough shards without any single reporter passing its own cap.
+	// Sending the bytes out of band takes attachments out of the body entirely.
+	UploadAttachment(ctx context.Context, data []byte, mimeType, filename string) (storageKey string, fileSize int64, err error)
 }
 
 // APIClient defines the interface for API communication (read + write)
