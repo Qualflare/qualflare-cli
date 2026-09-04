@@ -477,15 +477,26 @@ func selectCurrentRun(files []string, allowMixed bool, warn io.Writer) []string 
 
 	current := newestRun(groups, known)
 
-	kept := make([]string, 0, len(files))
+	// Filter IN THE CALLER'S ORDER rather than rebuilding from the groups.
+	// --shard numbers files by their position in this slice (tagShardsByFile),
+	// and its own help tells users to list them explicitly in shard order when
+	// the index has to be stable — so reordering here would silently renumber
+	// every shard. Input order is already deterministic, so this also keeps the
+	// selection reproducible without sorting.
+	selected := make(map[string]bool, len(groups[current])+len(groups[""]))
 	for _, m := range groups[current] {
-		kept = append(kept, m.path)
+		selected[m.path] = true
 	}
 	// Unattributable files ride along, as documented above.
 	for _, m := range groups[""] {
-		kept = append(kept, m.path)
+		selected[m.path] = true
 	}
-	sort.Strings(kept)
+	kept := make([]string, 0, len(selected))
+	for _, f := range files {
+		if selected[f] {
+			kept = append(kept, f)
+		}
+	}
 
 	fmt.Fprintf(warn, "ignored %d file(s) from %d earlier run(s) (--allow-mixed-runs to include them)\n",
 		len(files)-len(kept), len(known)-1)

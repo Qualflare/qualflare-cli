@@ -182,3 +182,24 @@ func TestReadRunMeta_UnreadableOrMalformedYieldsZeroValues(t *testing.T) {
 		t.Errorf("missing file should yield no runId, got %q", m.runID)
 	}
 }
+
+// --shard assigns each file's index from its POSITION in the slice handed to
+// the parser (tagShardsByFile), and the flag's own help tells users to list
+// files explicitly in shard order when that index has to be stable. Narrowing
+// must therefore filter in place, never reorder: an earlier version sorted the
+// result, which silently renumbered every shard whenever a stale file happened
+// to be present.
+func TestSelectCurrentRun_PreservesCallerOrderForShardNumbering(t *testing.T) {
+	dir := t.TempDir()
+	// Deliberately NOT in lexical order — shard 0 sorts after shard 1.
+	shard0 := writeReport(t, dir, "z-shard-0.json", "run-1", "2026-09-04T10:00:00Z")
+	shard1 := writeReport(t, dir, "a-shard-1.json", "run-1", "2026-09-04T10:00:01Z")
+	stale := writeReport(t, dir, "m-stale.json", "run-0", "2026-09-04T09:00:00Z")
+
+	got := selectCurrentRun([]string{shard0, shard1, stale}, false, io.Discard)
+
+	want := []string{shard0, shard1}
+	if len(got) != 2 || got[0] != want[0] || got[1] != want[1] {
+		t.Errorf("caller order must survive narrowing:\n got %v\nwant %v", bases(got), bases(want))
+	}
+}
