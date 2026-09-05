@@ -163,6 +163,7 @@ type Attachment struct {
 	// and an older CLI simply ignores it.
 	LocalVideoPath string `json:"localVideoPath,omitempty"`
 	LocalTracePath string `json:"localTracePath,omitempty"`
+	LocalImagePath string `json:"localImagePath,omitempty"`
 }
 
 // Parse decodes one Collect JSON file into a single synthetic wrapper
@@ -314,6 +315,8 @@ func convertCase(c Case, suiteName string, sourceDir string) domain.Case {
 		if rel, kind := a.LocalVideoPath, domain.ArtifactKindVideo; rel != "" {
 			attachment.LocalPath, attachment.ArtifactKind = resolveArtifactPath(rel, sourceDir), kind
 		} else if rel, kind := a.LocalTracePath, domain.ArtifactKindTrace; rel != "" {
+			attachment.LocalPath, attachment.ArtifactKind = resolveArtifactPath(rel, sourceDir), kind
+		} else if rel, kind := a.LocalImagePath, domain.ArtifactKindImage; rel != "" {
 			attachment.LocalPath, attachment.ArtifactKind = resolveArtifactPath(rel, sourceDir), kind
 		}
 		testCase.Attachments = append(testCase.Attachments, attachment)

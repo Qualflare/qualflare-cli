@@ -252,9 +252,12 @@ The format is auto-detected if not specified.`,
 		"Treat each input file as one parallel shard of the same run, numbered by argument position starting at 0 (requires 2+ files). Does not apply to a single file. WARNING: with a glob, files are numbered in lexical filename order (t1, t10, t100, t2, ...), which is NOT a stable per-shard identity — adding, renaming or losing a file shifts every later index. List the files explicitly, in shard order, when the index has to be stable across runs.")
 	cmd.Flags().StringVarP(&output, "output", "o", "", "Output format for dry-run (json)")
 	cmd.Flags().StringVar(&uploadArtifacts, "upload-artifacts", "",
-		"Comma-separated heavy artifact kinds to upload: "+strings.Join(domain.AllArtifactKinds(), ", ")+
-			". Default uploads NONE — a video or Playwright trace is the largest thing in a report, so "+
-			"uploading one is opt-in. Also settable via QF_UPLOAD_ARTIFACTS.")
+		"Comma-separated artifact kinds to upload, ADDED to what is already uploaded by default: "+
+			strings.Join(domain.AllArtifactKinds(), ", ")+". Screenshots (image) upload by default; "+
+			"video and Playwright traces do not, because either is the largest thing in a report by an "+
+			"order of magnitude and should be a choice rather than a surprise on the bill. Pass "+
+			"\"none\" to upload no artifacts at all, screenshots included. Also settable via "+
+			"QF_UPLOAD_ARTIFACTS.")
 	cmd.Flags().BoolVar(&allowMixed, "allow-mixed-runs", false,
 		"Upload even when the report files come from different runs (by default this is refused, "+
 			"because a stale file from an earlier run would be merged into this launch)")

@@ -240,6 +240,16 @@ func offloadFilename(name, mimeType string) (string, bool) {
 // save a request would be the wrong trade — worst case we are back to today's
 // behaviour for that one file.
 func (s *ReportService) offloadInlineAttachments(ctx context.Context, launch *domain.Launch) {
+	// Declining images has to decline the inline ones too. A reporter older
+	// than the localImagePath contract still base64-inlines its screenshots, so
+	// gating only the LocalPath path would leave --upload-artifacts=none
+	// delivering exactly the images it was asked not to -- and delivering them
+	// the expensive way, inside the /collect body.
+	if !s.config.IsArtifactUploadEnabled(domain.ArtifactKindImage) {
+		s.dropDeclinedInlineImages(launch)
+		return
+	}
+
 	type target struct {
 		suite, kase, att int
 		data             []byte
@@ -940,5 +950,41 @@ func tagShardsByFile(suites []domain.Suite, warn io.Writer) {
 		for j := range suites[i].Cases {
 			suites[i].Cases[j].ShardIndex = domain.IntPtr(i)
 		}
+	}
+}
+
+// dropDeclinedInlineImages removes inline image attachments when image uploads
+// were declined.
+//
+// Removed rather than left inline, matching resolveArtifactAttachments: the
+// server persists an attachment row from its Name alone, so keeping one with
+// its Content stripped would put an undownloadable placeholder in the UI for
+// every screenshot the user asked not to upload.
+//
+// Only the types the upload endpoint accepts are treated as images. A
+// text/plain log has no artifact kind, was never gateable, and is left exactly
+// where it was.
+func (s *ReportService) dropDeclinedInlineImages(launch *domain.Launch) {
+	dropped := 0
+	for i := range launch.Suites {
+		for j := range launch.Suites[i].Cases {
+			atts := launch.Suites[i].Cases[j].Attachments
+			kept := atts[:0]
+			for k := range atts {
+				if atts[k].Content != "" && atts[k].StorageKey == "" {
+					if _, isImage := offloadableExtensions[atts[k].MimeType]; isImage {
+						dropped++
+						continue
+					}
+				}
+				kept = append(kept, atts[k])
+			}
+			launch.Suites[i].Cases[j].Attachments = kept
+		}
+	}
+	if dropped > 0 {
+		fmt.Fprintf(s.warnWriter(),
+			"skipped %d inline image attachment(s): --upload-artifacts declined %q\n",
+			dropped, domain.ArtifactKindImage)
 	}
 }

@@ -3,6 +3,8 @@ package config
 import (
 	"strings"
 	"testing"
+
+	"qualflare-cli/internal/core/domain"
 )
 
 func TestParseArtifactKinds_EmptyMeansNothing(t *testing.T) {
@@ -42,11 +44,89 @@ func TestParseArtifactKinds_RejectsAnUnknownKindAndNamesTheValidOnes(t *testing.
 	}
 }
 
-func TestIsArtifactUploadEnabled_DefaultsToFalseForEveryKind(t *testing.T) {
+// The heavy kinds default to off; images do not. This test used to be named
+// "DefaultsToFalseForEveryKind" and passed only because it never asked about
+// images -- the name would have kept asserting something false.
+func TestIsArtifactUploadEnabled_HeavyKindsOffByDefaultImagesOn(t *testing.T) {
 	cfg := DefaultConfig()
 	for _, kind := range []string{"video", "trace", "anything"} {
 		if cfg.IsArtifactUploadEnabled(kind) {
 			t.Errorf("%q should be disabled by default", kind)
+		}
+	}
+	if !cfg.IsArtifactUploadEnabled(domain.ArtifactKindImage) {
+		t.Error("images should upload by default; making them opt-in would silently " +
+			"stop delivering screenshots for everyone who never passed the flag")
+	}
+}
+
+func TestParseArtifactKinds_NoneDeclinesEveryKindIncludingImages(t *testing.T) {
+	cfg := DefaultConfig()
+	kinds, err := ParseArtifactKinds("none", domain.AllArtifactKinds())
+	if err != nil {
+		t.Fatalf("none should parse: %v", err)
+	}
+	// Non-nil but empty: that is what separates an explicit refusal from an
+	// absent flag, which SetUploadArtifacts must not confuse.
+	if kinds == nil {
+		t.Fatal("none must produce a non-nil empty set, not nil")
+	}
+	cfg.SetUploadArtifacts(kinds)
+	for _, kind := range domain.AllArtifactKinds() {
+		if cfg.IsArtifactUploadEnabled(kind) {
+			t.Errorf("%q should be declined by none", kind)
+		}
+	}
+}
+
+func TestParseArtifactKinds_NoneCannotBeCombinedWithAKind(t *testing.T) {
+	if _, err := ParseArtifactKinds("none,video", domain.AllArtifactKinds()); err == nil {
+		t.Error("none alongside a kind asks for two opposite things and must be rejected")
+	}
+}
+
+// A named kind ADDS to the defaults. Replacing them would mean
+// --upload-artifacts=video silently stopped uploading the screenshots the user
+// was already getting.
+func TestSetUploadArtifacts_AddsToTheDefaultsRatherThanReplacingThem(t *testing.T) {
+	cfg := DefaultConfig()
+	kinds, err := ParseArtifactKinds("video", domain.AllArtifactKinds())
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	cfg.SetUploadArtifacts(kinds)
+	if !cfg.IsArtifactUploadEnabled(domain.ArtifactKindVideo) {
+		t.Error("video was asked for")
+	}
+	if !cfg.IsArtifactUploadEnabled(domain.ArtifactKindImage) {
+		t.Error("images must survive asking for video")
+	}
+	if cfg.IsArtifactUploadEnabled(domain.ArtifactKindTrace) {
+		t.Error("trace was not asked for")
+	}
+}
+
+// envArtifactKinds used to validate against a hardcoded {"video", "trace"},
+// so a newly added kind was accepted by the flag and silently rejected by the
+// environment. This is that drift.
+func TestQFUploadArtifactsAcceptsEveryKindTheFlagDoes(t *testing.T) {
+	for _, kind := range domain.AllArtifactKinds() {
+		t.Setenv("QF_UPLOAD_ARTIFACTS", kind)
+		cfg := DefaultConfig()
+		cfg.LoadFromEnv()
+		if !cfg.IsArtifactUploadEnabled(kind) {
+			t.Errorf("QF_UPLOAD_ARTIFACTS=%s should enable %s", kind, kind)
+		}
+	}
+}
+
+func TestQFUploadArtifactsNoneDeclinesEverything(t *testing.T) {
+	t.Setenv("QF_UPLOAD_ARTIFACTS", "none")
+	cfg := DefaultConfig()
+	cfg.LoadFromEnv()
+	for _, kind := range domain.AllArtifactKinds() {
+		if cfg.IsArtifactUploadEnabled(kind) {
+			t.Errorf("QF_UPLOAD_ARTIFACTS=none should decline %s", kind)
 		}
 	}
 }

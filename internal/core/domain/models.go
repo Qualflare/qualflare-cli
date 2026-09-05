@@ -448,11 +448,31 @@ type Attachment struct {
 const (
 	ArtifactKindVideo = "video"
 	ArtifactKindTrace = "trace"
+	// ArtifactKindImage is uploaded BY DEFAULT, unlike the two above. A
+	// screenshot is small, and it was always uploaded back when it had no
+	// choice but to travel inline in the /collect body -- making it opt-in
+	// would silently stop delivering screenshots for everyone who never passed
+	// the flag. It is listed here so it can still be declined
+	// (--upload-artifacts=none), not so it must be requested.
+	ArtifactKindImage = "image"
 )
+
+// ArtifactKindNone is the token that declines every kind, including the ones
+// that default to on. Without it "upload no images" would be inexpressible:
+// an empty --upload-artifacts is indistinguishable from an absent one.
+const ArtifactKindNone = "none"
+
+// DefaultArtifactKinds is what --upload-artifacts holds when nobody sets it.
+// Returned fresh each call: the result is a mutable set that callers own.
+func DefaultArtifactKinds() map[string]bool {
+	return map[string]bool{ArtifactKindImage: true}
+}
 
 // AllArtifactKinds is the set --upload-artifacts validates against, so a typo
 // is rejected with the valid list rather than silently uploading nothing.
-func AllArtifactKinds() []string { return []string{ArtifactKindVideo, ArtifactKindTrace} }
+func AllArtifactKinds() []string {
+	return []string{ArtifactKindVideo, ArtifactKindTrace, ArtifactKindImage}
+}
 
 // IntPtr returns a pointer to an int value
 func IntPtr(v int) *int { return &v }

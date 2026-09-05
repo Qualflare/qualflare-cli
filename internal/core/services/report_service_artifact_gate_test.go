@@ -10,16 +10,39 @@ import (
 	"qualflare-cli/internal/core/domain"
 )
 
-// gateSvc builds a service whose config opts into exactly the given kinds.
+// gateSvc builds a service that additionally opts into the given kinds. With no
+// kinds it leaves the DEFAULTS in place (images on, heavy kinds off) rather
+// than declining everything -- an empty set is "none", which is a different
+// thing and has its own helper below.
 func gateSvc(sender *videoStubSender, kinds ...string) (*ReportService, *bytes.Buffer) {
 	cfg := config.DefaultConfig()
-	set := map[string]bool{}
-	for _, k := range kinds {
-		set[k] = true
+	if len(kinds) > 0 {
+		set := map[string]bool{}
+		for _, k := range kinds {
+			set[k] = true
+		}
+		cfg.SetUploadArtifacts(set)
 	}
-	cfg.SetUploadArtifacts(set)
 	warn := &bytes.Buffer{}
 	return &ReportService{sender: sender, config: cfg, warn: warn}, warn
+}
+
+// gateSvcNone is --upload-artifacts=none: a non-nil empty set, declining every
+// kind including the ones that default to on.
+func gateSvcNone(sender *videoStubSender) (*ReportService, *bytes.Buffer) {
+	cfg := config.DefaultConfig()
+	cfg.SetUploadArtifacts(map[string]bool{})
+	warn := &bytes.Buffer{}
+	return &ReportService{sender: sender, config: cfg, warn: warn}, warn
+}
+
+func inlineImage(name string) domain.Attachment {
+	// "aGVsbG8=" is "hello"; the bytes do not matter, the MIME type does.
+	return domain.Attachment{Name: name, MimeType: "image/png", Content: "aGVsbG8="}
+}
+
+func inlineText(name string) domain.Attachment {
+	return domain.Attachment{Name: name, MimeType: "text/plain", Content: "aGVsbG8="}
 }
 
 func launchWith(atts ...domain.Attachment) *domain.Launch {
@@ -36,7 +59,9 @@ func trace() domain.Attachment {
 
 // The default. Videos uploaded automatically before this gate existed, and a
 // video is the largest thing in a report by an order of magnitude.
-func TestArtifactGate_UploadsNothingByDefault(t *testing.T) {
+// Heavy kinds only. Images are NOT part of "nothing by default" -- see
+// TestArtifactGate_InlineImagesUploadByDefault.
+func TestArtifactGate_UploadsNoHeavyArtifactsByDefault(t *testing.T) {
 	sender := &videoStubSender{storageKeyOut: "k", fileSizeOut: 1}
 	svc, _ := gateSvc(sender)
 
@@ -133,5 +158,89 @@ func TestArtifactGate_FailedUploadStillKeepsTheAttachment(t *testing.T) {
 
 	if len(launch.Suites[0].Cases[0].Attachments) != 1 {
 		t.Error("a FAILED upload must not drop the attachment; only a gated-out one is dropped")
+	}
+}
+
+// An on-disk screenshot uploads without anyone passing a flag. Screenshots were
+// always delivered back when inlining was their only route, so requiring
+// --upload-artifacts=image would silently stop delivering them for every
+// existing user.
+func TestArtifactGate_ImagesUploadByDefault(t *testing.T) {
+	sender := &videoStubSender{storageKeyOut: "k", fileSizeOut: 7}
+	svc, _ := gateSvc(sender)
+
+	launch := launchWith(domain.Attachment{
+		Name: "shot", LocalPath: "/tmp/shot.png", ArtifactKind: domain.ArtifactKindImage,
+	})
+	svc.resolveArtifactAttachments(context.Background(), launch)
+
+	if len(sender.uploadCalls) != 1 {
+		t.Fatalf("image should upload with no flag, got %v", sender.uploadCalls)
+	}
+	att := launch.Suites[0].Cases[0].Attachments[0]
+	if att.StorageKey != "k" {
+		t.Errorf("StorageKey = %q, want the uploaded key", att.StorageKey)
+	}
+}
+
+// --upload-artifacts=video must not turn screenshots off as a side effect. That
+// is what makes named kinds additive rather than a replacement.
+func TestArtifactGate_AskingForVideoKeepsImages(t *testing.T) {
+	sender := &videoStubSender{storageKeyOut: "k", fileSizeOut: 1}
+	svc, _ := gateSvc(sender, domain.ArtifactKindVideo)
+
+	launch := launchWith(video(), domain.Attachment{
+		Name: "shot", LocalPath: "/tmp/shot.png", ArtifactKind: domain.ArtifactKindImage,
+	})
+	svc.resolveArtifactAttachments(context.Background(), launch)
+
+	if len(launch.Suites[0].Cases[0].Attachments) != 2 {
+		t.Errorf("both video and image should survive, got %d attachments",
+			len(launch.Suites[0].Cases[0].Attachments))
+	}
+	if len(sender.uploadCalls) != 2 {
+		t.Errorf("expected 2 uploads, got %v", sender.uploadCalls)
+	}
+}
+
+// "none" has to reach the INLINE images too. A reporter older than the
+// localImagePath contract still base64-inlines its screenshots, so gating only
+// the on-disk path would leave --upload-artifacts=none delivering exactly the
+// images it was told not to -- and inside the /collect body at that.
+func TestArtifactGate_NoneDropsInlineImagesToo(t *testing.T) {
+	sender := &videoStubSender{}
+	svc, warn := gateSvcNone(sender)
+
+	launch := launchWith(inlineImage("shot"), inlineText("log"))
+	svc.offloadInlineAttachments(context.Background(), launch)
+
+	atts := launch.Suites[0].Cases[0].Attachments
+	if len(atts) != 1 {
+		t.Fatalf("the image should be dropped and the log kept, got %d attachments", len(atts))
+	}
+	if atts[0].Name != "log" {
+		t.Errorf("kept the wrong attachment: %q", atts[0].Name)
+	}
+	// Dropped, not blanked: the server persists a row from Name alone, so a
+	// stripped attachment would be an undownloadable placeholder in the UI.
+	if len(sender.uploadCalls) != 0 {
+		t.Errorf("nothing should upload when images are declined, got %v", sender.uploadCalls)
+	}
+	if !strings.Contains(warn.String(), "declined") {
+		t.Errorf("the drop should be reported, got %q", warn.String())
+	}
+}
+
+// A text attachment has no artifact kind and was never gateable. Declining
+// images must not take it with them.
+func TestArtifactGate_NoneLeavesNonImageInlineAttachmentsAlone(t *testing.T) {
+	sender := &videoStubSender{}
+	svc, _ := gateSvcNone(sender)
+
+	launch := launchWith(inlineText("log"))
+	svc.offloadInlineAttachments(context.Background(), launch)
+
+	if len(launch.Suites[0].Cases[0].Attachments) != 1 {
+		t.Error("a text attachment is not an image and must survive --upload-artifacts=none")
 	}
 }
