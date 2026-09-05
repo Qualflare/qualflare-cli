@@ -1,7 +1,7 @@
 // Package qualflare parses the reporters' own Collect JSON output directly —
-// the exact shape @qualflare/cypress and @qualflare/cucumberjs already build
-// and (in normal mode) POST to /api/v1/collect, written to a file instead
-// via each reporter's `outputFile` config option.
+// the exact shape every @qualflare/* reporter builds: playwright, cypress,
+// cucumberjs, vitest and jest. Each writes it to a file in `outputDir` rather
+// than POSTing anywhere; none of them makes a network call.
 //
 // This exists for the sharded-CI merge workflow: each shard writes its own
 // file, and `qualflare-cli upload --shard <files...>` merges them into one

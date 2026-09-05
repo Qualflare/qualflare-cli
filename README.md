@@ -204,7 +204,7 @@ Run `qf <command> --help` for flags and examples.
 
 | Category | Frameworks |
 |----------|-----------|
-| **Generic (JUnit-compatible)** | JUnit, `qualflare-json` (the @qualflare/cypress / @qualflare/cucumberjs reporters' own Collect JSON, for merging sharded-CI output) |
+| **Generic (JUnit-compatible)** | JUnit, `qualflare-json` (the Collect JSON written by every `@qualflare/*` reporter — playwright, cypress, cucumberjs, vitest, jest — for merging sharded-CI output) |
 | **Unit Testing** | pytest, Go testing, Jest/Vitest, Mocha, RSpec, PHPUnit, TestNG |
 | **BDD** | Cucumber, Karate |
 | **UI / E2E / Mobile** | Playwright, Cypress, Selenium, TestCafe, Maestro, XCTest, Espresso |
