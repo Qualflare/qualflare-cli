@@ -111,15 +111,25 @@ instead.
 Reports written by a reporter too old to stamp a `runId` carry no run identity, so they are always
 included — a mixed-version directory never loses live results.
 
-### Heavy artifacts are opt-in
+### Heavy artifacts are opt-in, screenshots are not
 
-The report itself always uploads. A **video or Playwright trace** only uploads when you ask for it:
+The report itself always uploads, and so do **screenshots**. A **video or Playwright trace** only
+uploads when you ask for it:
 
 | | |
 |---|---|
 | flag | `--upload-artifacts=video`, `=trace`, or `=video,trace` |
 | env | `QF_UPLOAD_ARTIFACTS=video,trace` |
-| default | neither — nothing heavy is uploaded |
+| default | `image` — screenshots upload, video and traces do not |
+| decline everything | `--upload-artifacts=none`, screenshots included |
+
+Named kinds are **added** to the default, not swapped for it: `--upload-artifacts=video` uploads
+video *and* screenshots. Turning screenshots off is what `none` is for, and `none` cannot be
+combined with another kind — asking for both is rejected rather than silently resolved one way.
+
+Screenshots differ from video for a reason. They are small, and they were always uploaded back when
+inlining into the request body was their only route, so making them opt-in would have silently
+stopped delivering them for everyone who never passed the flag.
 
 A video is the largest thing in a report by an order of magnitude, and before v0.1.20 every one a
 reporter wrote was uploaded with no way to decline. Nothing is dropped quietly: `collect` reports
