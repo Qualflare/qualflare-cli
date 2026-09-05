@@ -529,3 +529,42 @@ func TestParserOmitsAttemptsWhenTheReportHasNone(t *testing.T) {
 		t.Errorf("attempts key should be omitted entirely: %s", raw)
 	}
 }
+
+// Screenshots used to have only one route onto the wire: base64 inside the
+// report file, and from there inside the /collect body. localImagePath gives
+// them the same on-disk treatment video and traces already had, so the report
+// file stops carrying image bytes at all.
+func TestParserResolvesLocalImagePathToAnArtifact(t *testing.T) {
+	dir := t.TempDir()
+	shot := filepath.Join(dir, "shot.png")
+	if err := os.WriteFile(shot, []byte("png"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	reportPath := filepath.Join(dir, "report.json")
+	report := `{"framework": "cypress", "suites": [{"name": "s", "cases": [
+		{"id": "1", "name": "t", "status": "failed", "attachments": [
+			{"name": "screenshot", "mimeType": "image/png", "localImagePath": "shot.png"}
+		]}
+	]}]}`
+	if err := os.WriteFile(reportPath, []byte(report), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	parser := New()
+	suite, err := parser.ParsePath(reportPath)
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	att := suite.Cases[0].Attachments[0]
+	if att.ArtifactKind != domain.ArtifactKindImage {
+		t.Errorf("ArtifactKind = %q, want %q", att.ArtifactKind, domain.ArtifactKindImage)
+	}
+	// Resolved against the REPORT's directory, not the process cwd -- the whole
+	// output directory travels together as one CI artifact bundle.
+	if att.LocalPath != shot {
+		t.Errorf("LocalPath = %q, want %q", att.LocalPath, shot)
+	}
+	if att.Content != "" {
+		t.Errorf("an on-disk image must not also be inlined, got %d bytes of content", len(att.Content))
+	}
+}

@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"qualflare-cli/internal/core/domain"
 	"qualflare-cli/internal/git"
 	"qualflare-cli/internal/version"
 )
@@ -27,11 +28,12 @@ type Config struct {
 
 	// Project settings
 	Environment string
-	// UploadArtifacts is the set of heavy artifact kinds `collect` may upload
-	// (domain.ArtifactKind*). Empty by default: a video or trace is the largest
-	// thing in a report by an order of magnitude, and uploading one should be a
-	// choice rather than a surprise on the bill. --upload-artifacts /
-	// QF_UPLOAD_ARTIFACTS opt in.
+	// UploadArtifacts is the set of artifact kinds `collect` may upload
+	// (domain.ArtifactKind*). Defaults to {image}: a video or trace is the
+	// largest thing in a report by an order of magnitude, so uploading one
+	// should be a choice rather than a surprise on the bill, while a screenshot
+	// is small and was never opt-in to begin with. --upload-artifacts /
+	// QF_UPLOAD_ARTIFACTS add kinds; "none" declines every kind.
 	UploadArtifacts map[string]bool
 	// environmentSet records that the user chose the environment themselves —
 	// a --environment flag or QF_ENVIRONMENT — rather than it still holding
@@ -74,15 +76,18 @@ type Config struct {
 // DefaultConfig returns the default configuration
 func DefaultConfig() *Config {
 	return &Config{
-		APIKey:         "",
-		Environment:    "development",
-		Language:       "en-US",
-		Platform:       "api", // backward-compatible default; override with --platform / QF_PLATFORM
-		Branch:         "",
-		Commit:         "",
-		RetryMax:       3,
-		RetryBaseDelay: 1 * time.Second,
-		RetryMaxDelay:  30 * time.Second,
+		APIKey:      "",
+		Environment: "development",
+		// Images upload by default; video and trace stay opt-in. See
+		// domain.ArtifactKindImage for why the two differ.
+		UploadArtifacts: domain.DefaultArtifactKinds(),
+		Language:        "en-US",
+		Platform:        "api", // backward-compatible default; override with --platform / QF_PLATFORM
+		Branch:          "",
+		Commit:          "",
+		RetryMax:        3,
+		RetryBaseDelay:  1 * time.Second,
+		RetryMaxDelay:   30 * time.Second,
 		// 120s (not 30s): the server's own /collect DB budget is ~30s, so a 30s client
 		// deadline had zero headroom — a large upload that legitimately took ~30s
 		// server-side would trip the client timeout at the same moment, failing an
@@ -425,12 +430,30 @@ func getFirstEnv(keys ...string) string {
 	return ""
 }
 
-// SetUploadArtifacts records the kinds --upload-artifacts asked for. A nil or
-// empty set means upload nothing, which is the default.
+// SetUploadArtifacts records the kinds --upload-artifacts asked for.
+//
+// NIL means the flag was absent and the default set stands. A non-nil EMPTY
+// set is "none" -- an explicit refusal of everything, including the kinds that
+// default to on -- and must not be mistaken for absence, which is why this
+// tests for nil rather than length.
+//
+// A named list ADDS to the defaults rather than replacing them, so
+// `--upload-artifacts=video` means "video as well", not "video instead of the
+// screenshots I was already getting". Turning a default kind off is what
+// "none" is for.
 func (c *Config) SetUploadArtifacts(kinds map[string]bool) {
-	if len(kinds) > 0 {
-		c.UploadArtifacts = kinds
+	if kinds == nil {
+		return
 	}
+	if len(kinds) == 0 {
+		c.UploadArtifacts = map[string]bool{}
+		return
+	}
+	merged := domain.DefaultArtifactKinds()
+	for k := range kinds {
+		merged[k] = true
+	}
+	c.UploadArtifacts = merged
 }
 
 // IsArtifactUploadEnabled reports whether `collect` may upload this artifact
@@ -453,16 +476,30 @@ func ParseArtifactKinds(raw string, valid []string) (map[string]bool, error) {
 		allowed[v] = true
 	}
 	out := make(map[string]bool)
+	sawNone := false
 	for _, part := range strings.Split(raw, ",") {
 		kind := strings.ToLower(strings.TrimSpace(part))
 		if kind == "" {
 			continue
 		}
+		if kind == domain.ArtifactKindNone {
+			sawNone = true
+			continue
+		}
 		if !allowed[kind] {
-			return nil, fmt.Errorf("unknown artifact kind %q: must be one of %s", kind, strings.Join(valid, ", "))
+			return nil, fmt.Errorf("unknown artifact kind %q: must be one of %s, or %q to upload none",
+				kind, strings.Join(valid, ", "), domain.ArtifactKindNone)
 		}
 		out[kind] = true
 	}
+	// "none" alongside a kind asks for two opposite things. Rejecting is the
+	// only safe reading: silently letting either win would upload artifacts
+	// someone declined, or drop ones they asked for.
+	if sawNone && len(out) > 0 {
+		return nil, fmt.Errorf("artifact kind %q cannot be combined with other kinds", domain.ArtifactKindNone)
+	}
+	// A non-nil empty set is what distinguishes "none" (decline everything,
+	// including the kinds that default to on) from an absent flag (nil).
 	return out, nil
 }
 
@@ -470,9 +507,27 @@ func ParseArtifactKinds(raw string, valid []string) (map[string]bool, error) {
 // is ignored rather than fatal, matching envInt64: an env var is often set once
 // in CI and a hard failure there is worse than the documented default.
 func envArtifactKinds(dst *map[string]bool, key string) {
-	if v := os.Getenv(key); v != "" {
-		if kinds, err := ParseArtifactKinds(v, []string{"video", "trace"}); err == nil && len(kinds) > 0 {
-			*dst = kinds
-		}
+	v := os.Getenv(key)
+	if v == "" {
+		return
 	}
+	// domain.AllArtifactKinds() rather than a literal list: this used to
+	// hardcode {"video", "trace"}, so adding a kind silently made it
+	// unsettable through the environment while the flag accepted it.
+	kinds, err := ParseArtifactKinds(v, domain.AllArtifactKinds())
+	if err != nil {
+		return
+	}
+	if kinds == nil {
+		return
+	}
+	if len(kinds) == 0 {
+		*dst = map[string]bool{}
+		return
+	}
+	merged := domain.DefaultArtifactKinds()
+	for k := range kinds {
+		merged[k] = true
+	}
+	*dst = merged
 }
