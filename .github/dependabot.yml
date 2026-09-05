@@ -23,6 +23,14 @@ updates:
         update-types:
           - minor
           - patch
+    ignore:
+      # See the comment on the "Install cosign" step in release.yml. A v4 installer
+      # brings Cosign v3, whose `sign-blob` needs `--bundle`; taking it requires
+      # rewriting the signs: block in .goreleaser.yml first. Minor and patch
+      # updates within v3 still come through.
+      - dependency-name: sigstore/cosign-installer
+        update-types:
+          - version-update:semver-major
 
   - package-ecosystem: docker
     directory: /
