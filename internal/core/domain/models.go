@@ -2,6 +2,7 @@
 package domain
 
 import (
+	"encoding/json"
 	"strings"
 	"time"
 )
@@ -303,6 +304,16 @@ type Case struct {
 	RetryCount *int  `json:"retryCount,omitempty"` // Number of retry attempts
 	IsFlaky    *bool `json:"isFlaky,omitempty"`    // True if test passed after one or more retries
 
+	// Attempts is the per-attempt execution history for a retried test. Unlike
+	// RetryCount, which only says HOW MANY times a test ran, this carries what
+	// each individual attempt did -- which is the only way a report can answer
+	// "what failed on the first try?" for a test that eventually passed.
+	//
+	// Passed straight through to the server, which persists it into
+	// case_run_attempts (see api-service launch.Attempt; the field names here
+	// mirror it exactly). Nil for parsers whose format has no attempt history.
+	Attempts []Attempt `json:"attempts,omitempty"`
+
 	// Shard/parallel-worker information (pointers: nil = not applicable/unknown)
 	ShardIndex *int       `json:"shardIndex,omitempty"` // Index of the worker/shard that ran this test
 	StartedAt  *time.Time `json:"startedAt,omitempty"`  // When this test started executing
@@ -350,6 +361,28 @@ type Link struct {
 	Type string `json:"type"`
 	Name string `json:"name,omitempty"`
 	URL  string `json:"url"`
+}
+
+// Attempt is one execution of a retried test.
+//
+// Mirrors api-service's launch.Attempt field-for-field, INCLUDING the json
+// tags -- the CLI does not reshape it, so a mismatch here silently drops data
+// server-side rather than failing. Number is 1-based; the server ignores
+// anything lower. Duration is a time.Duration (NANOSECONDS) on the wire, which
+// the server converts to milliseconds on write.
+type Attempt struct {
+	Number    int             `json:"attempt"`
+	Status    Status          `json:"status"`
+	Duration  time.Duration   `json:"duration,omitempty"`
+	StartedAt *time.Time      `json:"startedAt,omitempty"`
+	UID       string          `json:"attemptId,omitempty"`
+	Message   string          `json:"message,omitempty"`
+	Trace     string          `json:"trace,omitempty"`
+	Snippet   string          `json:"snippet,omitempty"`
+	Line      *int            `json:"line,omitempty"`
+	Stdout    []string        `json:"stdout,omitempty"`
+	Stderr    []string        `json:"stderr,omitempty"`
+	Extra     json.RawMessage `json:"extra,omitempty"`
 }
 
 // Step represents a step within a test case (for BDD frameworks)

@@ -1,6 +1,7 @@
 package qualflare
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -444,5 +445,87 @@ func TestParserPreservesStepParentIndexAndParameters(t *testing.T) {
 	}
 	if !steps[1].Parameters[1].Masked {
 		t.Error("parameters[1].Masked = false, want true")
+	}
+}
+
+// The reporters have sent Case.attempts since @qualflare/playwright 0.5.0, but
+// this parser had no field for it, so encoding/json discarded it silently and
+// case_run_attempts never saw a row from a qualflare-json report. Nothing
+// failed -- retryCount still arrived, so a launch looked correct while the
+// per-attempt history it was meant to carry was gone.
+//
+// The marshal at the end is the part that actually matters: the domain model is
+// serialized straight onto /collect, so a missing json tag would drop the data
+// again one step later, where no parser test would notice.
+func TestParserPassesAttemptHistoryThroughToTheWire(t *testing.T) {
+	jsonReport := `{"framework": "cypress", "suites": [{"name": "s", "cases": [
+		{"id": "1", "name": "flaky", "status": "passed", "retryCount": 2, "isFlaky": true,
+		 "attempts": [
+			{"attempt": 1, "status": "failed", "message": "boom 1", "trace": "at a.ts:1", "duration": 1500000000},
+			{"attempt": 2, "status": "failed", "message": "boom 2"},
+			{"attempt": 3, "status": "passed"}
+		 ]}
+	]}]}`
+
+	parser := New()
+	suite, err := parser.Parse(strings.NewReader(jsonReport))
+	if err != nil {
+		t.Fatalf("parse error: %v", err)
+	}
+	got := suite.Cases[0].Attempts
+	if len(got) != 3 {
+		t.Fatalf("expected 3 attempts, got %d", len(got))
+	}
+	if got[0].Number != 1 || got[0].Status != domain.StatusFailed || got[0].Message != "boom 1" {
+		t.Errorf("attempt 1 mangled: %+v", got[0])
+	}
+	if got[0].Trace != "at a.ts:1" {
+		t.Errorf("attempt 1 trace lost: %q", got[0].Trace)
+	}
+	// Nanoseconds in, time.Duration out -- not re-scaled.
+	if got[0].Duration != 1500*time.Millisecond {
+		t.Errorf("attempt 1 duration = %v, want 1.5s", got[0].Duration)
+	}
+	if got[2].Number != 3 || got[2].Status != domain.StatusPassed {
+		t.Errorf("final attempt mangled: %+v", got[2])
+	}
+
+	raw, err := json.Marshal(suite.Cases[0])
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	var onWire map[string]any
+	if err := json.Unmarshal(raw, &onWire); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	wire, ok := onWire["attempts"].([]any)
+	if !ok || len(wire) != 3 {
+		t.Fatalf("attempts absent from the /collect body: %s", raw)
+	}
+	first, _ := wire[0].(map[string]any)
+	if first["attempt"] != float64(1) || first["message"] != "boom 1" {
+		t.Errorf("wire attempt 1 wrong: %v", first)
+	}
+}
+
+// A report with no attempts must not grow an empty array -- the server treats a
+// lone or absent attempt list as "nothing to persist", and sending `[]` would
+// spend bytes against the 10MB body limit for a row it discards.
+func TestParserOmitsAttemptsWhenTheReportHasNone(t *testing.T) {
+	jsonReport := `{"framework": "cypress", "suites": [{"name": "s", "cases": [
+		{"id": "1", "name": "plain", "status": "passed"}
+	]}]}`
+
+	parser := New()
+	suite, err := parser.Parse(strings.NewReader(jsonReport))
+	if err != nil {
+		t.Fatalf("parse error: %v", err)
+	}
+	if suite.Cases[0].Attempts != nil {
+		t.Errorf("expected nil attempts, got %+v", suite.Cases[0].Attempts)
+	}
+	raw, _ := json.Marshal(suite.Cases[0])
+	if strings.Contains(string(raw), "attempts") {
+		t.Errorf("attempts key should be omitted entirely: %s", raw)
 	}
 }
