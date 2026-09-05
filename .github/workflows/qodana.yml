@@ -20,10 +20,19 @@ jobs:
   qodana:
     name: Qodana Scan
     runs-on: ubuntu-latest
-    # A pull request from a fork cannot read QODANA_TOKEN, so the scan would fail for
-    # reasons the contributor cannot fix. Mirrors the HAS_NPM / HAS_SONAR pattern used
-    # in the other workflows.
-    if: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository }}
+    # Skipped whenever QODANA_TOKEN is unreachable, because the scan then fails for
+    # reasons the author cannot fix. Mirrors the HAS_NPM / HAS_SONAR pattern used in
+    # the other workflows. Two cases:
+    #
+    #   - A pull request from a fork cannot read repository secrets.
+    #   - A Dependabot pull request reads the *Dependabot* secret store, not the
+    #     Actions one, so `secrets.QODANA_TOKEN` arrives empty and the linter exits 1
+    #     with "please ensure you have an access token". It is not a fork, so the
+    #     fork check alone did not catch it.
+    #
+    # To scan Dependabot PRs instead of skipping them, add QODANA_TOKEN under
+    # Settings > Secrets and variables > Dependabot and drop the actor check.
+    if: ${{ github.event_name != 'pull_request' || (github.event.pull_request.head.repo.full_name == github.repository && github.actor != 'dependabot[bot]') }}
     permissions:
       contents: read
       pull-requests: write # post the summary comment on a PR
