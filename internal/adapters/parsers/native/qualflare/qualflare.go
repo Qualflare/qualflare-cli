@@ -82,6 +82,7 @@ type Case struct {
 	Duration    int64             `json:"duration"` // nanoseconds
 	RetryCount  *int              `json:"retryCount,omitempty"`
 	IsFlaky     *bool             `json:"isFlaky,omitempty"`
+	Attempts    []Attempt         `json:"attempts,omitempty"`
 	ShardIndex  *int              `json:"shardIndex,omitempty"`
 	Error       string            `json:"error,omitempty"`
 	Priority    string            `json:"priority,omitempty"`
@@ -91,6 +92,25 @@ type Case struct {
 	Steps       []Step            `json:"steps,omitempty"`
 	Labels      []Label           `json:"labels,omitempty"`
 	Links       []Link            `json:"links,omitempty"`
+}
+
+// Attempt mirrors api-service's launch.Attempt -- one execution of a retried
+// test, written by the reporters' per-attempt history. Decoded and passed
+// through unchanged: the server owns validation (attempt numbers below 1 are
+// dropped, a single attempt persists nothing) and its own truncation caps, so
+// re-implementing either here would only risk disagreeing with it.
+type Attempt struct {
+	Number    int        `json:"attempt"`
+	Status    string     `json:"status"`
+	Duration  int64      `json:"duration,omitempty"` // nanoseconds
+	StartedAt *time.Time `json:"startedAt,omitempty"`
+	UID       string     `json:"attemptId,omitempty"`
+	Message   string     `json:"message,omitempty"`
+	Trace     string     `json:"trace,omitempty"`
+	Snippet   string     `json:"snippet,omitempty"`
+	Line      *int       `json:"line,omitempty"`
+	Stdout    []string   `json:"stdout,omitempty"`
+	Stderr    []string   `json:"stderr,omitempty"`
 }
 
 // Label mirrors api-service's launch.Label -- Allure-style name/value
@@ -273,6 +293,7 @@ func convertCase(c Case, suiteName string, sourceDir string) domain.Case {
 		Duration:   base.ParseDurationNs(c.Duration),
 		RetryCount: c.RetryCount,
 		IsFlaky:    c.IsFlaky,
+		Attempts:   mapAttempts(c.Attempts),
 		ShardIndex: c.ShardIndex,
 		Error:      c.Error,
 		Priority:   domain.Severity(c.Priority),
@@ -382,4 +403,35 @@ func (p *Parser) GetFramework() domain.Framework {
 // SupportedFileExtensions returns supported file extensions.
 func (p *Parser) SupportedFileExtensions() []string {
 	return []string{".json"}
+}
+
+// mapAttempts converts the report's attempt history into the domain model.
+//
+// Deliberately a straight copy with no filtering: the server already drops
+// attempt numbers below 1 and discards a lone attempt, and duplicating those
+// rules here would mean two places to keep in sync with one of them invisible.
+// The one real conversion is duration, which arrives in nanoseconds — the
+// wire's unit throughout — and must stay a time.Duration so it is not
+// re-scaled downstream.
+func mapAttempts(in []Attempt) []domain.Attempt {
+	if len(in) == 0 {
+		return nil
+	}
+	out := make([]domain.Attempt, 0, len(in))
+	for _, a := range in {
+		out = append(out, domain.Attempt{
+			Number:    a.Number,
+			Status:    mapStatus(a.Status),
+			Duration:  base.ParseDurationNs(a.Duration),
+			StartedAt: a.StartedAt,
+			UID:       a.UID,
+			Message:   a.Message,
+			Trace:     a.Trace,
+			Snippet:   a.Snippet,
+			Line:      a.Line,
+			Stdout:    a.Stdout,
+			Stderr:    a.Stderr,
+		})
+	}
+	return out
 }
