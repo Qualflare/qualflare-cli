@@ -1,6 +1,7 @@
 package ctrf
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -307,8 +308,101 @@ func TestParse_Retries(t *testing.T) {
 		if c.RetryCount == nil || *c.RetryCount != 2 {
 			t.Errorf("retryCount = %v, want 2 — the observed attempts are the truth", c.RetryCount)
 		}
-		if c.Properties["ctrfRetryAttempts"] == "" {
-			t.Error("the attempts have no home in the wire model and must survive as a property")
+		// The wire model carries per-attempt history since the CLI gained
+		// Case.Attempts, so the attempts are mapped rather than stringified into
+		// a property.
+		if len(c.Attempts) != 3 {
+			t.Fatalf("attempts = %d, want 3 — two reported plus the test itself as the final one", len(c.Attempts))
+		}
+		if c.Properties["ctrfRetryAttempts"] != "" {
+			t.Error("the attempts are first-class now; the JSON-blob property must be gone")
+		}
+	})
+
+	t.Run("the test object is appended as the final attempt", func(t *testing.T) {
+		// CTRF's retryAttempts deliberately EXCLUDES the last execution: the test
+		// object is it. api-service's launch.Case.Attempts names this mapper as
+		// the place that off-by-one is resolved, so a report claiming one retry
+		// must produce two attempts, ending in the one that decided the outcome.
+		suite := parse(t, `{"results":{"tests":[{"name":"a","status":"passed","duration":1200,"message":"final ok",
+			"retries":1,"retryAttempts":[{"attempt":1,"status":"failed","duration":2900,"message":"gateway timed out"}]}]}}`)
+		got := suite.Cases[0].Attempts
+		if len(got) != 2 {
+			t.Fatalf("attempts = %d, want 2", len(got))
+		}
+		if got[0].Number != 1 || got[0].Status != domain.StatusFailed || got[0].Message != "gateway timed out" {
+			t.Errorf("first attempt = %+v; want the reported failure", got[0])
+		}
+		if got[0].Duration != 2900*time.Millisecond {
+			t.Errorf("duration = %v; CTRF reports milliseconds", got[0].Duration)
+		}
+		if got[1].Number != 2 || got[1].Status != domain.StatusPassed {
+			t.Errorf("final attempt = %+v; want the test object, numbered last", got[1])
+		}
+		if got[1].Duration != 1200*time.Millisecond {
+			t.Errorf("final duration = %v; want the test's own duration", got[1].Duration)
+		}
+	})
+
+	t.Run("a producer that already included the final attempt is not double-counted", func(t *testing.T) {
+		// `retries` counts RETRIES, so len(retryAttempts) == retries+1 means the
+		// producer put the final execution in the list itself. Appending again
+		// would invent an attempt that never ran.
+		suite := parse(t, `{"results":{"tests":[{"name":"a","status":"passed","duration":1,
+			"retries":1,"retryAttempts":[{"attempt":1,"status":"failed"},{"attempt":2,"status":"passed"}]}]}}`)
+		if got := suite.Cases[0].Attempts; len(got) != 2 {
+			t.Fatalf("attempts = %d, want 2 — the list was already complete", len(got))
+		}
+	})
+
+	t.Run("a single attempt sends nothing", func(t *testing.T) {
+		// Fewer than two attempts persists nothing server-side: a lone attempt
+		// carries no status or duration the case run does not already hold.
+		//
+		// Both routes in, because they are different code paths: no retryAttempts
+		// at all, and a one-element list the producer already closed out (retries:0
+		// with one entry means that entry IS the final attempt, so nothing is
+		// appended and the list stays at one).
+		noList := parse(t, `{"results":{"tests":[{"name":"a","status":"passed","duration":1,"retries":0}]}}`)
+		if got := noList.Cases[0].Attempts; got != nil {
+			t.Errorf("attempts = %v, want nil when no retryAttempts are reported", got)
+		}
+
+		alreadyClosed := parse(t, `{"results":{"tests":[{"name":"a","status":"passed","duration":1,
+			"retries":0,"retryAttempts":[{"attempt":1,"status":"passed"}]}]}}`)
+		if got := alreadyClosed.Cases[0].Attempts; got != nil {
+			t.Errorf("attempts = %v, want nil for a lone attempt that is already the final one", got)
+		}
+	})
+
+	t.Run("an oversized history keeps the attempt that decided the outcome", func(t *testing.T) {
+		var b strings.Builder
+		b.WriteString(`{"results":{"tests":[{"name":"a","status":"passed","duration":1,"retryAttempts":[`)
+		for i := 1; i <= 60; i++ {
+			if i > 1 {
+				b.WriteString(",")
+			}
+			fmt.Fprintf(&b, `{"attempt":%d,"status":"failed"}`, i)
+		}
+		b.WriteString(`]}]}}`)
+		got := parse(t, b.String()).Cases[0].Attempts
+		if len(got) != 50 {
+			t.Fatalf("attempts = %d, want 50", len(got))
+		}
+		// A plain slice(0,50) would drop the appended final attempt, which is the
+		// only element explaining why the case passed.
+		if got[49].Status != domain.StatusPassed {
+			t.Errorf("last attempt = %+v; the final attempt must survive the cap", got[49])
+		}
+	})
+
+	t.Run("attempt text is clamped to what the server stores", func(t *testing.T) {
+		long := strings.Repeat("x", 20000)
+		doc := fmt.Sprintf(`{"results":{"tests":[{"name":"a","status":"passed","duration":1,
+			"retryAttempts":[{"attempt":1,"status":"failed","message":%q}]}]}}`, long)
+		got := parse(t, doc).Cases[0].Attempts
+		if n := len([]rune(got[0].Message)); n != 8192 {
+			t.Errorf("message runes = %d, want 8192", n)
 		}
 	})
 
