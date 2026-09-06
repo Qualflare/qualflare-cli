@@ -119,10 +119,15 @@ type Test struct {
 
 	Retries Number `json:"retries"`
 	Flaky   *bool  `json:"flaky"`
-	// RetryAttempts is decoded for its LENGTH, which is the observed truth when
-	// it disagrees with `retries`. The CLI's wire model carries no per-attempt
-	// history, so the attempts themselves are preserved as a case property.
-	RetryAttempts []json.RawMessage `json:"retryAttempts"`
+	// RetryAttempts is CTRF's per-attempt history. Per the spec it holds only the
+	// attempts BEFORE the last one -- the test object itself is the final attempt --
+	// so a mapper has to append the test before this becomes the wire model's
+	// `attempts`. See applyRetries.
+	//
+	// Its length is also the observed retry count when that disagrees with
+	// `retries`: deployed reporters pin an older ctrf release than the spec, so
+	// the two can legitimately differ.
+	RetryAttempts []RetryAttempt `json:"retryAttempts"`
 
 	Stdout Strings `json:"stdout"`
 	Stderr Strings `json:"stderr"`
@@ -221,6 +226,26 @@ func (n *Number) UnmarshalJSON(b []byte) error {
 // stderr, where the wrapped runtime hands the reporter one blob rather than
 // lines. A heterogeneous array also occurs where user-supplied tag values are
 // forwarded unconverted.
+// RetryAttempt is one earlier execution of a test, as CTRF reports it.
+//
+// CTRF models an attempt with the same field names as a test, so the subset
+// mirrored here is the subset the wire model's Attempt can carry. Anything else
+// a producer emits is ignored rather than guessed at.
+type RetryAttempt struct {
+	Attempt   Number  `json:"attempt"`
+	Status    string  `json:"status"`
+	RawStatus string  `json:"rawStatus"`
+	Duration  Number  `json:"duration"`
+	Start     Number  `json:"start"`
+	AttemptID string  `json:"attemptId"`
+	Message   string  `json:"message"`
+	Trace     string  `json:"trace"`
+	Snippet   string  `json:"snippet"`
+	Line      *int    `json:"line"`
+	Stdout    Strings `json:"stdout"`
+	Stderr    Strings `json:"stderr"`
+}
+
 type Strings []string
 
 func (l *Strings) UnmarshalJSON(b []byte) error {
