@@ -470,7 +470,7 @@ func (s *ReportService) ParseTestResults(ctx context.Context, files []string, fr
 		testSuites = append(testSuites, *suite)
 	}
 
-	framework = resolveLaunchFramework(parser, detected, framework)
+	framework = resolveLaunchFramework(parser, detected, framework, testSuites)
 
 	return s.createReport(testSuites, framework), nil
 }
@@ -495,10 +495,39 @@ func (s *ReportService) parserForFile(filePath string) (ports.Parser, domain.Fra
 // they disagree the launch is labelled "mixed" rather than tagged with whichever file
 // happened to be parsed first (BUG-41). The server stores framework as a free string
 // (required,max=100), so "mixed" is a valid, honest label.
-func resolveLaunchFramework(parser ports.Parser, detected map[domain.Framework]struct{}, current domain.Framework) domain.Framework {
+//
+// # Passthrough formats never label the launch
+//
+// qualflare-json and ctrf are how a report TRAVELLED, not what produced it. Taking
+// parser.GetFramework() for them labelled every plugin upload "qualflare-json" and every
+// third-party upload "ctrf" — measured on production 2026-09-06, 81 launches across six
+// @qualflare-* projects, all of them.
+//
+// Both formats carry the real producer and both parsers already read it (qualflare-json
+// from its top-level `framework`, CTRF from `results.tool.name`) to pick each suite's
+// category. They now also record it as PropSourceFramework, which is what this reads.
+//
+// Resolution mirrors the auto-detect arm exactly, because it is the same question asked
+// of one file's contents rather than of several files: one distinct producer wins, several
+// are "mixed", none falls back to the format name — which is at least true, if unhelpful,
+// and better than naming a producer we could not determine.
+func resolveLaunchFramework(
+	parser ports.Parser,
+	detected map[domain.Framework]struct{},
+	current domain.Framework,
+	suites []domain.Suite,
+) domain.Framework {
 	switch {
 	case parser != nil:
-		return parser.GetFramework()
+		f := parser.GetFramework()
+		if isPassthroughFormat(f) {
+			if produced := producersOf(suites); len(produced) == 1 {
+				return produced[0]
+			} else if len(produced) > 1 {
+				return "mixed"
+			}
+		}
+		return f
 	case len(detected) > 1:
 		return "mixed"
 	case len(detected) == 1:
@@ -507,6 +536,32 @@ func resolveLaunchFramework(parser ports.Parser, detected map[domain.Framework]s
 		}
 	}
 	return current
+}
+
+// isPassthroughFormat reports whether a framework value names a TRANSPORT rather
+// than a producing tool.
+func isPassthroughFormat(f domain.Framework) bool {
+	return f == domain.FrameworkQualflareJSON || f == domain.FrameworkCTRF
+}
+
+// producersOf returns the distinct producing frameworks the suites recorded, in a
+// stable order so a two-producer launch cannot flip between runs.
+func producersOf(suites []domain.Suite) []domain.Framework {
+	seen := map[string]struct{}{}
+	var out []domain.Framework
+	for _, s := range suites {
+		v := s.Properties[domain.PropSourceFramework]
+		if v == "" {
+			continue
+		}
+		if _, dup := seen[v]; dup {
+			continue
+		}
+		seen[v] = struct{}{}
+		out = append(out, domain.Framework(v))
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i] < out[j] })
+	return out
 }
 
 // ValidateFiles validates that files can be parsed
