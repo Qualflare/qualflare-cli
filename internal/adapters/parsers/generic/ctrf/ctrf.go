@@ -37,7 +37,6 @@ const (
 	propExecutionID = "ctrfExecutionId"
 	propStop        = "ctrfStop"
 	propSuitePath   = "ctrfSuitePath"
-	propRetries     = "ctrfRetryAttempts"
 	propParamPrefix = "ctrfParam."
 	propOSPlatform  = "ctrfOsPlatform"
 	propOSRelease   = "ctrfOsRelease"
@@ -62,6 +61,20 @@ const (
 	propRetryCnt  = "retryCount"
 	propSystemOut = "system-out"
 	propSystemErr = "system-err"
+)
+
+// Caps mirroring api-service's launch.MaxCaseAttempts and the MaxAttempt*Runes
+// group. The server truncates on write regardless, so these exist to keep a
+// pathological retry history from eating the /collect body limit on the way
+// there, not to enforce correctness.
+const (
+	maxCaseAttempts        = 50
+	maxAttemptMessageRunes = 8192
+	maxAttemptTraceRunes   = 32768
+	maxAttemptSnippetRunes = 4096
+	maxAttemptOutputRunes  = 16384
+	maxAttemptOutputLines  = 200
+	maxAttemptUIDRunes     = 255
 )
 
 // Parser reads Common Test Report Format documents.
@@ -359,12 +372,11 @@ func applyCaseProperties(c *domain.Case, t *Test, status domain.Status, segments
 	}
 }
 
-// applyRetries maps CTRF's retry model onto the two fields the wire model has.
+// applyRetries maps CTRF's retry model onto RetryCount, IsFlaky and Attempts.
 //
 // len(retryAttempts) is the observed truth when it disagrees with `retries`:
 // deployed reporters pin an older ctrf release than the spec, so the two can
-// legitimately differ. The attempts themselves have no home in the CLI's model
-// and are preserved as a property rather than dropped.
+// legitimately differ.
 func applyRetries(c *domain.Case, t *Test, status domain.Status) {
 	count := len(t.RetryAttempts)
 	if count == 0 && t.Retries.IsSet() {
@@ -388,11 +400,123 @@ func applyRetries(c *domain.Case, t *Test, status domain.Status) {
 		c.IsFlaky = &flaky
 	}
 
-	if len(t.RetryAttempts) > 0 {
-		if raw, err := json.Marshal(t.RetryAttempts); err == nil {
-			setProp(c.Properties, propRetries, base.TruncateString(string(raw), 8192))
-		}
+	c.Attempts = attemptsToDomain(t, status)
+}
+
+// attemptsToDomain builds the per-attempt history the server persists, which is
+// NOT the shape CTRF reports.
+//
+// CTRF's retryAttempts holds only the executions before the last one, because the
+// test object itself IS the final attempt. The wire model wants one uniform
+// 1-based ascending list with the final attempt as its last element, so the test
+// is appended here -- api-service's launch.Case.Attempts names this mapper as the
+// place that off-by-one is resolved.
+//
+// Returns nil below two attempts: the server persists nothing for a lone attempt,
+// since it carries no status or duration the case run does not already hold.
+func attemptsToDomain(t *Test, status domain.Status) []domain.Attempt {
+	if len(t.RetryAttempts) == 0 {
+		return nil
 	}
+
+	out := make([]domain.Attempt, 0, len(t.RetryAttempts)+1)
+	for i, a := range t.RetryAttempts {
+		number := i + 1
+		if a.Attempt.IsSet() && a.Attempt.Int64() > 0 {
+			number = int(a.Attempt.Int64())
+		}
+		att := domain.Attempt{
+			Number:   number,
+			Status:   mapStatus(a.Status, a.RawStatus),
+			Duration: attemptDuration(a.Duration),
+			UID:      base.TruncateString(a.AttemptID, maxAttemptUIDRunes),
+			Message:  base.TruncateString(a.Message, maxAttemptMessageRunes),
+			Trace:    base.TruncateString(a.Trace, maxAttemptTraceRunes),
+			Snippet:  base.TruncateString(a.Snippet, maxAttemptSnippetRunes),
+			Line:     a.Line,
+			Stdout:   clampOutput(a.Stdout),
+			Stderr:   clampOutput(a.Stderr),
+		}
+		if a.Start.IsSet() {
+			started := time.UnixMilli(a.Start.Int64()).UTC()
+			att.StartedAt = &started
+		}
+		out = append(out, att)
+	}
+
+	// Append the test as the final attempt -- unless the producer already did.
+	// `retries` counts RETRIES, so a spec-compliant report has exactly `retries`
+	// entries here; one more than that means the final attempt is already present
+	// and appending would duplicate it.
+	alreadyFinal := t.Retries.IsSet() && len(t.RetryAttempts) == int(t.Retries.Int64())+1
+	if !alreadyFinal {
+		final := domain.Attempt{
+			Number:   out[len(out)-1].Number + 1,
+			Status:   status,
+			Duration: testDuration(t),
+			Message:  base.TruncateString(t.Message, maxAttemptMessageRunes),
+			Trace:    base.TruncateString(t.Trace, maxAttemptTraceRunes),
+			Snippet:  base.TruncateString(t.Snippet, maxAttemptSnippetRunes),
+			Stdout:   clampOutput(t.Stdout),
+			Stderr:   clampOutput(t.Stderr),
+		}
+		if t.Start.IsSet() {
+			started := time.UnixMilli(t.Start.Int64()).UTC()
+			final.StartedAt = &started
+		}
+		out = append(out, final)
+	}
+
+	if len(out) < 2 {
+		return nil
+	}
+	return clampAttempts(out)
+}
+
+// attemptDuration converts CTRF's integer milliseconds, like testDuration. A
+// negative or unset value becomes zero rather than a nonsense duration.
+func attemptDuration(n Number) time.Duration {
+	if !n.IsSet() {
+		return 0
+	}
+	if ms := n.Int64(); ms > 0 {
+		return time.Duration(ms) * time.Millisecond
+	}
+	return 0
+}
+
+// clampAttempts bounds the list to what one case run persists, keeping the FINAL
+// attempt: it carries the outcome, so a plain truncation would discard the only
+// element that explains the case's own status.
+func clampAttempts(in []domain.Attempt) []domain.Attempt {
+	if len(in) <= maxCaseAttempts {
+		return in
+	}
+	out := make([]domain.Attempt, 0, maxCaseAttempts)
+	out = append(out, in[:maxCaseAttempts-1]...)
+	return append(out, in[len(in)-1])
+}
+
+// clampOutput bounds captured output by lines first, then by runes, matching how
+// the server truncates on write.
+func clampOutput(lines []string) []string {
+	if len(lines) == 0 {
+		return nil
+	}
+	if len(lines) > maxAttemptOutputLines {
+		lines = lines[:maxAttemptOutputLines]
+	}
+	out := make([]string, 0, len(lines))
+	total := 0
+	for _, l := range lines {
+		if total >= maxAttemptOutputRunes {
+			break
+		}
+		l = base.TruncateString(l, maxAttemptOutputRunes-total)
+		total += len([]rune(l))
+		out = append(out, l)
+	}
+	return out
 }
 
 // labelsToDomain flattens CTRF's labels object into name/value pairs. An ARRAY
