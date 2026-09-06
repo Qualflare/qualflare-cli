@@ -396,6 +396,58 @@ func TestParse_Retries(t *testing.T) {
 		}
 	})
 
+	t.Run("captured output is carried onto the attempt and bounded", func(t *testing.T) {
+		// Bounded by LINES first, then by total runes -- the same order the server
+		// truncates in, so what is dropped here is what would be dropped anyway.
+		var lines []string
+		for i := 0; i < 250; i++ {
+			lines = append(lines, `"line"`)
+		}
+		doc := fmt.Sprintf(`{"results":{"tests":[{"name":"a","status":"passed","duration":1,
+			"retryAttempts":[{"attempt":1,"status":"failed","stdout":[%s],"stderr":["err"]}]}]}}`,
+			strings.Join(lines, ","))
+		got := parse(t, doc).Cases[0].Attempts
+		if n := len(got[0].Stdout); n != 200 {
+			t.Errorf("stdout lines = %d, want the 200-line cap", n)
+		}
+		if len(got[0].Stderr) != 1 || got[0].Stderr[0] != "err" {
+			t.Errorf("stderr = %v; a short stream must pass through untouched", got[0].Stderr)
+		}
+	})
+
+	t.Run("a single oversized output line is cut to the rune budget", func(t *testing.T) {
+		doc := fmt.Sprintf(`{"results":{"tests":[{"name":"a","status":"passed","duration":1,
+			"retryAttempts":[{"attempt":1,"status":"failed","stdout":[%q]}]}]}}`, strings.Repeat("x", 20000))
+		got := parse(t, doc).Cases[0].Attempts
+		if n := len([]rune(got[0].Stdout[0])); n != 16384 {
+			t.Errorf("stdout runes = %d, want the 16384 cap", n)
+		}
+	})
+
+	t.Run("an attempt start time is carried, and a missing duration is not invented", func(t *testing.T) {
+		suite := parse(t, `{"results":{"tests":[{"name":"a","status":"passed","duration":1,
+			"retryAttempts":[{"attempt":1,"status":"failed","start":1756720800000}]}]}}`)
+		got := suite.Cases[0].Attempts
+		if got[0].StartedAt == nil {
+			t.Fatal("startedAt must be carried when CTRF reports start")
+		}
+		if got[0].StartedAt.UTC().Format(time.RFC3339) != "2025-09-01T10:00:00Z" {
+			t.Errorf("startedAt = %v; CTRF reports epoch milliseconds", got[0].StartedAt)
+		}
+		// No duration reported: zero, not a value borrowed from the case.
+		if got[0].Duration != 0 {
+			t.Errorf("duration = %v, want 0 when the attempt reports none", got[0].Duration)
+		}
+	})
+
+	t.Run("a negative attempt duration becomes zero, not a negative duration", func(t *testing.T) {
+		suite := parse(t, `{"results":{"tests":[{"name":"a","status":"passed","duration":1,
+			"retryAttempts":[{"attempt":1,"status":"failed","duration":-5}]}]}}`)
+		if d := suite.Cases[0].Attempts[0].Duration; d != 0 {
+			t.Errorf("duration = %v, want 0", d)
+		}
+	})
+
 	t.Run("attempt text is clamped to what the server stores", func(t *testing.T) {
 		long := strings.Repeat("x", 20000)
 		doc := fmt.Sprintf(`{"results":{"tests":[{"name":"a","status":"passed","duration":1,
