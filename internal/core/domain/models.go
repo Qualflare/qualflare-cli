@@ -65,6 +65,22 @@ const (
 	FrameworkQualflareJSON Framework = "qualflare-json"
 )
 
+// PropSourceFramework names the suite property a PASSTHROUGH parser sets to the
+// framework that actually produced the results.
+//
+// qualflare-json and ctrf are FORMATS. A launch parsed from one of them was
+// produced by cypress, or playwright, or whatever wrote the file — and both
+// formats say so: qualflare-json in its top-level `framework`, CTRF in
+// `results.tool.name`. Both parsers already read it to pick the suite category
+// and then dropped it, so Launch.Framework ended up labelled with the transport.
+//
+// A property rather than a new Suite field: it rides the channel that already
+// exists for exactly this ("nothing in a report is silently discarded, even when
+// it cannot be modelled"), and it is per-suite, which is what makes a merged
+// shard file carrying two producers detectable rather than silently collapsed to
+// whichever parsed first.
+const PropSourceFramework = "sourceFramework"
+
 // AllFrameworks returns all supported frameworks
 func AllFrameworks() []Framework {
 	return []Framework{

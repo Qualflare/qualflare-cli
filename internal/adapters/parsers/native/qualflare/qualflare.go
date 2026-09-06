@@ -237,6 +237,18 @@ func buildSuite(collect Collect, sourceDir string) (*domain.Suite, error) {
 		Cases:     make([]domain.Case, 0),
 	}
 
+	// Same value, kept rather than only categorised. Category answers "what kind
+	// of tests" (e2e); Launch.Framework wants "what produced them" (cypress),
+	// and until this the launch was labelled "qualflare-json" — the format it
+	// arrived in.
+	if f := domain.Framework(collect.Framework); f.IsValid() &&
+		f != domain.FrameworkQualflareJSON && f != domain.FrameworkCTRF {
+		if suite.Properties == nil {
+			suite.Properties = map[string]string{}
+		}
+		suite.Properties[domain.PropSourceFramework] = string(f)
+	}
+
 	// Stopgap for the browser/platform data-loss this parser otherwise has: see
 	// Collect.Platform/Collect.Browser's doc comment for why these are read from
 	// the top-level Collect object. promoteConsistentSuiteProperties
