@@ -101,17 +101,37 @@ var rawStatusMap = map[string]domain.Status{
 // "generic". The raw tool name survives in the suite's ctrfTool property either
 // way, so declining to guess loses nothing.
 func categoryForTool(toolName string) domain.FrameworkCategory {
+	if f, ok := frameworkForTool(toolName); ok {
+		return f.GetCategory()
+	}
+	return domain.CategoryGeneric
+}
+
+// frameworkForTool resolves a CTRF results.tool.name onto the domain Framework
+// that produced it, reporting whether it could.
+//
+// Split out of categoryForTool, which already did this resolution and then
+// discarded everything except the category. The producing framework is what
+// Launch.Framework should carry: "ctrf" is the FORMAT the report arrived in, not
+// the tool that ran the tests, and labelling a launch with its transport is the
+// same category error this function's exclusion of FrameworkCTRF already guards
+// against one level down.
+//
+// Returns false rather than guessing. jasmine, wdio, nightwatch, codeceptjs and
+// the .NET runners have no Qualflare framework, and the caller's fallback is an
+// honest "unknown producer" rather than a near neighbour.
+func frameworkForTool(toolName string) (domain.Framework, bool) {
 	name := strings.ToLower(strings.TrimSpace(toolName))
 	name = strings.ReplaceAll(name, "_", "-")
 	name = strings.ReplaceAll(name, " ", "-")
 
 	if f, ok := toolAliases[name]; ok {
-		return f.GetCategory()
+		return f, true
 	}
 	if f := domain.Framework(name); f.IsValid() && f != domain.FrameworkQualflareJSON && f != domain.FrameworkCTRF {
-		return f.GetCategory()
+		return f, true
 	}
-	return domain.CategoryGeneric
+	return "", false
 }
 
 // toolAliases holds unambiguous synonyms only. Names that already match a

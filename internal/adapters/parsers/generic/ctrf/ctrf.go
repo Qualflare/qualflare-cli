@@ -143,6 +143,13 @@ func buildSuite(report *Report) *domain.Suite {
 	}
 
 	setProp(suite.Properties, propTool, toolName)
+	// The producing framework, when the tool name resolves to one. This is what
+	// Launch.Framework should carry — "ctrf" is how the report travelled, not
+	// what ran the tests. Unresolvable tools set nothing, so the caller can tell
+	// "produced by something we do not model" from "produced by cypress".
+	if f, ok := frameworkForTool(toolName); ok {
+		setProp(suite.Properties, domain.PropSourceFramework, string(f))
+	}
 	setProp(suite.Properties, propToolVersion, toolVersion)
 	setProp(suite.Properties, propRunID, report.RunID)
 	setProp(suite.Properties, propReportID, report.ReportID)
