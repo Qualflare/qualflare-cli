@@ -178,8 +178,39 @@ func (p *Parser) collect(ts *TestSuite, dst *domain.Suite) {
 		}
 	}
 
-	for _, tc := range ts.TestCases {
-		dst.Cases = append(dst.Cases, p.convertTestCase(tc))
+	// Collapse reruns. pytest-rerunfailures emits one <testcase> per ATTEMPT,
+	// all sharing a classname and name, and pytest's own header counts them as a
+	// single test -- a suite with 9 <testcase> elements and two retried tests
+	// declares tests="5". Emitting all nine would inflate the case count, give
+	// several cases the same ID, and hide the flakiness entirely.
+	//
+	// Attempts are adjacent and in execution order, so the LAST of a run is the
+	// one that decided the outcome. Verified under `-n 2` as well: xdist keeps a
+	// test's reruns together on the worker that owns it.
+	//
+	// Only ADJACENT duplicates are merged. Two genuinely distinct cases that
+	// happen to share a name would have to be neighbours to collide, and pytest
+	// gives parametrised cases distinct names (`test_x[1]`, `test_x[2]`), so the
+	// realistic collision is a rerun.
+	for i := 0; i < len(ts.TestCases); {
+		j := i + 1
+		for j < len(ts.TestCases) && isSameTest(ts.TestCases[i], ts.TestCases[j]) {
+			j++
+		}
+
+		testCase := p.convertTestCase(ts.TestCases[j-1])
+		if attempts := j - i; attempts > 1 {
+			testCase.RetryCount = domain.IntPtr(attempts - 1)
+			// Only a case that eventually went green is flaky; one still failing
+			// is just failing, however many times it was retried. Mirrors
+			// junitxml.convertTestCase.
+			if testCase.Status == domain.StatusPassed {
+				testCase.IsFlaky = domain.BoolPtr(true)
+			}
+		}
+		dst.Cases = append(dst.Cases, testCase)
+
+		i = j
 	}
 
 	for i := range ts.TestSuites {
@@ -264,6 +295,14 @@ func (p *Parser) convertTestCase(tc TestCase) domain.Case {
 	}
 
 	return testCase
+}
+
+// isSameTest reports whether two <testcase> elements identify the same test.
+//
+// A nameless case is never merged: two of them would otherwise collapse into
+// one on the strength of both being anonymous.
+func isSameTest(a, b TestCase) bool {
+	return a.Name != "" && a.Name == b.Name && a.Classname == b.Classname
 }
 
 // GetFramework returns the framework type
