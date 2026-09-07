@@ -1,6 +1,7 @@
 package pytest
 
 import (
+	"bytes"
 	"encoding/xml"
 	"io"
 	"time"
@@ -11,6 +12,23 @@ import (
 
 // Parser parses pytest XML output
 type Parser struct{}
+
+// TestSuites is pytest's ACTUAL root element.
+//
+// pytest has wrapped its JUnit output in <testsuites> since 6.0 (2020); only
+// before that was the root a bare <testsuite>. This parser decoded the old shape
+// alone, so a report from any supported pytest version failed the whole upload
+// with "expected element type <testsuite> but have <testsuites>" -- and content
+// detection routes any JUnit-ish XML containing the word "pytest" here, so
+// `pytest --junitxml=results.xml && qf <id> collect results.xml` could not work
+// at all. Every test in this package used a hand-written bare-root fixture,
+// which is why it went unnoticed.
+type TestSuites struct {
+	XMLName    xml.Name    `xml:"testsuites"`
+	Name       string      `xml:"name,attr"`
+	Time       string      `xml:"time,attr"`
+	TestSuites []TestSuite `xml:"testsuite"`
+}
 
 // Python pytest-xml structures
 type TestSuite struct {
@@ -30,6 +48,10 @@ type TestSuite struct {
 	Timestamp  string     `xml:"timestamp,attr"`
 	TestCases  []TestCase `xml:"testcase"`
 	Properties []Property `xml:"properties>property"`
+	// A <testsuite> may itself contain nested <testsuite> children -- merged
+	// multi-run reports and several xdist/CI aggregators produce them. Captured
+	// so their cases are not silently dropped, matching junitxml (CLI-H8).
+	TestSuites []TestSuite `xml:"testsuite"`
 }
 
 type TestCase struct {
@@ -74,37 +96,56 @@ func New() *Parser {
 	return &Parser{}
 }
 
-// Parse parses pytest XML content
+// Parse parses pytest XML content.
+//
+// Both root shapes are accepted: the <testsuites> wrapper every supported pytest
+// emits, and the bare <testsuite> of pytest < 6.0. The content is read into
+// memory first so the second attempt starts from the beginning regardless of
+// whether the reader happens to be an io.Seeker -- a non-seekable reader would
+// otherwise resume mid-document and fail for a second, misleading reason.
 func (p *Parser) Parse(reader io.Reader) (*domain.Suite, error) {
-	var testSuite TestSuite
-	decoder := xml.NewDecoder(reader)
-
-	if err := decoder.Decode(&testSuite); err != nil {
+	content, err := io.ReadAll(reader)
+	if err != nil {
 		return nil, err
 	}
 
+	var root TestSuites
+	if derr := xml.NewDecoder(bytes.NewReader(content)).Decode(&root); derr != nil {
+		var single TestSuite
+		if serr := xml.NewDecoder(bytes.NewReader(content)).Decode(&single); serr != nil {
+			// Report the wrapper error: it names the root actually found, which
+			// is the more useful of the two for a malformed file.
+			return nil, derr
+		}
+		root.TestSuites = []TestSuite{single}
+	}
+
 	suite := &domain.Suite{
-		Name:      testSuite.Name,
+		Name:      suiteName(root),
 		Category:  domain.FrameworkPython.GetCategory(),
 		Timestamp: time.Now().UTC(),
-		Cases:     make([]domain.Case, 0, len(testSuite.TestCases)),
+		// Non-nil: the server validates `cases` as required, and a nil slice
+		// marshals to null and 400s the whole upload.
+		Cases: make([]domain.Case, 0),
 	}
 
-	if duration, err := base.ParseDuration(testSuite.Time); err == nil {
+	// Prefer the wrapper's own time when it declares one; otherwise total the
+	// suites, so a multi-suite report reports the whole run rather than its
+	// first part.
+	if duration, derr := base.ParseDuration(root.Time); derr == nil && root.Time != "" {
 		suite.Duration = duration
-	}
-
-	// Add suite properties
-	if len(testSuite.Properties) > 0 {
-		suite.Properties = make(map[string]string)
-		for _, prop := range testSuite.Properties {
-			suite.Properties[prop.Name] = prop.Value
+	} else {
+		var total time.Duration
+		for i := range root.TestSuites {
+			if d, terr := base.ParseDuration(root.TestSuites[i].Time); terr == nil {
+				total += d
+			}
 		}
+		suite.Duration = total
 	}
 
-	for _, tc := range testSuite.TestCases {
-		testCase := p.convertTestCase(tc)
-		suite.Cases = append(suite.Cases, testCase)
+	for i := range root.TestSuites {
+		p.collect(&root.TestSuites[i], suite)
 	}
 
 	// BUG-38: derive Passed/Failed/Skipped/Errors/TotalTests from the actual case
@@ -112,6 +153,69 @@ func (p *Parser) Parse(reader io.Reader) (*domain.Suite, error) {
 	suite.RecomputeCounts()
 
 	return suite, nil
+}
+
+// suiteName keeps the single-suite name that reports carried before <testsuites>
+// was understood, so an existing launch's suite does not silently rename itself.
+func suiteName(root TestSuites) string {
+	if len(root.TestSuites) == 1 && root.TestSuites[0].Name != "" {
+		return root.TestSuites[0].Name
+	}
+	if root.Name != "" {
+		return root.Name
+	}
+	return "pytest"
+}
+
+// collect flattens one <testsuite> and everything nested beneath it into dst.
+func (p *Parser) collect(ts *TestSuite, dst *domain.Suite) {
+	if len(ts.Properties) > 0 {
+		if dst.Properties == nil {
+			dst.Properties = make(map[string]string)
+		}
+		for _, prop := range ts.Properties {
+			dst.Properties[prop.Name] = prop.Value
+		}
+	}
+
+	// Collapse reruns. pytest-rerunfailures emits one <testcase> per ATTEMPT,
+	// all sharing a classname and name, and pytest's own header counts them as a
+	// single test -- a suite with 9 <testcase> elements and two retried tests
+	// declares tests="5". Emitting all nine would inflate the case count, give
+	// several cases the same ID, and hide the flakiness entirely.
+	//
+	// Attempts are adjacent and in execution order, so the LAST of a run is the
+	// one that decided the outcome. Verified under `-n 2` as well: xdist keeps a
+	// test's reruns together on the worker that owns it.
+	//
+	// Only ADJACENT duplicates are merged. Two genuinely distinct cases that
+	// happen to share a name would have to be neighbours to collide, and pytest
+	// gives parametrised cases distinct names (`test_x[1]`, `test_x[2]`), so the
+	// realistic collision is a rerun.
+	for i := 0; i < len(ts.TestCases); {
+		j := i + 1
+		for j < len(ts.TestCases) && isSameTest(ts.TestCases[i], ts.TestCases[j]) {
+			j++
+		}
+
+		testCase := p.convertTestCase(ts.TestCases[j-1])
+		if attempts := j - i; attempts > 1 {
+			testCase.RetryCount = domain.IntPtr(attempts - 1)
+			// Only a case that eventually went green is flaky; one still failing
+			// is just failing, however many times it was retried. Mirrors
+			// junitxml.convertTestCase.
+			if testCase.Status == domain.StatusPassed {
+				testCase.IsFlaky = domain.BoolPtr(true)
+			}
+		}
+		dst.Cases = append(dst.Cases, testCase)
+
+		i = j
+	}
+
+	for i := range ts.TestSuites {
+		p.collect(&ts.TestSuites[i], dst)
+	}
 }
 
 // convertTestCase converts a Python test case to domain.Case
@@ -191,6 +295,14 @@ func (p *Parser) convertTestCase(tc TestCase) domain.Case {
 	}
 
 	return testCase
+}
+
+// isSameTest reports whether two <testcase> elements identify the same test.
+//
+// A nameless case is never merged: two of them would otherwise collapse into
+// one on the strength of both being anonymous.
+func isSameTest(a, b TestCase) bool {
+	return a.Name != "" && a.Name == b.Name && a.Classname == b.Classname
 }
 
 // GetFramework returns the framework type

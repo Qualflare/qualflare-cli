@@ -98,7 +98,15 @@ func (p *Parser) Parse(reader io.Reader) (*domain.Suite, error) {
 	// Process all test suites recursively
 	p.processSuites(testSuites.TestSuites, suite)
 
-	suite.TotalTests = len(suite.Cases)
+	// Derive Passed/Failed/Skipped/Errors/TotalTests from the case statuses
+	// rather than counting inline. The hand-rolled tally this replaces folded
+	// StatusError into Failed and never incremented Errors, so a PHPUnit <error>
+	// -- an exception or a risky test, not an assertion failure -- was reported
+	// as a failure and the error count was always zero. It also silently dropped
+	// StatusTimeout, StatusAborted and StatusPending, which are not produced here
+	// today but would have gone uncounted entirely, leaving the buckets adding up
+	// to less than TotalTests.
+	suite.RecomputeCounts()
 
 	return suite, nil
 }
@@ -110,17 +118,9 @@ func (p *Parser) processSuites(suites []TestSuite, domainSuite *domain.Suite) {
 		for _, tc := range s.TestCases {
 			testCase := p.convertTestCase(tc)
 			domainSuite.Cases = append(domainSuite.Cases, testCase)
+			// Assertions has no equivalent in RecomputeCounts -- it is a
+			// PHPUnit-specific total, not a status rollup -- so it stays here.
 			domainSuite.Assertions += tc.Assertions
-
-			// Update counters
-			switch testCase.Status {
-			case domain.StatusPassed:
-				domainSuite.Passed++
-			case domain.StatusFailed, domain.StatusError:
-				domainSuite.Failed++
-			case domain.StatusSkipped:
-				domainSuite.Skipped++
-			}
 		}
 
 		// Parse duration
