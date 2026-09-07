@@ -288,3 +288,175 @@ func TestPytestParser_NonSeekableReaderStillFallsBack(t *testing.T) {
 		t.Fatalf("expected 1 case, got %d", len(suite.Cases))
 	}
 }
+
+// pytest-rerunfailures emits one <testcase> per ATTEMPT, all sharing a classname
+// and name. pytest itself counts them as ONE test: the fixture below has nine
+// <testcase> elements and declares tests="5". Captured from a real
+// pytest 9.1.1 / pytest-rerunfailures 16.6.1 run.
+//
+// Note what is NOT in it: the failed attempts of test_recovers carry no
+// <failure> and no retry property. That information does not exist in the file,
+// which is why the count and the flakiness are all that can be recovered here.
+const rerunReport = `<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests">` +
+	`<testsuite name="pytest" errors="0" failures="1" skipped="0" tests="5" time="0.025">` +
+	`<testcase classname="test_shapes" name="test_recovers" time="0.001"/>` +
+	`<testcase classname="test_shapes" name="test_recovers" time="0.001"/>` +
+	`<testcase classname="test_shapes" name="test_recovers" time="0.002"/>` +
+	`<testcase classname="test_shapes" name="test_never_recovers" time="0.001"/>` +
+	`<testcase classname="test_shapes" name="test_never_recovers" time="0.001"/>` +
+	`<testcase classname="test_shapes" name="test_never_recovers" time="0.001">` +
+	`<failure message="AssertionError: always fails">E   AssertionError: always fails</failure>` +
+	`</testcase>` +
+	`<testcase classname="test_shapes" name="test_param[1]" time="0.000"/>` +
+	`<testcase classname="test_shapes" name="test_param[2]" time="0.000"/>` +
+	`<testcase classname="test_shapes" name="test_plain" time="0.000"/>` +
+	`</testsuite></testsuites>`
+
+func findCase(t *testing.T, suite *domain.Suite, name string) domain.Case {
+	t.Helper()
+	for _, c := range suite.Cases {
+		if c.Name == name {
+			return c
+		}
+	}
+	t.Fatalf("no case named %q; have %d cases", name, len(suite.Cases))
+	return domain.Case{}
+}
+
+func TestPytestParser_CollapsesRerunsToTheCountPytestItselfReports(t *testing.T) {
+	suite, err := New().Parse(strings.NewReader(rerunReport))
+	if err != nil {
+		t.Fatalf("parse error: %v", err)
+	}
+
+	// The fixture's own header says tests="5" over nine <testcase> elements.
+	if len(suite.Cases) != 5 {
+		t.Fatalf("expected the 5 cases pytest reports, got %d", len(suite.Cases))
+	}
+	if suite.Passed != 4 || suite.Failed != 1 {
+		t.Errorf("expected 4 passed / 1 failed, got %d / %d", suite.Passed, suite.Failed)
+	}
+}
+
+func TestPytestParser_ARecoveredRerunIsFlaky(t *testing.T) {
+	suite, err := New().Parse(strings.NewReader(rerunReport))
+	if err != nil {
+		t.Fatalf("parse error: %v", err)
+	}
+
+	c := findCase(t, suite, "test_recovers")
+	if c.Status != domain.StatusPassed {
+		t.Errorf("expected the final attempt's status (passed), got %s", c.Status)
+	}
+	if c.RetryCount == nil || *c.RetryCount != 2 {
+		t.Fatalf("expected RetryCount 2 (three attempts), got %v", c.RetryCount)
+	}
+	if c.IsFlaky == nil || !*c.IsFlaky {
+		t.Errorf("a test that failed twice and then passed is flaky; got %v", c.IsFlaky)
+	}
+}
+
+func TestPytestParser_ATestStillFailingAfterRetriesIsNotFlaky(t *testing.T) {
+	// Failing after retries is failing, however many attempts it took. Mirrors
+	// junitxml, which leaves IsFlaky unset unless the case ended green.
+	suite, err := New().Parse(strings.NewReader(rerunReport))
+	if err != nil {
+		t.Fatalf("parse error: %v", err)
+	}
+
+	c := findCase(t, suite, "test_never_recovers")
+	if c.Status != domain.StatusFailed {
+		t.Errorf("expected failed, got %s", c.Status)
+	}
+	if c.RetryCount == nil || *c.RetryCount != 2 {
+		t.Fatalf("expected RetryCount 2, got %v", c.RetryCount)
+	}
+	if c.IsFlaky != nil && *c.IsFlaky {
+		t.Errorf("a still-failing test is not flaky")
+	}
+	// The outcome comes from the LAST attempt, which is the one carrying the
+	// failure -- taking the first would report this test as passing.
+	if c.Error == "" {
+		t.Error("expected the final attempt's failure text to survive")
+	}
+}
+
+func TestPytestParser_ATestThatRanOnceIsUntouched(t *testing.T) {
+	suite, err := New().Parse(strings.NewReader(rerunReport))
+	if err != nil {
+		t.Fatalf("parse error: %v", err)
+	}
+	c := findCase(t, suite, "test_plain")
+	if c.RetryCount != nil {
+		t.Errorf("expected no RetryCount on a test that ran once, got %v", *c.RetryCount)
+	}
+	if c.IsFlaky != nil {
+		t.Errorf("expected no IsFlaky on a test that ran once, got %v", *c.IsFlaky)
+	}
+}
+
+func TestPytestParser_ParametrisedCasesAreNotMerged(t *testing.T) {
+	// pytest gives them distinct names, so they must survive as separate cases.
+	suite, err := New().Parse(strings.NewReader(rerunReport))
+	if err != nil {
+		t.Fatalf("parse error: %v", err)
+	}
+	findCase(t, suite, "test_param[1]")
+	findCase(t, suite, "test_param[2]")
+}
+
+func TestPytestParser_OnlyAdjacentDuplicatesAreMerged(t *testing.T) {
+	// Attempts are always adjacent, in serial and under xdist alike. Two
+	// same-named cases separated by another test are not a rerun, so merging
+	// them would be inventing a retry that never happened.
+	report := `<testsuites><testsuite name="pytest">` +
+		`<testcase classname="m" name="test_a" time="0.001"/>` +
+		`<testcase classname="m" name="test_b" time="0.001"/>` +
+		`<testcase classname="m" name="test_a" time="0.001"/>` +
+		`</testsuite></testsuites>`
+
+	suite, err := New().Parse(strings.NewReader(report))
+	if err != nil {
+		t.Fatalf("parse error: %v", err)
+	}
+	if len(suite.Cases) != 3 {
+		t.Fatalf("expected 3 cases, got %d", len(suite.Cases))
+	}
+	for _, c := range suite.Cases {
+		if c.RetryCount != nil {
+			t.Errorf("case %q should carry no RetryCount, got %v", c.Name, *c.RetryCount)
+		}
+	}
+}
+
+func TestPytestParser_SameNameInDifferentClassesIsNotMerged(t *testing.T) {
+	report := `<testsuites><testsuite name="pytest">` +
+		`<testcase classname="mod_a" name="test_x" time="0.001"/>` +
+		`<testcase classname="mod_b" name="test_x" time="0.001"/>` +
+		`</testsuite></testsuites>`
+
+	suite, err := New().Parse(strings.NewReader(report))
+	if err != nil {
+		t.Fatalf("parse error: %v", err)
+	}
+	if len(suite.Cases) != 2 {
+		t.Fatalf("expected 2 cases from different classes, got %d", len(suite.Cases))
+	}
+}
+
+func TestPytestParser_NamelessCasesAreNeverMerged(t *testing.T) {
+	// Two anonymous cases are not "the same test"; collapsing them on the
+	// strength of both being nameless would lose a real result.
+	report := `<testsuites><testsuite name="pytest">` +
+		`<testcase classname="m" time="0.001"/>` +
+		`<testcase classname="m" time="0.001"/>` +
+		`</testsuite></testsuites>`
+
+	suite, err := New().Parse(strings.NewReader(report))
+	if err != nil {
+		t.Fatalf("parse error: %v", err)
+	}
+	if len(suite.Cases) != 2 {
+		t.Fatalf("expected 2 nameless cases to survive, got %d", len(suite.Cases))
+	}
+}
