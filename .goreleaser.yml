@@ -184,19 +184,30 @@ changelog:
 # collision, and `brew install qualflare/tap/qf` keeps working continuously. Uploaded
 # only for stable releases when HOMEBREW_TAP_TOKEN is set — never for a prerelease, so
 # an rc tag can't overwrite the default formula that `brew install` resolves.
-brews:
+# Casks, not formulas: `brews` is deprecated since goreleaser v2.16, and casks
+# now work under Homebrew on Linux too -- the reason the old formula existed.
+# No `directory:` (casks must live in Casks/), no `license:` (casks ignore it),
+# and no `test:` -- casks have no `brew test` equivalent, so the smoke test that
+# ran `qf version` on install is gone.
+homebrew_casks:
   - name: qf
     repository:
       owner: qualflare
       name: homebrew-tap
       token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
-    directory: Formula
     homepage: https://github.com/qualflare/qualflare-cli
     description: CLI tool for collecting test results for Qualflare
-    license: Apache-2.0
     skip_upload: "{{ if and .Env.HOMEBREW_TAP_TOKEN (not .Prerelease) }}false{{ else }}true{{ end }}"
-    test: |
-      system "#{bin}/qf", "version"
+    # The binaries are not Apple-notarized. A cask downloads the archive itself,
+    # so macOS quarantines it and reports "damaged and cannot be opened" -- the
+    # old formula never hit this. Guarded on OS.mac? because this same cask
+    # installs on Linux.
+    hooks:
+      post:
+        install: |
+          if OS.mac?
+            system_command "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "#{staged_path}/qf"]
+          end
 
 release:
   github:
