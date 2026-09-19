@@ -92,6 +92,11 @@ type ConfigProvider interface {
 	SetEnvironmentFallback(env string)
 	GetLanguage() string
 	GetPlatform() string
+	// SetPlatformFallback applies a platform recovered from a report file,
+	// yielding to --platform or QF_PLATFORM and ignoring values outside the
+	// API's enum. Without it a mobile reporter's launch is labelled "api". It
+	// reports whether the value was adopted.
+	SetPlatformFallback(platform string) bool
 	GetMilestone() int64
 	GetMaxFileSize() int64
 	GetCLIVersion() string

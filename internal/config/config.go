@@ -41,9 +41,14 @@ type Config struct {
 	// only when the user did NOT choose, so this is what keeps an explicit
 	// choice winning over whatever the reporter happened to write.
 	environmentSet bool
-	Language       string
-	Platform       string
-	Milestone      int64
+	// platformSet mirrors environmentSet for the platform: --platform or
+	// QF_PLATFORM means the user chose, and a report's own platform must not
+	// override that. Without the flag, DefaultConfig's "api" is
+	// indistinguishable from a deliberate --platform api.
+	platformSet bool
+	Language    string
+	Platform    string
+	Milestone   int64
 
 	// Git information
 	Branch string
@@ -112,6 +117,9 @@ func NewConfig() *Config {
 func (c *Config) LoadFromEnv() {
 	if os.Getenv("QF_ENVIRONMENT") != "" {
 		c.environmentSet = true
+	}
+	if os.Getenv("QF_PLATFORM") != "" {
+		c.platformSet = true
 	}
 	envString(&c.Environment, "QF_ENVIRONMENT")
 	envArtifactKinds(&c.UploadArtifacts, "QF_UPLOAD_ARTIFACTS")
@@ -229,7 +237,33 @@ func (c *Config) SetLanguage(language string) {
 func (c *Config) SetPlatform(platform string) {
 	if platform != "" {
 		c.Platform = platform
+		c.platformSet = true
 	}
+}
+
+// apiPlatforms is the closed set the API accepts (`oneof=android ios desktop web
+// api`, and required). A report's platform is only worth adopting if it is one of
+// these: the alternative is sending a value that 422s the entire upload, which is
+// worse than the wrong-but-accepted "api" default.
+var apiPlatforms = map[string]bool{
+	"android": true, "ios": true, "desktop": true, "web": true, "api": true,
+}
+
+// SetPlatformFallback applies a platform discovered in a report file. It yields to
+// --platform and QF_PLATFORM, and ignores anything outside the API's enum.
+//
+// Without it every launch from a native reporter was labelled "api" — the CLI's
+// backward-compatible default — however clearly the report said ios or android.
+//
+// It reports whether the value was adopted, so the caller can drop the duplicate
+// launch property. A value it declined (a Selenium suite's "linux", say) must stay
+// a property: that is the only place it would otherwise survive.
+func (c *Config) SetPlatformFallback(platform string) bool {
+	if platform == "" || c.platformSet || !apiPlatforms[strings.ToLower(platform)] {
+		return false
+	}
+	c.Platform = strings.ToLower(platform)
+	return true
 }
 
 // SetMilestone sets the milestone sequence number (skips 0 = unset).

@@ -754,7 +754,23 @@ func (s *ReportService) createReport(testSuites []domain.Suite, framework domain
 	s.config.SetEnvironmentFallback(launchProps["environment"])
 	delete(launchProps, "environment")
 
+	// Same story as environment, one field over: the report knows it ran on ios,
+	// and until this was read the launch claimed "api".
+	if s.config.SetPlatformFallback(launchProps["platform"]) {
+		// Promoted to a first-class field; a duplicate property would just be noise.
+		// A DECLINED value stays a property — that is the only place it survives.
+		delete(launchProps, "platform")
+	}
+
 	ci := takeCIMetadata(launchProps)
+	// The CI keys are a carry channel, not suite data: unlike platform and
+	// browser they describe the run as a whole, so leaving copies on every suite
+	// would show the same build number on each one.
+	for _, suite := range testSuites {
+		for _, k := range []string{domain.PropCIProvider, domain.PropCIBuildNumber, domain.PropCIRunURL, domain.PropCIPRNumber} {
+			delete(suite.Properties, k)
+		}
+	}
 
 	return &domain.Launch{
 		Framework:   string(framework),
