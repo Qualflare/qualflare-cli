@@ -284,3 +284,89 @@ func TestLaunchCI_AbsentWhenTheReportHasNone(t *testing.T) {
 		}
 	}
 }
+
+// Every native reporter writes the platform it ran on; the CLI's own default
+// ("api", kept for backward compatibility) always won, so a Maestro launch from
+// an iPhone simulator was labelled api. Production, 2026-09-20: every launch of
+// all four reporter projects said platform api.
+func TestLaunchPlatform_ComesFromTheReportUnlessChosen(t *testing.T) {
+	report := func(platform string) string {
+		return `{
+		  "framework": "maestro",
+		  "platform": "` + platform + `",
+		  "metadata": {"reporterVersion": "0.1.0"},
+		  "suites": [{"name": "flows", "cases": [{"name": "a", "status": "passed", "duration": 1}]}]
+		}`
+	}
+
+	if got := parseLaunch(t, "collect.json", report("ios"), "").Platform; got != "ios" {
+		t.Errorf("Platform = %q, want %q", got, "ios")
+	}
+
+	// Outside the API's enum (oneof=android ios desktop web api) the value is
+	// ignored rather than sent: it would 422 the whole launch.
+	if got := parseLaunch(t, "collect.json", report("iphone-17-pro"), "").Platform; got != "api" {
+		t.Errorf("Platform = %q for a value the API rejects, want the default %q", got, "api")
+	}
+
+	// An explicit choice outranks the file, exactly as --environment does.
+	cfg := config.DefaultConfig()
+	cfg.SetPlatform("desktop")
+	s := NewReportService(factory.NewParserFactory(), nil, cfg)
+	path := writeFile(t, t.TempDir(), "collect.json", report("ios"))
+	launch, err := s.ParseTestResults(context.Background(), []string{path}, "")
+	if err != nil {
+		t.Fatalf("ParseTestResults() = %v", err)
+	}
+	if launch.Platform != "desktop" {
+		t.Errorf("Platform = %q, want the chosen %q", launch.Platform, "desktop")
+	}
+}
+
+// The CI keys are a carry channel for launch-level data, so they must not be left
+// on every suite as properties — the same build number repeated per suite.
+func TestLaunchCI_CarryKeysAreNotLeftOnSuites(t *testing.T) {
+	const report = `{
+	  "framework": "maestro",
+	  "metadata": {"reporterVersion": "0.1.0"},
+	  "ciProvider": "github",
+	  "ciBuildNumber": "35398054421",
+	  "suites": [{"name": "flows", "cases": [{"name": "a", "status": "passed", "duration": 1}]}]
+	}`
+
+	launch := parseLaunch(t, "collect.json", report, "")
+	for _, suite := range launch.Suites {
+		for _, k := range []string{domain.PropCIProvider, domain.PropCIBuildNumber} {
+			if _, dup := suite.Properties[k]; dup {
+				t.Errorf("suite %q still carries %q", suite.Name, k)
+			}
+		}
+	}
+	if launch.CIProvider != "github" {
+		t.Errorf("CIProvider = %q — promoted value lost", launch.CIProvider)
+	}
+}
+
+// An adopted platform becomes Launch.Platform and stops being a duplicate
+// property; a declined one has to stay a property, because that is the only place
+// it survives at all.
+func TestLaunchPlatform_DuplicatePropertyOnlyGoesWhenAdopted(t *testing.T) {
+	report := func(platform string) string {
+		return `{
+		  "framework": "maestro",
+		  "platform": "` + platform + `",
+		  "metadata": {"reporterVersion": "0.1.0"},
+		  "suites": [{"name": "flows", "cases": [{"name": "a", "status": "passed", "duration": 1}]}]
+		}`
+	}
+
+	adopted := parseLaunch(t, "collect.json", report("ios"), "")
+	if _, dup := adopted.Properties["platform"]; dup {
+		t.Errorf("platform is both Launch.Platform (%q) and a property", adopted.Platform)
+	}
+
+	declined := parseLaunch(t, "collect.json", report("iphone-17-pro"), "")
+	if declined.Properties["platform"] != "iphone-17-pro" {
+		t.Errorf("a declined platform was dropped entirely: properties = %v", declined.Properties)
+	}
+}
