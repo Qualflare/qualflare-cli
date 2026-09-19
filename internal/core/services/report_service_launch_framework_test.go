@@ -142,3 +142,37 @@ func TestProducersOf_IsOrderIndependent(t *testing.T) {
 		t.Error("the resolved framework depends on suite order")
 	}
 }
+
+// Nobody passes --format when uploading a report directory: `qf <project> collect
+// ./qualflare-results` is the documented line in every reporter's README and in the
+// CI snippets on qualflare.com. That path resolved to the FORMAT, because
+// resolveLaunchFramework only unwrapped a passthrough format in its explicit-parser
+// arm, leaving the auto-detect arm to return whatever was detected.
+//
+// Measured on production 2026-09-20, after the passthrough fix shipped in v0.1.25:
+// the newest launch of qualflare-maestro, qualflare-testng, qualflare-jest and
+// qualflare-go was still labelled qualflare-json, because all four upload a
+// directory without --format.
+func TestLaunchFramework_AutoDetectedReportReportsItsProducer(t *testing.T) {
+	// framework + metadata + suites is what the content detector keys on, and what
+	// every native reporter writes.
+	const report = `{
+	  "framework": "maestro",
+	  "metadata": {"reporterVersion": "0.1.0"},
+	  "suites": [{
+	    "name": "flows",
+	    "cases": [{"name": "Settings opens", "status": "passed", "duration": 120}]
+	  }]
+	}`
+
+	// The empty format is what collect passes when --format is absent.
+	launch := parseLaunch(t, "collect.json", report, "")
+
+	if launch.Framework == string(domain.FrameworkQualflareJSON) {
+		t.Fatalf("Framework = %q — the report says maestro, and an absent --format "+
+			"must not relabel it as the format it arrived in", launch.Framework)
+	}
+	if launch.Framework != "maestro" {
+		t.Errorf("Framework = %q, want %q", launch.Framework, "maestro")
+	}
+}
