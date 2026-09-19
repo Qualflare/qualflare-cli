@@ -519,23 +519,34 @@ func resolveLaunchFramework(
 ) domain.Framework {
 	switch {
 	case parser != nil:
-		f := parser.GetFramework()
-		if isPassthroughFormat(f) {
-			if produced := producersOf(suites); len(produced) == 1 {
-				return produced[0]
-			} else if len(produced) > 1 {
-				return "mixed"
-			}
-		}
-		return f
+		return unwrapPassthrough(parser.GetFramework(), suites)
 	case len(detected) > 1:
 		return "mixed"
 	case len(detected) == 1:
 		for f := range detected {
-			return f
+			// Auto-detect resolves a report directory to qualflare-json, which is how
+			// every reporter's documented `collect ./qualflare-results` arrives. The
+			// unwrap belongs here too, or the commonest path keeps the format's name.
+			return unwrapPassthrough(f, suites)
 		}
 	}
 	return current
+}
+
+// unwrapPassthrough replaces a transport format with the tool that produced the
+// results, when the suites agree on one.
+func unwrapPassthrough(f domain.Framework, suites []domain.Suite) domain.Framework {
+	if !isPassthroughFormat(f) {
+		return f
+	}
+	switch produced := producersOf(suites); len(produced) {
+	case 1:
+		return produced[0]
+	case 0:
+		return f
+	default:
+		return "mixed"
+	}
 }
 
 // isPassthroughFormat reports whether a framework value names a TRANSPORT rather
