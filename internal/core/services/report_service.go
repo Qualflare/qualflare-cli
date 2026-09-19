@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net/url"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -737,7 +738,8 @@ func (s *ReportService) createReport(testSuites []domain.Suite, framework domain
 	// allowlist consideration is needed for THIS producer specifically. A future
 	// producer of user-authored Launch.Properties (e.g. a --property flag) would
 	// need its own allowlist, same as stripUserAuthoredSuiteProperties's pytest case.
-	launchProps := promoteConsistentSuiteProperties(testSuites, "browser", "platform", "environment")
+	launchProps := promoteConsistentSuiteProperties(testSuites, "browser", "platform", "environment",
+		domain.PropCIProvider, domain.PropCIBuildNumber, domain.PropCIRunURL, domain.PropCIPRNumber)
 
 	// The qualflare-json reporters write the environment they were configured
 	// with into their report. Until this was read, it went nowhere and the
@@ -752,6 +754,8 @@ func (s *ReportService) createReport(testSuites []domain.Suite, framework domain
 	s.config.SetEnvironmentFallback(launchProps["environment"])
 	delete(launchProps, "environment")
 
+	ci := takeCIMetadata(launchProps)
+
 	return &domain.Launch{
 		Framework:   string(framework),
 		Platform:    s.config.GetPlatform(),
@@ -762,6 +766,11 @@ func (s *ReportService) createReport(testSuites []domain.Suite, framework domain
 		Milestone:   s.config.GetMilestone(),
 		Branch:      s.config.GetBranch(),
 		Commit:      s.config.GetCommit(),
+
+		CIProvider:    ci.provider,
+		CIBuildNumber: ci.buildNumber,
+		CIRunURL:      ci.runURL,
+		CIPRNumber:    ci.prNumber,
 		Metadata: domain.Metadata{
 			Version:   s.config.GetCLIVersion(),
 			Timestamp: time.Now().UTC().Format(time.RFC3339),
@@ -770,6 +779,50 @@ func (s *ReportService) createReport(testSuites []domain.Suite, framework domain
 		Properties: launchProps,
 		Suites:     testSuites,
 	}
+}
+
+// ciMetadata is the launch-level CI attribution a report carried.
+type ciMetadata struct {
+	provider    string
+	buildNumber string
+	runURL      string
+	prNumber    *int32
+}
+
+// takeCIMetadata lifts the CI properties a passthrough parser recorded out of the
+// promoted launch properties and onto first-class Launch fields, deleting them so
+// the UI does not show the same value twice.
+//
+// Anything the API would reject is dropped rather than sent: its validation is
+// per-launch, so one over-long build number would 422 the entire upload. A run
+// URL must parse as absolute for the same reason -- `validate:"url"` is stricter
+// than "non-empty string".
+func takeCIMetadata(props map[string]string) ciMetadata {
+	var ci ciMetadata
+	take := func(key string, max int) string {
+		v := props[key]
+		delete(props, key)
+		if v == "" || len(v) > max {
+			return ""
+		}
+		return v
+	}
+	ci.provider = take(domain.PropCIProvider, 64)
+	ci.buildNumber = take(domain.PropCIBuildNumber, 128)
+	if raw := take(domain.PropCIRunURL, 2048); raw != "" {
+		if u, err := url.Parse(raw); err == nil && u.IsAbs() && u.Host != "" {
+			ci.runURL = raw
+		}
+	}
+	if raw := take(domain.PropCIPRNumber, 32); raw != "" {
+		// ParseInt with bitSize 32 does the range check itself, which is both the
+		// honest way to say it and what keeps gosec's G109 quiet.
+		if n, err := strconv.ParseInt(raw, 10, 32); err == nil && n >= 1 {
+			v := int32(n)
+			ci.prNumber = &v
+		}
+	}
+	return ci
 }
 
 // promoteConsistentSuiteProperties collects, for each key, the value every

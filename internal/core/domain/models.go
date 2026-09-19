@@ -81,6 +81,17 @@ const (
 // whichever parsed first.
 const PropSourceFramework = "sourceFramework"
 
+// PropCI* name the suite properties a PASSTHROUGH parser sets to carry the
+// report's launch-level CI metadata through to createReport, which promotes
+// them onto the Launch and removes them again. Same channel as browser and
+// platform; see promoteConsistentSuiteProperties.
+const (
+	PropCIProvider    = "ciProvider"
+	PropCIBuildNumber = "ciBuildNumber"
+	PropCIRunURL      = "ciRunUrl"
+	PropCIPRNumber    = "ciPrNumber"
+)
+
 // AllFrameworks returns all supported frameworks
 func AllFrameworks() []Framework {
 	return []Framework{
@@ -214,6 +225,18 @@ type Launch struct {
 	Environment string `json:"environment,omitempty"`
 	Language    string `json:"language,omitempty"`
 	Milestone   int64  `json:"milestone,omitempty"`
+
+	// CI pipeline metadata, from the report being uploaded -- every native
+	// reporter detects its CI and writes these four. The CLI does not detect CI
+	// itself: it may run somewhere other than where the tests did, and the
+	// report is the thing that knows. Names, types and limits mirror the API's
+	// launch.Collect (ciProvider max 64, ciBuildNumber max 128, ciRunUrl a URL
+	// max 2048, ciPrNumber >= 1); values that would fail that validation are
+	// dropped on the way in, because a 422 rejects the whole launch.
+	CIProvider    string `json:"ciProvider,omitempty"`
+	CIBuildNumber string `json:"ciBuildNumber,omitempty"`
+	CIRunURL      string `json:"ciRunUrl,omitempty"`
+	CIPRNumber    *int32 `json:"ciPrNumber,omitempty"`
 
 	// Metadata
 	Metadata Metadata `json:"metadata,omitempty"`
