@@ -33,6 +33,7 @@ func (c *stubConfig) SetEnvironmentFallback(string)       {}
 func (c *stubConfig) IsArtifactUploadEnabled(string) bool { return false }
 func (c *stubConfig) GetLanguage() string                 { return "en-US" }
 func (c *stubConfig) GetPlatform() string                 { return "linux" }
+func (c *stubConfig) SetPlatformFallback(string) bool     { return false }
 func (c *stubConfig) GetMilestone() int64                 { return 0 }
 func (c *stubConfig) GetMaxFileSize() int64               { return 1 << 20 }
 func (c *stubConfig) GetCLIVersion() string               { return "test" }
