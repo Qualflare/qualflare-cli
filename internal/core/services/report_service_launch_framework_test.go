@@ -2,6 +2,8 @@ package services
 
 import (
 	"context"
+	"encoding/json"
+	"strings"
 	"testing"
 
 	"qualflare-cli/internal/adapters/parsers/factory"
@@ -174,5 +176,111 @@ func TestLaunchFramework_AutoDetectedReportReportsItsProducer(t *testing.T) {
 	}
 	if launch.Framework != "maestro" {
 		t.Errorf("Framework = %q, want %q", launch.Framework, "maestro")
+	}
+}
+
+// Every native reporter writes platform and environment alongside framework, and
+// the parser used to REPLACE the suite's property map when it carried either --
+// dropping the PropSourceFramework marker set moments earlier. That defeated the
+// label fix silently: the existing tests above all use fixtures with neither key,
+// so both the v0.1.25 fix and its auto-detect counterpart above passed while
+// production stayed labelled qualflare-json.
+func TestLaunchFramework_PlatformInTheReportKeepsTheProducer(t *testing.T) {
+	const report = `{
+	  "framework": "maestro",
+	  "platform": "ios",
+	  "environment": "production",
+	  "metadata": {"reporterVersion": "0.1.0"},
+	  "suites": [{
+	    "name": "flows",
+	    "cases": [{"name": "Settings opens", "status": "passed", "duration": 120}]
+	  }]
+	}`
+
+	for _, format := range []domain.Framework{"", domain.FrameworkQualflareJSON} {
+		launch := parseLaunch(t, "collect.json", report, format)
+		if launch.Framework != "maestro" {
+			t.Errorf("--format %q: Framework = %q, want \"maestro\"", format, launch.Framework)
+		}
+	}
+}
+
+// Native reporters detect their CI and write it into the report; nothing read it,
+// so every launch from every reporter reported no CI at all. Measured on
+// production 2026-09-20: qualflare-maestro, qualflare-testng, qualflare-jest and
+// qualflare-go all showed ciProvider: null on runs that plainly happened in
+// GitHub Actions.
+func TestLaunchCI_ComesFromTheReport(t *testing.T) {
+	const report = `{
+	  "framework": "maestro",
+	  "metadata": {"reporterVersion": "0.1.0"},
+	  "ciProvider": "github",
+	  "ciBuildNumber": "35398054421",
+	  "ciRunUrl": "https://github.com/Qualflare/qualflare-maestro/actions/runs/35398054421",
+	  "ciPrNumber": 42,
+	  "suites": [{
+	    "name": "flows",
+	    "cases": [{"name": "Settings opens", "status": "passed", "duration": 120}]
+	  }]
+	}`
+
+	launch := parseLaunch(t, "collect.json", report, "")
+
+	if launch.CIProvider != "github" || launch.CIBuildNumber != "35398054421" {
+		t.Errorf("CIProvider = %q, CIBuildNumber = %q", launch.CIProvider, launch.CIBuildNumber)
+	}
+	if launch.CIRunURL == "" {
+		t.Error("CIRunURL is empty — the report carried one")
+	}
+	if launch.CIPRNumber == nil || *launch.CIPRNumber != 42 {
+		t.Errorf("CIPRNumber = %v, want 42", launch.CIPRNumber)
+	}
+	// Promoted onto the launch, not left duplicated in its properties.
+	for _, k := range []string{domain.PropCIProvider, domain.PropCIBuildNumber, domain.PropCIRunURL, domain.PropCIPRNumber} {
+		if _, dup := launch.Properties[k]; dup {
+			t.Errorf("property %q is still on the launch as well", k)
+		}
+	}
+}
+
+// The API validates CI metadata per launch, so one bad value must not cost the
+// whole upload: send nothing rather than something it will 422.
+func TestLaunchCI_ValuesTheAPIWouldRejectAreDropped(t *testing.T) {
+	report := `{
+	  "framework": "maestro",
+	  "metadata": {"reporterVersion": "0.1.0"},
+	  "ciProvider": "` + strings.Repeat("p", 65) + `",
+	  "ciBuildNumber": "` + strings.Repeat("9", 129) + `",
+	  "ciRunUrl": "not-a-url",
+	  "ciPrNumber": 0,
+	  "suites": [{"name": "flows", "cases": [{"name": "a", "status": "passed", "duration": 1}]}]
+	}`
+
+	launch := parseLaunch(t, "collect.json", report, "")
+
+	if launch.CIProvider != "" || launch.CIBuildNumber != "" || launch.CIRunURL != "" || launch.CIPRNumber != nil {
+		t.Errorf("kept a value the API rejects: provider=%q build=%q url=%q pr=%v",
+			launch.CIProvider, launch.CIBuildNumber, launch.CIRunURL, launch.CIPRNumber)
+	}
+}
+
+// A report with no CI metadata must leave the fields absent, not empty-but-present:
+// the API distinguishes them.
+func TestLaunchCI_AbsentWhenTheReportHasNone(t *testing.T) {
+	const report = `{
+	  "framework": "maestro",
+	  "metadata": {"reporterVersion": "0.1.0"},
+	  "suites": [{"name": "flows", "cases": [{"name": "a", "status": "passed", "duration": 1}]}]
+	}`
+
+	launch := parseLaunch(t, "collect.json", report, "")
+	body, err := json.Marshal(launch)
+	if err != nil {
+		t.Fatalf("Marshal() = %v", err)
+	}
+	for _, k := range []string{"ciProvider", "ciBuildNumber", "ciRunUrl", "ciPrNumber"} {
+		if strings.Contains(string(body), k) {
+			t.Errorf("%q is in the payload for a report that carried no CI metadata", k)
+		}
 	}
 }

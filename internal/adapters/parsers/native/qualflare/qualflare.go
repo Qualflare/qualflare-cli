@@ -19,6 +19,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strconv"
 	"time"
 
 	"qualflare-cli/internal/adapters/parsers/base"
@@ -62,10 +63,19 @@ type Collect struct {
 	// metadata, os) are deliberately still NOT decoded here — recovering those
 	// needs a ports.Parser interface change to carry launch-level fields, out
 	// of scope for this stopgap.
-	Platform    string  `json:"platform,omitempty"`
-	Browser     string  `json:"browser,omitempty"`
-	Environment string  `json:"environment,omitempty"`
-	Suites      []Suite `json:"suites"`
+	Platform    string `json:"platform,omitempty"`
+	Browser     string `json:"browser,omitempty"`
+	Environment string `json:"environment,omitempty"`
+
+	// CI metadata rides the same channel, for the same reason: the reporters set
+	// it on the top-level Collect object only, and left undecoded it went
+	// nowhere -- every launch from a native reporter reported no CI at all,
+	// however plainly it had run in one.
+	CIProvider    string  `json:"ciProvider,omitempty"`
+	CIBuildNumber string  `json:"ciBuildNumber,omitempty"`
+	CIRunURL      string  `json:"ciRunUrl,omitempty"`
+	CIPRNumber    *int    `json:"ciPrNumber,omitempty"`
+	Suites        []Suite `json:"suites"`
 }
 
 type Suite struct {
@@ -255,8 +265,15 @@ func buildSuite(collect Collect, sourceDir string) (*domain.Suite, error) {
 	// (report_service.go) reads these same two keys off every merged suite and
 	// promotes them to Launch.Properties when every suite that sets them agrees
 	// — unchanged by this parser, it just needed something to read.
+	//
+	// These are ADDED to whatever is already on the suite: PropSourceFramework is
+	// set just above, and replacing the map here dropped it for every report that
+	// also carries platform/browser/environment -- which is every report a native
+	// reporter writes. That silently defeated the launch-label fix.
 	if collect.Browser != "" || collect.Platform != "" || collect.Environment != "" {
-		suite.Properties = make(map[string]string, 3)
+		if suite.Properties == nil {
+			suite.Properties = make(map[string]string, 3)
+		}
 		if collect.Browser != "" {
 			suite.Properties["browser"] = collect.Browser
 		}
@@ -265,6 +282,23 @@ func buildSuite(collect Collect, sourceDir string) (*domain.Suite, error) {
 		}
 		if collect.Environment != "" {
 			suite.Properties["environment"] = collect.Environment
+		}
+	}
+	if collect.CIProvider != "" || collect.CIBuildNumber != "" || collect.CIRunURL != "" || collect.CIPRNumber != nil {
+		if suite.Properties == nil {
+			suite.Properties = make(map[string]string, 4)
+		}
+		if collect.CIProvider != "" {
+			suite.Properties[domain.PropCIProvider] = collect.CIProvider
+		}
+		if collect.CIBuildNumber != "" {
+			suite.Properties[domain.PropCIBuildNumber] = collect.CIBuildNumber
+		}
+		if collect.CIRunURL != "" {
+			suite.Properties[domain.PropCIRunURL] = collect.CIRunURL
+		}
+		if collect.CIPRNumber != nil {
+			suite.Properties[domain.PropCIPRNumber] = strconv.Itoa(*collect.CIPRNumber)
 		}
 	}
 
