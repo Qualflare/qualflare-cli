@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"qualflare-cli/internal/core/domain"
@@ -261,8 +262,28 @@ func (f *ParserFactory) DetectFrameworkFromContent(filename string, content []by
 		}
 	}
 
-	// Fall back to filename-based detection
-	return f.DetectFramework(filename)
+	// Fall back to filename-based detection, but only trust it when the parser it
+	// names can actually read this kind of file.
+	//
+	// The filename rules match a bare substring, so a native report directory's
+	// `qualflare-maestro-<token>.json` matches the "maestro" rule -- and the
+	// Maestro parser reads JUnit XML, so it fails with a bare `EOF` that says
+	// nothing about what went wrong. Today content detection happens to catch
+	// that file first; reordering these two, or one report shape the detectors
+	// do not recognise, is all it would take.
+	framework, err := f.DetectFramework(filename)
+	if err != nil {
+		return "", err
+	}
+	if parser, ok := f.parsers[framework]; ok && ext != "" {
+		if exts := parser.SupportedFileExtensions(); len(exts) > 0 && !slices.Contains(exts, ext) {
+			return "", fmt.Errorf(
+				"cannot detect the framework for %s: its contents match no format this CLI knows, "+
+					"and its name suggests %s, whose reports are %s. Pass --format to choose a parser explicitly",
+				filename, framework, strings.Join(exts, "/"))
+		}
+	}
+	return framework, nil
 }
 
 // detectNDJSONFramework detects the framework from newline-delimited JSON by
