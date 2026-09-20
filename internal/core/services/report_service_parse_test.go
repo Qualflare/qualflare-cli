@@ -597,8 +597,12 @@ func TestParseTestResults_RejectsOversizedFile(t *testing.T) {
 
 // A parser implementing ports.PathAwareParser owns all of its own I/O —
 // parseFile must call ParsePath(filePath) instead of opening the file itself
-// and calling Parse(reader). This is the extension point Maestro (a sibling
-// commands.json) and XCTest (a .xcresult directory bundle) build on.
+// and calling Parse(reader). Two parsers build on it: XCTest, for a .xcresult
+// directory bundle, and the native qualflare-json parser, which resolves an
+// attachment's relative path against the report file's own directory rather
+// than the CLI's cwd. Maestro does NOT — it reads JUnit XML through the shared
+// junitxml helper, and its package doc records why a sibling commands.json is
+// not something it can rely on.
 func TestParseTestResults_PathAwareParserReceivesThePath(t *testing.T) {
 	dir := t.TempDir()
 	f := writeFile(t, dir, "r.xml", "<x/>")
