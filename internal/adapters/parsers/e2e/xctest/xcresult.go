@@ -12,10 +12,11 @@ import (
 	"qualflare-cli/internal/core/domain"
 )
 
-// xcresultTimeout bounds the whole extraction (the base test listing plus
-// one activities call per test) — xcresulttool is fast, but a large bundle
-// with many tests makes many subprocess calls.
-const xcresultTimeout = 2 * time.Minute
+// xcresultTimeout bounds the whole extraction: the base test listing, one
+// attachment export for the bundle, then an activities call and a test-details
+// call per test — xcresulttool is fast, but a large bundle with many tests
+// makes many subprocess calls, and there are now two per test rather than one.
+const xcresultTimeout = 3 * time.Minute
 
 // testsResponse mirrors `xcresulttool get test-results tests`'s JSON output
 // (schema version 0.1.0, verified against real output — see xcresult_test.go).
@@ -70,13 +71,43 @@ func parseXCResultBundle(bundlePath string) (*domain.Suite, error) {
 	}
 
 	cases := buildCasesFromTestNodes(resp.TestNodes)
+
+	// One export for the whole bundle, before the per-test loop: it writes
+	// every attachment and a manifest keyed by test, so doing it per test
+	// would re-export the lot each time. Best-effort — a bundle with no
+	// attachments, or an export that fails, still reports its cases.
+	attachmentsByTest, err := exportAttachments(ctx, bundlePath)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "warning: xctest: could not export attachments: %v; reporting without them\n", err)
+	}
+
 	for i := range cases {
 		steps, err := activitiesForTest(ctx, bundlePath, cases[i].ID)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "warning: xctest: could not get activities for %s: %v; reporting case-level results only for it\n", cases[i].ID, err)
+		} else {
+			cases[i].Steps = steps
+		}
+
+		if atts := attachmentsByTest[cases[i].ID]; len(atts) > 0 {
+			cases[i].Attachments = atts
+		}
+
+		// Retry history is a second subcommand per test. It is worth the call:
+		// without it a test that failed and then passed is indistinguishable
+		// from one that passed first time, which is exactly the history a
+		// flaky-test report exists to show.
+		attempts, err := attemptsForTest(ctx, bundlePath, cases[i].ID)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "warning: xctest: could not get run details for %s: %v; reporting without retry history for it\n", cases[i].ID, err)
 			continue
 		}
-		cases[i].Steps = steps
+		if len(attempts) > 0 {
+			cases[i].Attempts = attempts
+			retries, flaky := retrySummary(attempts)
+			cases[i].RetryCount = &retries
+			cases[i].IsFlaky = &flaky
+		}
 	}
 
 	suite := &domain.Suite{
