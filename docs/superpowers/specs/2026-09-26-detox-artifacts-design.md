@@ -50,16 +50,30 @@ same route.
 
 ## What ships
 
-### 1. `qf collect --detox-artifacts <dir>` (the work)
+### 1. `qf collect --artifacts-dir <dir>` (the work)
 
 Scans a Detox artifacts root, matches each per-test directory to a case in the report being
 uploaded, and attaches its files.
 
-**Auto-detection.** With the flag absent, nothing is scanned. With the flag passed a directory that
-is a Detox *root* (containing `<configuration>.<timestamp>` subdirectories), the newest such
-subdirectory is used. With the flag passed a specific `<configuration>.<timestamp>` directory, that
-one is used. Auto-detection never guesses `./artifacts` on its own: silently attaching files from a
-directory the user did not name is how a stale run's video ends up on today's launch.
+**The flag is framework-generic, the layout is not.** `--artifacts-dir` names a directory of
+artifacts; the layout inside it is inferred from the format of the report being uploaded. Detox is
+the first implementation, and the flag exists in this shape so Maestro's debug output and anything
+else that drops files in a directory do not each arrive as their own near-identical flag.
+
+Two consequences to honour, or the generality is a trap rather than a feature:
+
+- A format with no artifact-directory support must **fail loudly** when the flag is passed, naming
+  the format and the formats that do support it. Silently ignoring the flag would look identical to
+  a matching bug.
+- The inference is from the report, never from the directory's own shape. Sniffing a directory to
+  decide what wrote it is guesswork that fails in exactly the confusing cases.
+
+**No auto-detection.** With the flag absent, nothing is scanned — `./artifacts` is never guessed,
+even though it is Detox's default `rootDir`. Attaching files from a directory the user did not name
+is how a stale run's video ends up on today's launch, and that mistake is invisible from the
+dashboard. Given the flag, a Detox *root* (containing `<configuration>.<timestamp>` subdirectories)
+resolves to the newest such subdirectory; a specific `<configuration>.<timestamp>` directory is
+used as given.
 
 **Matching.** Detox names each per-test directory `{glyph} {test-number} {test-full-name}`, for
 example `✗ Assertions should assert an element has (accessibility) id`. Matching strips the leading
@@ -133,8 +147,9 @@ and a simulator. It is also non-negotiable. Two spikes this month (the orchestra
 pass, and `.xcresult`'s per-run shape) each overturned a design that read as obviously correct, and
 both were caught only by running the real thing.
 
-**End to end.** `qf collect --detox-artifacts` against that fixture's output, with `--dry-run`
-showing each case carrying the artifacts its directory held.
+**End to end.** `qf collect --artifacts-dir` against that fixture's output, with `--dry-run`
+showing each case carrying the artifacts its directory held, and a second run against a
+non-Detox report asserting the flag fails loudly rather than being ignored.
 
 ## Out of scope
 
@@ -149,5 +164,6 @@ showing each case carrying the artifacts its directory held.
    plausibly yield `✗ name` and then `✓ name`, or a numbered pair. If so, artifacts should attach to
    the attempt rather than the case — and `domain.Attempt` has no attachment field, so the answer
    changes scope. The fixture must cover it.
-2. **Is `--detox-artifacts` the right surface**, or should it be `--artifacts-dir` with the format
-   inferred? A Detox-specific flag is clearer now and harder to generalise later.
+2. **Decided: `--artifacts-dir`, with the layout inferred from the report's format.** Revisit only
+   if the second framework to use it needs a materially different shape of input, which would mean
+   the generality was wrong rather than early.
