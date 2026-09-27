@@ -7,7 +7,7 @@ require (
 	github.com/spf13/cobra v1.10.2
 	golang.org/x/net v0.58.0
 	golang.org/x/term v0.45.0
-	resty.dev/v3 v3.0.0-rc.3
+	resty.dev/v3 v3.0.0-rc.4
 )
 
 require (
