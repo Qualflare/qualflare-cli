@@ -1,6 +1,13 @@
 # Detox artifacts — design
 
 **Status:** spike complete, spec revised from its findings
+**Correction 2026-09-27:** the artifact table below said `.uihierarchy`. Detox
+writes `.viewhierarchy` (`IosUIHierarchyPlugin.js`), and also `.dtxplain`
+alongside `.dtxrec`. The implementation encoded the wrong extension faithfully
+and nothing broke, because unmapped extensions fall through to the same
+`trace`/`application/octet-stream` pair — which is why only reading the producer
+could find it. Every filename in this table is now taken from a
+`preparePathForArtifact(...)` call in detox@20.51.4.
 **Date:** 2026-09-26
 **Scope:** `qualflare-cli` (the work), plus a thin `@qualflare/detox` npm package (positioning)
 
@@ -132,7 +139,8 @@ whether it uploads by default:
 | Video | `.mp4` | `video` | opt-in |
 | Device log | `.log` | `trace` | opt-in |
 | Instruments recording | `.dtxrec` | `trace` | opt-in |
-| UI hierarchy | `.uihierarchy` | `trace` | opt-in |
+| UI hierarchy | `.viewhierarchy` | `trace` | opt-in |
+| Instruments (plain) | `.dtxplain` | `trace` | opt-in |
 
 Videos are opt-in deliberately and that is not a new decision: `--upload-artifacts`' existing
 wording already says video "is the largest thing in a report by an order of magnitude and should be

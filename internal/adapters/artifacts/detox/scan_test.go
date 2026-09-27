@@ -247,3 +247,63 @@ func TestAttachReportsAMatchedButUnreadableDirectory(t *testing.T) {
 		t.Errorf("unreadable = %v, want the unreadable directory reported there, not silently dropped", unreadable)
 	}
 }
+
+// TestKindForArtifactCoversEveryFilenameDetoxWrites pins the mapping against the
+// producer rather than against itself.
+//
+// The list is every `preparePathForArtifact(...)` call in detox@20.51.4's
+// src/artifacts tree — the authoritative set of filenames Detox can write. It is
+// spelled out here because the previous version of this mapping named
+// ".uihierarchy", an extension Detox does not produce (it writes
+// ".viewhierarchy"), and no test could catch that: the default arm returns the
+// same kind and mime, so the wrong case was indistinguishable from the right one
+// by behaviour alone. The defence is naming the real filenames, so a future
+// Detox release that renames one shows up as a row to update.
+func TestKindForArtifactCoversEveryFilenameDetoxWrites(t *testing.T) {
+	cases := []struct {
+		filename string
+		kind     string
+		mime     string
+	}{
+		// Screenshots: `${artifactName}.png`, where artifactName is testStart,
+		// testDone, testFailed, testFnFailure or a name the test chose.
+		{"testStart.png", domain.ArtifactKindImage, "image/png"},
+		{"testDone.png", domain.ArtifactKindImage, "image/png"},
+		{"testFailed.png", domain.ArtifactKindImage, "image/png"},
+		// Video, the same extension on both platforms: ADBScreenrecorderPlugin
+		// uses .mp4 and SimulatorRecordVideoPlugin uses temporaryPath.for.mp4().
+		{"test.mp4", domain.ArtifactKindVideo, "video/mp4"},
+		// Logs, all four shapes. The .json.log one matters: filepath.Ext returns
+		// ".log", not ".json", so it must NOT be treated as JSON.
+		{"device.log", domain.ArtifactKindTrace, "text/plain"},
+		{"detox_pid_12345.log", domain.ArtifactKindTrace, "text/plain"},
+		{"detox_pid_12345.json.log", domain.ArtifactKindTrace, "text/plain"},
+		{"emulator-5554 2026-09-27 13-30-00Z.startup.log", domain.ArtifactKindTrace, "text/plain"},
+		// Instruments recordings and the UI hierarchy snapshot.
+		{"test.dtxrec", domain.ArtifactKindTrace, "application/octet-stream"},
+		{"test.dtxplain", domain.ArtifactKindTrace, "application/octet-stream"},
+		{"ui.viewhierarchy", domain.ArtifactKindTrace, "application/octet-stream"},
+		// Anything a future Detox adds must still attach, as an opt-in trace,
+		// rather than being dropped.
+		{"something.brandnew", domain.ArtifactKindTrace, "application/octet-stream"},
+		{"noextension", domain.ArtifactKindTrace, "application/octet-stream"},
+	}
+	for _, c := range cases {
+		kind, mime := kindForArtifact(c.filename)
+		if kind != c.kind || mime != c.mime {
+			t.Errorf("kindForArtifact(%q) = (%q, %q), want (%q, %q)", c.filename, kind, mime, c.kind, c.mime)
+		}
+	}
+}
+
+// TestNoArtifactIsEverDropped states the safety property directly: whatever the
+// extension, an artifact gets a kind and a mime type, so a file Detox wrote can
+// never silently vanish from the report.
+func TestNoArtifactIsEverDropped(t *testing.T) {
+	for _, name := range []string{"", ".", "x", "x.", ".hidden", "a.b.c.unknown", "UPPER.PNG", "video.MP4"} {
+		kind, mime := kindForArtifact(name)
+		if kind == "" || mime == "" {
+			t.Errorf("kindForArtifact(%q) = (%q, %q); neither may be empty", name, kind, mime)
+		}
+	}
+}

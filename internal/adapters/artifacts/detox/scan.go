@@ -328,11 +328,19 @@ func kindForArtifact(filename string) (kind, mime string) {
 		return domain.ArtifactKindVideo, "video/mp4"
 	case ".log":
 		return domain.ArtifactKindTrace, "text/plain"
-	case ".dtxrec", ".uihierarchy":
-		// Same result as default (application/octet-stream, ArtifactKindTrace).
-		// Kept as an explicit case, not merged, to name Detox's two other
-		// artifact types (view hierarchy snapshots and its own trace/replay
-		// format) rather than let them read as forgotten.
+	case ".dtxrec", ".dtxplain", ".viewhierarchy":
+		// Same result as the default arm (ArtifactKindTrace,
+		// application/octet-stream). Kept explicit, not merged, to name Detox's
+		// other artifact types rather than let them read as forgotten: .dtxrec
+		// and .dtxplain are its instruments recordings, .viewhierarchy its UI
+		// hierarchy snapshots.
+		//
+		// The extension WAS ".uihierarchy" here, which Detox never writes — the
+		// design doc's artifact table said so and this encoded it faithfully.
+		// IosUIHierarchyPlugin.js writes `${key}.viewhierarchy`. Nothing broke,
+		// because the default arm returns the same pair, which is exactly why a
+		// wrong-but-harmless value like that survives review: it is only
+		// findable by reading the producer, not by testing the consumer.
 		return domain.ArtifactKindTrace, "application/octet-stream"
 	default:
 		return domain.ArtifactKindTrace, "application/octet-stream"
