@@ -73,9 +73,28 @@ exclude:
   # the message from the wrong place. xctest/maestro/espresso are three 26-line files that
   # each delegate to junitxml.Parse; collapsing them trades 60 obvious lines for one
   # clever one.
+  #
+  # The third path, internal/adapters/cli/command.go, is a different case with the same
+  # answer. frameworkDisplayGroups there is a 27-entry lookup table that must name every
+  # framework explicitly. Qodana reports "Duplicated code fragment" at its declaration
+  # (command.go:820, from the check-run annotations) after detox became its 8th e2e
+  # entry; the same table, one entry shorter, scans clean on main. Which fragment it
+  # pairs with is not stated by the annotation and could not be reproduced locally —
+  # Qodana runs only in CI here — but the likely match is the run of 8 identically
+  # shaped e2e lines against the 8 unit-test lines directly above them.
+  #
+  # The repetition is what that table IS: one line per framework, each mapping a name to
+  # one of six display buckets. Collapsing it — bucket-to-slice, or deriving it from
+  # Framework.GetCategory() — is precisely the change the map's doc comment argues
+  # against, because GetCategory() stopped returning bucket keys and grouping on it
+  # silently dropped 23 of 24 frameworks from list-formats once already.
+  # TestBuildFrameworkDisplayGroups_IncludesEveryFramework is the real guard there: it
+  # fails if a framework is ever missing from the table, which is the bug worth
+  # catching, and no duplication inspection would catch it.
   - name: DuplicatedCode
     paths:
       - internal/adapters/parsers
+      - internal/adapters/cli/command.go
 
   # ctrf.Number mixes a pointer receiver (UnmarshalJSON) with value receivers
   # (IsSet/Int64/Float/String), which is what this inspection flags — once per method.

@@ -134,6 +134,9 @@ func TestCategoryForTool(t *testing.T) {
 		{"Go Test", domain.FrameworkGolang.GetCategory()},
 		{"pytest", domain.FrameworkPython.GetCategory()},
 		{"postman", domain.FrameworkNewman.GetCategory()},
+		// A CTRF report naming detox as its tool reaches this with no --format
+		// detox involved, and must not produce the category "detox".
+		{"detox", domain.FrameworkJest.GetCategory()},
 
 		// No Qualflare framework exists for these; inventing one would put a
 		// falsehood in the data model.
@@ -159,7 +162,18 @@ func TestCategoryForTool(t *testing.T) {
 	}
 }
 
-// Every category this parser can produce must be one the server accepts.
+// Every category this parser can produce must be one some framework advertises
+// — never a tool name echoed back verbatim.
+//
+// Note what this does NOT prove. The `valid` set is derived from
+// AllFrameworks(), so it cannot tell you whether the SERVER accepts these
+// values: a framework added to AllFrameworks makes its own category valid here
+// by construction, which is precisely how "detox" — a category the server's
+// oneof rejects with a 400 — passed this test while being unshippable. The
+// server contract is pinned non-circularly by
+// TestEveryFrameworkCategoryIsAcceptedByTheServer in internal/core/domain,
+// against a verbatim copy of the oneof. This test guards the narrower property
+// its name claims: that categoryForTool never invents a category of its own.
 func TestCategoryForToolAlwaysProducesAValidCategory(t *testing.T) {
 	valid := map[domain.FrameworkCategory]bool{}
 	for _, f := range domain.AllFrameworks() {
@@ -167,7 +181,7 @@ func TestCategoryForToolAlwaysProducesAValidCategory(t *testing.T) {
 	}
 	valid[domain.CategoryGeneric] = true
 
-	seeds := []string{"playwright", "jest", "go", "jasmine", "", "ctrf", "нечто", "MSTest"}
+	seeds := []string{"playwright", "jest", "go", "jasmine", "", "ctrf", "нечто", "MSTest", "detox", "Detox"}
 	names := make([]string, 0, len(seeds)+len(domain.AllFrameworks()))
 	names = append(names, seeds...)
 	for _, f := range domain.AllFrameworks() {

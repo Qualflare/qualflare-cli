@@ -80,6 +80,10 @@ func NewParserFactory() *ParserFactory {
 	// alias is registered directly — without it `--format vitest` fails with
 	// "unsupported framework" even though the enum accepts the value.
 	f.parsers[domain.FrameworkVitest] = jest.New()
+	// Detox drives Jest as its test runner, so a Detox report IS a Jest
+	// report at the file-format level: --format detox must resolve to the
+	// same parser, same reasoning as the Vitest alias above.
+	f.parsers[domain.FrameworkDetox] = jest.New()
 	f.RegisterParser(mocha.New())
 	f.RegisterParser(rspec.New())
 	f.RegisterParser(phpunit.New())

@@ -35,6 +35,12 @@ type Config struct {
 	// is small and was never opt-in to begin with. --upload-artifacts /
 	// QF_UPLOAD_ARTIFACTS add kinds; "none" declines every kind.
 	UploadArtifacts map[string]bool
+	// ArtifactsDir is --artifacts-dir: a directory of artifacts a framework left
+	// on disk, matched to the cases in the report being uploaded and attached.
+	// Empty means the flag was not passed, so nothing is scanned — attaching
+	// files from a directory nobody named is how a stale run's video ends up
+	// on today's launch.
+	ArtifactsDir string
 	// environmentSet records that the user chose the environment themselves —
 	// a --environment flag or QF_ENVIRONMENT — rather than it still holding
 	// DefaultConfig's "development". A report file's own environment fills in
@@ -419,6 +425,12 @@ func (c *Config) IsDryRun() bool {
 // IsShard returns whether shard mode is enabled
 func (c *Config) IsShard() bool {
 	return c.Shard
+}
+
+// GetArtifactsDir returns the --artifacts-dir value, or "" when it was not
+// passed (meaning: scan nothing).
+func (c *Config) GetArtifactsDir() string {
+	return c.ArtifactsDir
 }
 
 // Validate validates the configuration

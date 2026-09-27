@@ -9,6 +9,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"qualflare-cli/internal/adapters/artifacts"
 	"qualflare-cli/internal/auth"
 	"qualflare-cli/internal/config"
 	"qualflare-cli/internal/core/domain"
@@ -78,9 +79,9 @@ Other:
 
 Supported frameworks:
   Generic (JUnit): junit, ctrf, qualflare-json
-  Unit Testing:    python, golang, jest, mocha, rspec, phpunit, testng
+  Unit Testing:    python, golang, jest, vitest, mocha, rspec, phpunit, testng
   BDD:             cucumber, karate
-  UI/E2E/Mobile:   playwright, cypress, selenium, testcafe, maestro, xctest, espresso
+  UI/E2E/Mobile:   playwright, cypress, selenium, testcafe, maestro, xctest, espresso, detox
   API Testing:     newman, k6
   Security:        zap, trivy, snyk, sonarqube`,
 		SilenceUsage:  true,
@@ -186,6 +187,7 @@ func (c *CLI) createCollectCommand() *cobra.Command {
 		uploadArtifacts string
 		shard           bool
 		output          string
+		artifactsDir    string
 	)
 
 	cmd := &cobra.Command{
@@ -230,6 +232,7 @@ The format is auto-detected if not specified.`,
 				output:          output,
 				allowMixed:      allowMixed,
 				uploadArtifacts: uploadArtifacts,
+				artifactsDir:    artifactsDir,
 			})
 		},
 	}
@@ -258,6 +261,12 @@ The format is auto-detected if not specified.`,
 			"order of magnitude and should be a choice rather than a surprise on the bill. Pass "+
 			"\"none\" to upload no artifacts at all, screenshots included. Also settable via "+
 			"QF_UPLOAD_ARTIFACTS.")
+	cmd.Flags().StringVar(&artifactsDir, "artifacts-dir", "",
+		"Directory of artifacts a framework left on disk, attached to the matching test cases. "+
+			"Currently applies to Detox reports, where it is the Detox artifacts root (or one "+
+			"<configuration>.<timestamp> run inside it). Never guessed: without this flag nothing is "+
+			"scanned, because attaching files from a directory nobody named is how a stale run's video "+
+			"ends up on today's launch.")
 	cmd.Flags().BoolVar(&allowMixed, "allow-mixed-runs", false,
 		"Upload even when the report files come from different runs (by default this is refused, "+
 			"because a stale file from an earlier run would be merged into this launch)")
@@ -281,6 +290,10 @@ type collectOptions struct {
 	// uploadArtifacts is the raw --upload-artifacts value, validated into a
 	// set by config.ParseArtifactKinds in applyCollectOptions.
 	uploadArtifacts string
+	// artifactsDir is --artifacts-dir: a directory of artifacts a framework
+	// left on disk, matched to cases and attached. Empty means the flag was
+	// not passed.
+	artifactsDir string
 }
 
 // validPlatforms mirrors the server's launch platform enum
@@ -380,6 +393,7 @@ func applyCollectOptions(cfg *config.Config, opts collectOptions) error {
 	cfg.SetTimeout(opts.timeout)
 	cfg.SetDryRun(opts.dryRun)
 	cfg.SetShard(opts.shard)
+	cfg.ArtifactsDir = opts.artifactsDir
 	return nil
 }
 
@@ -669,6 +683,14 @@ func (c *CLI) printReportJSON(ctx context.Context, files []string, framework dom
 		return fmt.Errorf("failed to parse test results: %w", err)
 	}
 
+	// This is a SEPARATE dry-run path from ProcessTestResults (it never calls
+	// that function), so the attachment scan has to be repeated here too --
+	// otherwise `--dry-run --output json` would be the one dry-run form that
+	// never shows what --artifacts-dir would have attached.
+	if err := artifacts.AttachIfRequested(report, c.config.GetArtifactsDir(), os.Stderr); err != nil {
+		return err
+	}
+
 	jsonData, err := json.MarshalIndent(report, "", "  ")
 	if err != nil {
 		return fmt.Errorf("failed to marshal report: %w", err)
@@ -818,6 +840,7 @@ var frameworkDisplayGroups = map[domain.Framework]domain.FrameworkCategory{
 	domain.FrameworkMaestro:    domain.CategoryE2E,
 	domain.FrameworkXCTest:     domain.CategoryE2E,
 	domain.FrameworkEspresso:   domain.CategoryE2E,
+	domain.FrameworkDetox:      domain.CategoryE2E,
 
 	domain.FrameworkNewman: domain.CategoryAPI,
 	domain.FrameworkK6:     domain.CategoryAPI,

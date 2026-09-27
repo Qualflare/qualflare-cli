@@ -215,6 +215,24 @@ Format is auto-detected from the filename and file content. Pass `--format <name
 
 Any framework that emits standard JUnit XML — NUnit, MSTest, xUnit.net, Robot Framework, and others — can be uploaded using `--format junit`. Because all JUnit emitters share the same XML schema, use `--format <name>` (or a recognizable filename like `maestro-results.xml`) to disambiguate Maestro, XCTest, Espresso, and TestNG outputs from generic JUnit.
 
+### Framework artifacts on disk
+
+Some frameworks write screenshots, videos and logs to a directory rather than
+into the results file. `--artifacts-dir` attaches those to the matching cases:
+
+```bash
+# Detox: the artifacts root, or one <configuration>.<timestamp> run inside it
+qf myapp collect jest-results.json --artifacts-dir ./artifacts
+```
+
+Screenshots upload by default. Videos and device logs do not — pass
+`--upload-artifacts=video,trace` for those. A video is the largest thing in a
+report by an order of magnitude, and a device log from a real app is the
+artifact most likely to carry customer data, so neither is a surprise by
+default.
+
+The directory is never guessed: without the flag, nothing is scanned.
+
 ## Configuration
 
 Credentials are stored per identifier in `$XDG_CONFIG_HOME/qualflare/config.toml` (permissions `0600`). Treat this file like an SSH key.

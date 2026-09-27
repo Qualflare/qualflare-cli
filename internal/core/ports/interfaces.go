@@ -128,6 +128,9 @@ type ConfigProvider interface {
 	// IsShard reports whether --shard mode is enabled: every case from input
 	// file i is tagged shard_index = i, overwriting any other mechanism's value.
 	IsShard() bool
+	// GetArtifactsDir returns the --artifacts-dir value, or "" when it was
+	// not passed, meaning nothing is scanned.
+	GetArtifactsDir() string
 
 	// Validation
 	Validate() error

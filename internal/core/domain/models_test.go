@@ -104,6 +104,9 @@ func TestFrameworkGetCategory(t *testing.T) {
 		{FrameworkZAP, FrameworkCategory(FrameworkZAP)},
 		{FrameworkSonarQube, FrameworkCategory(FrameworkSonarQube)},
 		{FrameworkQualflareJSON, CategoryGeneric},
+		// Detox is valid but has no category of its own: the server's oneof has
+		// no "detox", so it borrows Jest's — see GetCategory's FrameworkDetox arm.
+		{FrameworkDetox, FrameworkCategory(FrameworkJest)},
 		{"nope", CategoryGeneric},
 		{"", CategoryGeneric},
 	}
@@ -147,6 +150,13 @@ func TestAllFrameworksAreValidAndCategorised(t *testing.T) {
 		want := FrameworkCategory(f)
 		if f == FrameworkQualflareJSON || f == FrameworkCTRF {
 			want = CategoryGeneric
+		}
+		// Detox is the third exception, and for the same reason as CTRF rather
+		// than a different one: FrameworkCategory("detox") is not in the server's
+		// oneof, so categorising as itself would 400 the launch. It borrows
+		// Jest's category because Jest is what actually produced the report.
+		if f == FrameworkDetox {
+			want = FrameworkCategory(FrameworkJest)
 		}
 		if got := f.GetCategory(); got != want {
 			t.Errorf("Framework(%q).GetCategory() = %q, want %q", f, got, want)
@@ -432,6 +442,59 @@ func TestGetStatusTreatsTimeoutAndAbortAsNotPassing(t *testing.T) {
 		suite.RecomputeCounts()
 		if got := suite.GetStatus(); got == StatusPassed {
 			t.Errorf("a suite containing %q reported %q; it must not read as a pass", s, got)
+		}
+	}
+}
+
+// serverAcceptedCategories is the api-service Suite.Category oneof, copied
+// verbatim from internal/core/domain/launch/launch.go's validate tag.
+//
+// It is duplicated here on purpose. The category is the one field where the CLI
+// can invent a value the server has never heard of: validation is a closed
+// oneof, and an unrecognized non-empty category fails it, which is a 400 for the
+// WHOLE launch rather than one dropped suite or a silent default. Every other
+// cross-repo assumption in this package degrades; this one rejects.
+//
+// Keeping the list here turns that into a local test failure. Widening the
+// server's enum means adding the value here in the same change — which is the
+// reminder, not an inconvenience.
+var serverAcceptedCategories = map[FrameworkCategory]bool{
+	"unit": true, "bdd": true, "e2e": true, "api": true, "security": true,
+	"generic": true, "junit": true, "python": true, "golang": true, "jest": true,
+	"vitest": true, "mocha": true, "rspec": true, "phpunit": true, "testng": true,
+	"cucumber": true, "karate": true, "playwright": true, "cypress": true,
+	"selenium": true, "testcafe": true, "maestro": true, "xctest": true,
+	"espresso": true, "newman": true, "k6": true, "zap": true, "trivy": true,
+	"snyk": true, "sonarqube": true,
+}
+
+// TestEveryFrameworkCategoryIsAcceptedByTheServer is the guard the
+// categorises-as-itself test above cannot be.
+//
+// That test asks whether GetCategory is self-consistent, and a framework added
+// to AllFrameworks passes it by construction — which is exactly how detox was
+// added with a category ("detox") the server rejects, on a branch whose whole
+// suite was green. Self-consistency was never the property that mattered; being
+// in the server's enum is.
+func TestEveryFrameworkCategoryIsAcceptedByTheServer(t *testing.T) {
+	for _, f := range AllFrameworks() {
+		if got := f.GetCategory(); !serverAcceptedCategories[got] {
+			t.Errorf("Framework(%q).GetCategory() = %q, which the server's Suite.Category oneof does not accept: "+
+				"every suite in such a launch would 400. Either map this framework onto a category the server "+
+				"knows (see GetCategory's FrameworkDetox arm) or widen the enum server-side first.", f, got)
+		}
+	}
+}
+
+// TestUnknownFrameworksStillCategoriseSafely covers the inputs that reach
+// GetCategory from OUTSIDE AllFrameworks: the passthrough parsers read a
+// framework name out of the report file, so the value is whatever a third-party
+// reporter wrote. An unknown name must land on an accepted category, never
+// round-trip verbatim into the payload.
+func TestUnknownFrameworksStillCategoriseSafely(t *testing.T) {
+	for _, name := range []string{"", "nope", "detox", "wdio", "jasmine", "Detox", "jest-circus", "../etc/passwd"} {
+		if got := Framework(name).GetCategory(); !serverAcceptedCategories[got] {
+			t.Errorf("Framework(%q).GetCategory() = %q, not accepted by the server", name, got)
 		}
 	}
 }

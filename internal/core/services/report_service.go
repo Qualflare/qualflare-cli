@@ -18,6 +18,7 @@ import (
 	"sync"
 	"time"
 
+	"qualflare-cli/internal/adapters/artifacts"
 	"qualflare-cli/internal/core/domain"
 	"qualflare-cli/internal/core/ports"
 )
@@ -59,6 +60,11 @@ func (s *ReportService) warnWriter() io.Writer {
 func (s *ReportService) ProcessTestResults(ctx context.Context, files []string, framework domain.Framework) error {
 	report, err := s.ParseTestResults(ctx, files, framework)
 	if err != nil {
+		return err
+	}
+
+	// Before the dry-run return, so --dry-run shows what would be attached.
+	if err := artifacts.AttachIfRequested(report, s.config.GetArtifactsDir(), s.warnWriter()); err != nil {
 		return err
 	}
 

@@ -63,6 +63,13 @@ func TestParserCategoryComesFromTheSourceFrameworkField(t *testing.T) {
 	}{
 		{"cypress", domain.FrameworkCategory(domain.FrameworkCypress)},
 		{"cucumber", domain.FrameworkCategory(domain.FrameworkCucumber)},
+		// A Detox suite reports as jest, not as "detox": this is the path that
+		// bypasses GetFramework entirely, so it is the one that would have put an
+		// unknown category on the wire and 400'd the launch. A Jest reporter
+		// configured with framework: "detox" is all it takes to reach it.
+		{"detox", domain.FrameworkCategory(domain.FrameworkJest)},
+		// An unmodelled producer must not round-trip its own name as a category.
+		{"wdio", domain.CategoryGeneric},
 	}
 	for _, c := range cases {
 		jsonReport := `{"framework": "` + c.framework + `", "suites": [{"name": "s", "cases": [{"id": "1", "name": "t", "status": "passed"}]}]}`
@@ -566,5 +573,27 @@ func TestParserResolvesLocalImagePathToAnArtifact(t *testing.T) {
 	}
 	if att.Content != "" {
 		t.Errorf("an on-disk image must not also be inlined, got %d bytes of content", len(att.Content))
+	}
+}
+
+// TestDetoxKeepsItsIdentityInTheSourceFrameworkProperty is the other half of
+// categorising a Detox report as "jest": the category had to give up the name,
+// so something else has to carry it. sourceFramework is a free-text property
+// with no server-side enum, which is why it can hold what the category cannot.
+//
+// Without this, "map detox onto jest's category" would be indistinguishable
+// from "lose the fact that it was Detox".
+func TestDetoxKeepsItsIdentityInTheSourceFrameworkProperty(t *testing.T) {
+	jsonReport := `{"framework": "detox", "suites": [{"name": "s", "cases": [{"id": "1", "name": "t", "status": "passed"}]}]}`
+	suite, err := New().Parse(strings.NewReader(jsonReport))
+	if err != nil {
+		t.Fatalf("parse error: %v", err)
+	}
+	if got := suite.Properties[domain.PropSourceFramework]; got != string(domain.FrameworkDetox) {
+		t.Errorf("suite property %s = %q, want %q — the category cannot say detox, so this must",
+			domain.PropSourceFramework, got, domain.FrameworkDetox)
+	}
+	if suite.Category != domain.FrameworkCategory(domain.FrameworkJest) {
+		t.Errorf("suite category = %q, want %q", suite.Category, domain.FrameworkJest)
 	}
 }

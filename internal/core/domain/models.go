@@ -26,10 +26,40 @@ const (
 	FrameworkCTRF Framework = "ctrf"
 
 	// Unit Testing Frameworks
-	FrameworkPython  Framework = "python"
-	FrameworkGolang  Framework = "golang"
-	FrameworkJest    Framework = "jest"
-	FrameworkVitest  Framework = "vitest"
+	FrameworkPython Framework = "python"
+	FrameworkGolang Framework = "golang"
+	FrameworkJest   Framework = "jest"
+	FrameworkVitest Framework = "vitest"
+	// FrameworkDetox is an E2E framework whose reports are, at the file-format
+	// level, Jest reports — Detox drives Jest as its test runner. It gets its
+	// own Framework value (rather than reusing FrameworkJest) so a user who
+	// explicitly ran a Detox suite can say so with --format detox, even though
+	// content detection alone will still call an undeclared upload "jest". See
+	// internal/adapters/artifacts (the --artifacts-dir support check) for the
+	// half of this that has to accept both.
+	//
+	// --format detox never reaches the wire as the launch's framework:
+	// resolveLaunchFramework (report_service.go) labels the launch with
+	// parser.GetFramework(), and the Jest parser's GetFramework() hardcodes
+	// FrameworkJest regardless of which alias (jest/vitest/detox) it was
+	// looked up under — the same precedent vitest already sets. That is
+	// deliberate, not a bug to "fix" by making GetFramework return the
+	// requested alias: this parser also hardcodes its Suite.Category to
+	// FrameworkJest.GetCategory(), so a GetFramework that returned "detox"
+	// would disagree with the suite's own category, and — the hazard
+	// GetCategory's default-arm comment above warns about for exactly this
+	// reason — anything that later fed "detox" back through GetCategory()
+	// as a category/framework label the server does not yet recognize would
+	// 400 the whole launch. Leave GetFramework returning FrameworkJest alone.
+	//
+	// That hazard is real and reaches further than --format: the two passthrough
+	// parsers take a framework NAME OUT OF THE FILE (qualflare-json's `framework`
+	// field, CTRF's results.tool.name) and categorise by it, bypassing
+	// GetFramework entirely. Both are reachable with no --format detox at all —
+	// a Jest reporter configured with framework: "detox", or any CTRF reporter
+	// naming detox as its tool. GetCategory has an explicit FrameworkDetox arm to
+	// close all three paths at once; see it before changing anything here.
+	FrameworkDetox   Framework = "detox"
 	FrameworkMocha   Framework = "mocha"
 	FrameworkRSpec   Framework = "rspec"
 	FrameworkPHPUnit Framework = "phpunit"
@@ -101,6 +131,7 @@ func AllFrameworks() []Framework {
 		FrameworkGolang,
 		FrameworkJest,
 		FrameworkVitest,
+		FrameworkDetox,
 		FrameworkMocha,
 		FrameworkRSpec,
 		FrameworkPHPUnit,
@@ -162,6 +193,27 @@ func (f Framework) GetCategory() FrameworkCategory {
 		// validation entirely. The default arm's own comment describes exactly
 		// this hazard.
 		return CategoryGeneric
+	case FrameworkDetox:
+		// Detox is the one valid framework with NO category of its own, because
+		// the server's Suite.Category oneof does not list "detox" — see
+		// api-service internal/core/domain/launch/launch.go, where an
+		// unrecognized non-empty category is a 400 for the whole launch, not a
+		// silent default. Adding detox to AllFrameworks (so --format detox is
+		// accepted) therefore cannot also mean categorising as itself the way
+		// the default arm does for every other framework.
+		//
+		// "jest" rather than "e2e", though the oneof accepts both: the
+		// --format detox path already reports Suite.Category as
+		// FrameworkJest.GetCategory(), because the Jest parser hardcodes it and
+		// GetFramework() returns FrameworkJest for every alias. Returning "jest"
+		// here makes the two PASSTHROUGH paths that read a framework name out of
+		// the file itself — qualflare-json's `framework` field and CTRF's
+		// results.tool.name — agree with it instead of disagreeing.
+		//
+		// Nothing is lost by not naming detox here: both passthrough parsers also
+		// record the resolved framework as the suite's sourceFramework property,
+		// so "detox" still travels, in a field with no enum to violate.
+		return FrameworkJest.GetCategory()
 	default:
 		if f.IsValid() {
 			return FrameworkCategory(f)
