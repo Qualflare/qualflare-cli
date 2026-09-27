@@ -1,0 +1,147 @@
+name: Scheduled vulnerability scan
+
+# govulncheck already runs on every PR and every push to main, in ci.yml's
+# Security Scan job. This is NOT a duplicate of it, and the difference is the
+# whole point:
+#
+#   ci.yml answers  "did this change introduce a vulnerability?"
+#   this answers    "did a vulnerability appear in code nobody changed?"
+#
+# The vulnerability database moves on its own. A CVE published against a pinned
+# dependency, or against the Go standard library, makes this repository
+# vulnerable without a single commit — and with no commit there is no CI run, so
+# nothing notices. A quiet fortnight is exactly when that goes unseen.
+#
+# That is not hypothetical here. On 2026-09-27 the CI pin moved from Go 1.25.13
+# to 1.26.3 and govulncheck immediately reported two REACHABLE standard-library
+# vulnerabilities in the new toolchain:
+#
+#     GO-2026-6218  net/url@go1.26.3     fixed in go1.26.6
+#     GO-2026-6090  crypto/tls@go1.26.3  fixed in go1.26.6
+#
+# Both sat on real call paths through http.Client.SendReport. They were caught
+# only because the pin happened to move that day; build, test and lint were all
+# green on the vulnerable toolchain, because a vulnerable toolchain compiles
+# perfectly well. Had 1.26.3 been pinned a week earlier and left alone, nothing
+# in this repository would ever have mentioned it.
+
+on:
+  schedule:
+    # 07:00 UTC daily. Early enough that a finding is waiting at the start of the
+    # day rather than arriving mid-afternoon, and daily rather than weekly
+    # because the cost of a run is a minute and the cost of a miss is six days.
+    - cron: '0 7 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: security-schedule
+  cancel-in-progress: false
+
+jobs:
+  govulncheck:
+    name: govulncheck against main
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      issues: write # a scheduled failure needs somewhere visible to land
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      # The Go version is READ FROM ci.yml rather than pinned again here.
+      # govulncheck reports standard-library vulnerabilities against the
+      # toolchain it runs on, so scanning a different version than CI builds
+      # with would report vulnerabilities this project does not have, or miss
+      # ones it does. One pin, one source of truth, and no second place to
+      # forget when it moves.
+      - name: Resolve the Go version CI builds with
+        id: go
+        run: |
+          set -euo pipefail
+          VERSION="$(grep -m1 -oE "go-version: '[0-9]+\.[0-9]+\.[0-9]+'" .github/workflows/ci.yml \
+                     | grep -oE "[0-9]+\.[0-9]+\.[0-9]+")"
+          if [ -z "$VERSION" ]; then
+            echo "::error title=Could not resolve the Go version::No go-version pin found in .github/workflows/ci.yml. This job must scan the version CI builds with; fix the parse rather than hardcoding one here."
+            exit 1
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "scanning with Go $VERSION, read from ci.yml"
+
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: ${{ steps.go.outputs.version }}
+
+      # Installed without an @version, exactly as ci.yml does: the version comes
+      # from tools/go.mod and is verified against tools/go.sum, so the scanner
+      # itself is reproducible. The vulnerability DATABASE is fetched fresh at
+      # run time, which is the part that must not be pinned.
+      - name: Install govulncheck
+        run: go -C tools install golang.org/x/vuln/cmd/govulncheck
+
+      - name: Scan
+        id: scan
+        continue-on-error: true
+        run: |
+          set -o pipefail
+          govulncheck ./... 2>&1 | tee govulncheck.txt
+
+      - name: Report a finding as an issue
+        if: steps.scan.outcome != 'success'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          GO_VERSION: ${{ steps.go.outputs.version }}
+        run: |
+          set -euo pipefail
+          TITLE="govulncheck: vulnerabilities reported against main"
+
+          # One issue, reopened and commented rather than a new one per day —
+          # a scheduled job that files a fresh issue every morning trains people
+          # to close them unread, which is worse than no alert at all.
+          EXISTING="$(gh issue list --state open --search "\"$TITLE\" in:title" \
+                      --json number --jq '.[0].number // empty')"
+
+          {
+            echo "\`govulncheck ./...\` reported findings on \`main\` with Go \`$GO_VERSION\`."
+            echo
+            echo "Nothing was pushed — these appeared because the vulnerability database moved,"
+            echo "or because a dependency or the toolchain became vulnerable in place."
+            echo
+            echo "[Run log]($RUN_URL)"
+            echo
+            echo '```'
+            # Trimmed: the full report can be long, and the first findings are
+            # the ones that matter. The run log has all of it.
+            head -c 8000 govulncheck.txt
+            echo
+            echo '```'
+          } > body.md
+
+          if [ -n "$EXISTING" ]; then
+            gh issue comment "$EXISTING" --body-file body.md
+            echo "commented on existing issue #$EXISTING"
+          else
+            gh issue create --title "$TITLE" --body-file body.md --label security \
+              || gh issue create --title "$TITLE" --body-file body.md
+            echo "opened a new issue"
+          fi
+
+      - name: Keep the full report
+        if: steps.scan.outcome != 'success'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: govulncheck-report
+          path: govulncheck.txt
+          retention-days: 30
+
+      # The job fails AFTER the issue exists, so a red run and a readable report
+      # always arrive together. Failing at the scan step would leave the finding
+      # visible only to whoever opens the log.
+      - name: Fail if anything was reported
+        if: steps.scan.outcome != 'success'
+        run: |
+          echo "::error title=Vulnerabilities reported::govulncheck found issues on main. See the issue it just opened or commented on."
+          exit 1
