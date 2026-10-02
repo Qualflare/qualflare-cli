@@ -60,7 +60,7 @@ jobs:
         uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
         with:
           registry: ghcr.io
-          username: ${{ github.actor }}
+          username: root@qualflare.com
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Log in to Docker Hub
