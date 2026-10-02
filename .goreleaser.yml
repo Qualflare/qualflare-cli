@@ -160,7 +160,9 @@ snapshot:
 
 changelog:
   sort: asc
-  use: github
+  # git, not github: the github backend credits each entry to the author's GitHub login.
+  use: git
+  format: "{{ .SHA }} {{ .Message }}"
   filters:
     exclude:
       - '^docs:'
