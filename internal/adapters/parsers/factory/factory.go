@@ -84,6 +84,11 @@ func NewParserFactory() *ParserFactory {
 	// report at the file-format level: --format detox must resolve to the
 	// same parser, same reasoning as the Vitest alias above.
 	f.parsers[domain.FrameworkDetox] = jest.New()
+	// @qualflare/webdriverio and @qualflare/appium write qualflare-json, so
+	// --format webdriverio/appium resolve to the native parser. WebdriverIO's
+	// own JUnit or Allure output is a different format: --format junit.
+	f.parsers[domain.FrameworkWebdriverIO] = qualflare.New()
+	f.parsers[domain.FrameworkAppium] = qualflare.New()
 	f.RegisterParser(mocha.New())
 	f.RegisterParser(rspec.New())
 	f.RegisterParser(phpunit.New())
@@ -196,6 +201,14 @@ func (f *ParserFactory) DetectFramework(filename string) (domain.Framework, erro
 		return domain.FrameworkCypress, nil
 	case strings.Contains(base, "testcafe"):
 		return domain.FrameworkTestCafe, nil
+	// Ahead of Selenium: "webdriverio" contains "webdriver", so a WebdriverIO
+	// file would otherwise be routed to the Selenium parser. Filename rules are
+	// only the fallback when content detection fails, and an extension the
+	// chosen parser cannot read is refused with a --format hint.
+	case strings.Contains(base, "webdriverio") || hasWordToken(base, "wdio"):
+		return domain.FrameworkWebdriverIO, nil
+	case strings.Contains(base, "appium"):
+		return domain.FrameworkAppium, nil
 	case strings.Contains(base, "selenium") || strings.Contains(base, "webdriver"):
 		return domain.FrameworkSelenium, nil
 	case strings.Contains(base, "maestro"):
