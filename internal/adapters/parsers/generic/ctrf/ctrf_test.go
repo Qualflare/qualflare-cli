@@ -141,7 +141,8 @@ func TestCategoryForTool(t *testing.T) {
 		// No Qualflare framework exists for these; inventing one would put a
 		// falsehood in the data model.
 		{"jasmine", domain.CategoryGeneric},
-		{"wdio", domain.CategoryGeneric},
+		{"wdio", domain.FrameworkCategory(domain.FrameworkWebdriverIO)},
+		{"webdriverio", domain.FrameworkCategory(domain.FrameworkWebdriverIO)},
 		{"nightwatch", domain.CategoryGeneric},
 		{"MSTest", domain.CategoryGeneric},
 		{"NUnit", domain.CategoryGeneric},

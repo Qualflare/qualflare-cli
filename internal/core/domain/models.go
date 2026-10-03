@@ -18,9 +18,9 @@ const (
 	// tool-agnostic JSON interchange format. Generic for the same reason JUnit
 	// is: roughly fifteen producers and no single owning tool.
 	//
-	// It is mostly about reach. CTRF has first-party reporters for wdio,
-	// jasmine, nightwatch, codeceptjs and the .NET runners (MSTest, NUnit,
-	// xUnit) — none of which Qualflare supports directly, and .NET in
+	// It is mostly about reach. CTRF has first-party reporters for jasmine,
+	// nightwatch, codeceptjs and the .NET runners (MSTest, NUnit, xUnit) —
+	// none of which Qualflare supports directly, and .NET in
 	// particular can otherwise only arrive as generic JUnit XML.
 	// See internal/adapters/parsers/generic/ctrf.
 	FrameworkCTRF Framework = "ctrf"
@@ -77,6 +77,15 @@ const (
 	FrameworkMaestro    Framework = "maestro"
 	FrameworkXCTest     Framework = "xctest"
 	FrameworkEspresso   Framework = "espresso"
+	// FrameworkWebdriverIO and FrameworkAppium are what @qualflare/webdriverio
+	// and @qualflare/appium (which composes it) write into their reports'
+	// `framework` field. Both reports are qualflare-json at the file-format
+	// level, so --format webdriverio/appium resolve to that parser, the same
+	// way --format detox resolves to Jest's. Unlike detox, both are categories
+	// the server accepts (api-service migration 0294), so they categorise as
+	// themselves through GetCategory's default arm.
+	FrameworkWebdriverIO Framework = "webdriverio"
+	FrameworkAppium      Framework = "appium"
 
 	// API Testing Frameworks
 	FrameworkNewman Framework = "newman"
@@ -145,6 +154,8 @@ func AllFrameworks() []Framework {
 		FrameworkMaestro,
 		FrameworkXCTest,
 		FrameworkEspresso,
+		FrameworkWebdriverIO,
+		FrameworkAppium,
 		FrameworkNewman,
 		FrameworkK6,
 		FrameworkZAP,

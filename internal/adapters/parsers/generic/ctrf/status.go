@@ -95,7 +95,7 @@ var rawStatusMap = map[string]domain.Status{
 // fail the server's oneof and 400 the whole launch, which is the trap
 // GetCategory's own doc comment describes.
 //
-// Deliberately conservative. jasmine, wdio, nightwatch, codeceptjs and the .NET
+// Deliberately conservative. jasmine, nightwatch, codeceptjs and the .NET
 // runners have no Qualflare framework, and force-fitting them onto a near
 // neighbour would put a falsehood in the data model to avoid an honest
 // "generic". The raw tool name survives in the suite's ctrfTool property either
@@ -117,7 +117,7 @@ func categoryForTool(toolName string) domain.FrameworkCategory {
 // same category error this function's exclusion of FrameworkCTRF already guards
 // against one level down.
 //
-// Returns false rather than guessing. jasmine, wdio, nightwatch, codeceptjs and
+// Returns false rather than guessing. jasmine, nightwatch, codeceptjs and
 // the .NET runners have no Qualflare framework, and the caller's fallback is an
 // honest "unknown producer" rather than a near neighbour.
 func frameworkForTool(toolName string) (domain.Framework, bool) {
@@ -146,4 +146,8 @@ var toolAliases = map[string]domain.Framework{
 	"owasp-zap":  domain.FrameworkZAP,
 	"sonar":      domain.FrameworkSonarQube,
 	"sonarcloud": domain.FrameworkSonarQube,
+	// CTRF's own WebdriverIO reporter names its tool "wdio". It was generic
+	// until webdriverio became a framework; "webdriverio" itself resolves
+	// through IsValid.
+	"wdio": domain.FrameworkWebdriverIO,
 }

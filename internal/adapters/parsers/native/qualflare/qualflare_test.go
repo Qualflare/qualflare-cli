@@ -68,7 +68,12 @@ func TestParserCategoryComesFromTheSourceFrameworkField(t *testing.T) {
 		// unknown category on the wire and 400'd the launch. A Jest reporter
 		// configured with framework: "detox" is all it takes to reach it.
 		{"detox", domain.FrameworkCategory(domain.FrameworkJest)},
+		// The two native reporters' labels categorise as themselves.
+		{"webdriverio", domain.FrameworkCategory(domain.FrameworkWebdriverIO)},
+		{"appium", domain.FrameworkCategory(domain.FrameworkAppium)},
 		// An unmodelled producer must not round-trip its own name as a category.
+		// "wdio" is a CTRF tool alias, not a framework: no native reporter
+		// writes it, so a qualflare-json file claiming it stays generic.
 		{"wdio", domain.CategoryGeneric},
 	}
 	for _, c := range cases {

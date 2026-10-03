@@ -81,7 +81,8 @@ Supported frameworks:
   Generic (JUnit): junit, ctrf, qualflare-json
   Unit Testing:    python, golang, jest, vitest, mocha, rspec, phpunit, testng
   BDD:             cucumber, karate
-  UI/E2E/Mobile:   playwright, cypress, selenium, testcafe, maestro, xctest, espresso, detox
+  UI/E2E/Mobile:   playwright, cypress, selenium, testcafe, maestro, xctest, espresso, detox,
+                   webdriverio, appium
   API Testing:     newman, k6
   Security:        zap, trivy, snyk, sonarqube`,
 		SilenceUsage:  true,
@@ -833,14 +834,16 @@ var frameworkDisplayGroups = map[domain.Framework]domain.FrameworkCategory{
 	domain.FrameworkCucumber: domain.CategoryBDD,
 	domain.FrameworkKarate:   domain.CategoryBDD,
 
-	domain.FrameworkPlaywright: domain.CategoryE2E,
-	domain.FrameworkCypress:    domain.CategoryE2E,
-	domain.FrameworkSelenium:   domain.CategoryE2E,
-	domain.FrameworkTestCafe:   domain.CategoryE2E,
-	domain.FrameworkMaestro:    domain.CategoryE2E,
-	domain.FrameworkXCTest:     domain.CategoryE2E,
-	domain.FrameworkEspresso:   domain.CategoryE2E,
-	domain.FrameworkDetox:      domain.CategoryE2E,
+	domain.FrameworkPlaywright:  domain.CategoryE2E,
+	domain.FrameworkCypress:     domain.CategoryE2E,
+	domain.FrameworkSelenium:    domain.CategoryE2E,
+	domain.FrameworkTestCafe:    domain.CategoryE2E,
+	domain.FrameworkMaestro:     domain.CategoryE2E,
+	domain.FrameworkXCTest:      domain.CategoryE2E,
+	domain.FrameworkEspresso:    domain.CategoryE2E,
+	domain.FrameworkDetox:       domain.CategoryE2E,
+	domain.FrameworkWebdriverIO: domain.CategoryE2E,
+	domain.FrameworkAppium:      domain.CategoryE2E,
 
 	domain.FrameworkNewman: domain.CategoryAPI,
 	domain.FrameworkK6:     domain.CategoryAPI,

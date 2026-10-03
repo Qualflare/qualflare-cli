@@ -464,7 +464,7 @@ var serverAcceptedCategories = map[FrameworkCategory]bool{
 	"vitest": true, "mocha": true, "rspec": true, "phpunit": true, "testng": true,
 	"cucumber": true, "karate": true, "playwright": true, "cypress": true,
 	"selenium": true, "testcafe": true, "maestro": true, "xctest": true,
-	"espresso": true, "newman": true, "k6": true, "zap": true, "trivy": true,
+	"espresso": true, "webdriverio": true, "appium": true, "newman": true, "k6": true, "zap": true, "trivy": true,
 	"snyk": true, "sonarqube": true,
 }
 
