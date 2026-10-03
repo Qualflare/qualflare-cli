@@ -1,0 +1,109 @@
+name: Spike — Flutter test output
+
+# THROWAWAY. Captures the raw JSON reporter stream `flutter test` writes, so
+# the qf collect parser is designed against real output. Raw stdout is kept
+# verbatim, non-JSON lines included: the parser must handle what users' files
+# really contain.
+on:
+  push:
+    branches: [spike/flutter-output]
+
+jobs:
+  widget:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+      - name: Create the fixture app
+        run: |
+          flutter --version > flutter-version.txt
+          flutter create --no-pub spike_app
+          cd spike_app
+          flutter pub add 'dev:integration_test:{"sdk":"flutter"}'
+          rm -f test/widget_test.dart
+          cp ../spike/flutter/tests/widget_cases_test.dart test/
+          cp ../spike/flutter/tests/setup_all_failure_test.dart test/
+          cp ../spike/flutter/tests/broken_test.dart test/
+      - name: --machine (raw stdout)
+        working-directory: spike_app
+        run: flutter test --machine > ../widget-machine.jsonl || true
+      - name: --file-reporter json
+        working-directory: spike_app
+        run: flutter test --file-reporter json:../widget-file-reporter.jsonl || true
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: flutter-output-widget
+          path: |
+            widget-machine.jsonl
+            widget-file-reporter.jsonl
+            flutter-version.txt
+
+  android:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules && sudo udevadm trigger --name-match=kvm
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+      - name: Create the fixture app
+        run: |
+          flutter create --no-pub spike_app
+          cd spike_app
+          flutter pub add 'dev:integration_test:{"sdk":"flutter"}'
+          mkdir -p integration_test
+          cp ../spike/flutter/tests/app_test.dart integration_test/
+      - uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 34
+          arch: x86_64
+          working-directory: spike_app
+          script: flutter test integration_test/app_test.dart -d emulator-5554 --machine > ../device-android.jsonl || true
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: flutter-output-android
+          path: device-android.jsonl
+
+  ios:
+    runs-on: macos-15
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+      - name: Pick and boot an iPhone simulator
+        run: |
+          read -r SIM_UDID SIM_VERSION SIM_NAME < <(
+            xcrun simctl list devices available -j | jq -r '
+              [ .devices | to_entries[]
+                | select(.key | test("SimRuntime.iOS-"))
+                | (.key | capture("iOS-(?<v>[0-9-]+)$").v | gsub("-"; ".")) as $v
+                | .value[] | select(.name | startswith("iPhone"))
+                | { udid, name, v: $v } ]
+              | sort_by(.v | split(".") | map(tonumber)) | last
+              | "\(.udid) \(.v) \(.name)"')
+          xcrun simctl boot "$SIM_UDID" || true
+          xcrun simctl bootstatus "$SIM_UDID" -b
+          echo "SIM_UDID=$SIM_UDID" >> "$GITHUB_ENV"
+      - name: Create the fixture app
+        run: |
+          flutter create --no-pub spike_app
+          cd spike_app
+          flutter pub add 'dev:integration_test:{"sdk":"flutter"}'
+          mkdir -p integration_test
+          cp ../spike/flutter/tests/app_test.dart integration_test/
+      - name: integration_test on the simulator (raw stdout)
+        working-directory: spike_app
+        run: flutter test integration_test/app_test.dart -d "$SIM_UDID" --machine > ../device-ios.jsonl || true
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: flutter-output-ios
+          path: device-ios.jsonl
