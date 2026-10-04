@@ -187,6 +187,20 @@ func TestDeviceCaptures_AndroidAndIOS(t *testing.T) {
 	}
 }
 
+// Synthetic: no capture comes from a Windows runner. A native suite.path and a
+// file:///C:/ root_url must resolve to the same relative path.
+func TestRelativePaths_Windows(t *testing.T) {
+	root := projectRoot([]string{`C:\x\app\test\a_test.dart`})
+	if root != "C:/x/app" {
+		t.Fatalf("projectRoot = %q", root)
+	}
+	for _, p := range []string{`C:\x\app\test\a_test.dart`, "file:///C:/x/app/test/a_test.dart"} {
+		if got := relativePath(p, root); got != "test/a_test.dart" {
+			t.Errorf("relativePath(%q) = %q, want test/a_test.dart", p, got)
+		}
+	}
+}
+
 func TestRelativePaths_LinuxAndMacRunners(t *testing.T) {
 	paths := []string{
 		"/home/runner/work/x/x/app/test/a_test.dart",

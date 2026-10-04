@@ -15,7 +15,16 @@ func normalizePath(p string) string {
 		}
 		p = rest
 	}
-	return strings.ReplaceAll(p, "\\", "/")
+	p = strings.ReplaceAll(p, "\\", "/")
+	// file:///C:/x decodes to /C:/x; drop the slash so it matches a native C:\x.
+	if len(p) >= 3 && p[0] == '/' && p[2] == ':' && isDriveLetter(p[1]) {
+		p = p[1:]
+	}
+	return p
+}
+
+func isDriveLetter(b byte) bool {
+	return (b >= 'a' && b <= 'z') || (b >= 'A' && b <= 'Z')
 }
 
 func isTestDir(segment string) bool {
