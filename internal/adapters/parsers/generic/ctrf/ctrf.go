@@ -72,8 +72,6 @@ const (
 	maxAttemptMessageRunes = 8192
 	maxAttemptTraceRunes   = 32768
 	maxAttemptSnippetRunes = 4096
-	maxAttemptOutputRunes  = 16384
-	maxAttemptOutputLines  = 200
 	maxAttemptUIDRunes     = 255
 )
 
@@ -441,8 +439,8 @@ func attemptsToDomain(t *Test, status domain.Status) []domain.Attempt {
 			Trace:    base.TruncateString(a.Trace, maxAttemptTraceRunes),
 			Snippet:  base.TruncateString(a.Snippet, maxAttemptSnippetRunes),
 			Line:     a.Line,
-			Stdout:   clampOutput(a.Stdout),
-			Stderr:   clampOutput(a.Stderr),
+			Stdout:   base.ClampOutput(a.Stdout),
+			Stderr:   base.ClampOutput(a.Stderr),
 		}
 		if a.Start.IsSet() {
 			started := time.UnixMilli(a.Start.Int64()).UTC()
@@ -464,8 +462,8 @@ func attemptsToDomain(t *Test, status domain.Status) []domain.Attempt {
 			Message:  base.TruncateString(t.Message, maxAttemptMessageRunes),
 			Trace:    base.TruncateString(t.Trace, maxAttemptTraceRunes),
 			Snippet:  base.TruncateString(t.Snippet, maxAttemptSnippetRunes),
-			Stdout:   clampOutput(t.Stdout),
-			Stderr:   clampOutput(t.Stderr),
+			Stdout:   base.ClampOutput(t.Stdout),
+			Stderr:   base.ClampOutput(t.Stderr),
 		}
 		if t.Start.IsSet() {
 			started := time.UnixMilli(t.Start.Int64()).UTC()
@@ -502,28 +500,6 @@ func clampAttempts(in []domain.Attempt) []domain.Attempt {
 	out := make([]domain.Attempt, 0, maxCaseAttempts)
 	out = append(out, in[:maxCaseAttempts-1]...)
 	return append(out, in[len(in)-1])
-}
-
-// clampOutput bounds captured output by lines first, then by runes, matching how
-// the server truncates on write.
-func clampOutput(lines []string) []string {
-	if len(lines) == 0 {
-		return nil
-	}
-	if len(lines) > maxAttemptOutputLines {
-		lines = lines[:maxAttemptOutputLines]
-	}
-	out := make([]string, 0, len(lines))
-	total := 0
-	for _, l := range lines {
-		if total >= maxAttemptOutputRunes {
-			break
-		}
-		l = base.TruncateString(l, maxAttemptOutputRunes-total)
-		total += len([]rune(l))
-		out = append(out, l)
-	}
-	return out
 }
 
 // labelsToDomain flattens CTRF's labels object into name/value pairs. An ARRAY

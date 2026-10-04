@@ -28,8 +28,11 @@ const (
 	// Unit Testing Frameworks
 	FrameworkPython Framework = "python"
 	FrameworkGolang Framework = "golang"
-	FrameworkJest   Framework = "jest"
-	FrameworkVitest Framework = "vitest"
+	// FrameworkFlutter is registered with the parser in a later step; it is not in
+	// AllFrameworks until then.
+	FrameworkFlutter Framework = "flutter"
+	FrameworkJest    Framework = "jest"
+	FrameworkVitest  Framework = "vitest"
 	// FrameworkDetox is an E2E framework whose reports are, at the file-format
 	// level, Jest reports — Detox drives Jest as its test runner. It gets its
 	// own Framework value (rather than reusing FrameworkJest) so a user who

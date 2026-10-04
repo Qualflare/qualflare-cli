@@ -109,3 +109,32 @@ type ContentSignature struct {
 	// FilenamePatterns are patterns to match against filenames
 	FilenamePatterns []string
 }
+
+// Output limits mirroring api-service's MaxAttempt* group; the server truncates
+// on write regardless, so these keep pathological output off the wire.
+const (
+	MaxOutputRunes = 16384
+	MaxOutputLines = 200
+)
+
+// ClampOutput bounds captured output by lines first, then by runes, matching how
+// the server truncates on write.
+func ClampOutput(lines []string) []string {
+	if len(lines) == 0 {
+		return nil
+	}
+	if len(lines) > MaxOutputLines {
+		lines = lines[:MaxOutputLines]
+	}
+	out := make([]string, 0, len(lines))
+	total := 0
+	for _, l := range lines {
+		if total >= MaxOutputRunes {
+			break
+		}
+		l = TruncateString(l, MaxOutputRunes-total)
+		total += len([]rune(l))
+		out = append(out, l)
+	}
+	return out
+}
