@@ -159,6 +159,8 @@ func AllFrameworks() []Framework {
 		FrameworkEspresso,
 		FrameworkWebdriverIO,
 		FrameworkAppium,
+		// The server accepts category "flutter" since api-service migration 0296.
+		FrameworkFlutter,
 		FrameworkNewman,
 		FrameworkK6,
 		FrameworkZAP,

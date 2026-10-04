@@ -1,6 +1,8 @@
 package factory
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -83,5 +85,77 @@ func TestDetectNDJSONRejectsNonJSON(t *testing.T) {
 				t.Errorf("expected detection to fail, got framework %q", got)
 			}
 		})
+	}
+}
+
+// `flutter test --reporter json` (and `--file-reporter json:<path>`) emit NDJSON
+// whose first record is {"protocolVersion":...,"type":"start"}.
+func TestDetect_FlutterMachineAndFileReporter(t *testing.T) {
+	f := NewParserFactory()
+	for _, name := range []string{"widget-machine.jsonl", "widget-file-reporter.jsonl", "device-android.jsonl"} {
+		t.Run(name, func(t *testing.T) {
+			content, err := os.ReadFile(filepath.Join("..", "unit", "flutter", "testdata", name))
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, fn := range []string{"results.json", name} {
+				got, err := f.DetectFrameworkFromContent(fn, content)
+				if err != nil {
+					t.Fatalf("DetectFrameworkFromContent(%s): %v", fn, err)
+				}
+				if got != domain.FrameworkFlutter {
+					t.Errorf("%s: detected %q, want %q", fn, got, domain.FrameworkFlutter)
+				}
+			}
+		})
+	}
+}
+
+// `flutter test -v` on a device prints tool log lines before the JSON stream.
+func TestDetect_FlutterPastLeadingNoise(t *testing.T) {
+	f := NewParserFactory()
+	content, err := os.ReadFile(filepath.Join("..", "unit", "flutter", "testdata", "device-ios.jsonl"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.HasPrefix(string(content), "[") {
+		t.Fatalf("fixture no longer starts with tool log noise: %.40q", content)
+	}
+	got, err := f.DetectFrameworkFromContent("results.json", content)
+	if err != nil {
+		t.Fatalf("DetectFrameworkFromContent: %v", err)
+	}
+	if got != domain.FrameworkFlutter {
+		t.Errorf("detected %q, want %q", got, domain.FrameworkFlutter)
+	}
+}
+
+// Only the first object line within the first 1 MiB is classified.
+func TestDetectNDJSON_ScanLimits(t *testing.T) {
+	f := NewParserFactory()
+	start := `{"protocolVersion":"0.1.1","type":"start","time":0}`
+
+	beyond := strings.Repeat("noise line\n", 100000) + start // > 1 MiB of noise
+	if _, err := f.DetectFrameworkFromContent("results.json", []byte(beyond)); err == nil {
+		t.Error("an object line past the 1 MiB window must not be classified")
+	}
+
+	// Only the FIRST object line is classified: an unknown one stops the scan.
+	second := `{"unknown":1}` + "\n" + start
+	if got, err := f.DetectFrameworkFromContent("results.json", []byte(second)); err == nil {
+		t.Errorf("only the first object line counts, got %q", got)
+	}
+}
+
+func TestDetect_GoTestJSONUnchanged(t *testing.T) {
+	f := NewParserFactory()
+	content := `{"Time":"2024-01-15T10:30:00Z","Action":"run","Package":"example.com/p","Test":"TestX"}` + "\n" +
+		`{"Time":"2024-01-15T10:30:01Z","Action":"pass","Package":"example.com/p","Test":"TestX","Elapsed":0.1}` + "\n"
+	got, err := f.DetectFrameworkFromContent("results.json", []byte(content))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != domain.FrameworkGolang {
+		t.Errorf("detected %q, want %q", got, domain.FrameworkGolang)
 	}
 }

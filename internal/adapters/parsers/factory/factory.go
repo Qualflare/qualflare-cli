@@ -44,6 +44,7 @@ import (
 	"qualflare-cli/internal/adapters/parsers/security/zap"
 
 	// Unit test parsers
+	"qualflare-cli/internal/adapters/parsers/unit/flutter"
 	"qualflare-cli/internal/adapters/parsers/unit/golang"
 	"qualflare-cli/internal/adapters/parsers/unit/jest"
 	"qualflare-cli/internal/adapters/parsers/unit/mocha"
@@ -74,6 +75,7 @@ func NewParserFactory() *ParserFactory {
 	// Unit Testing Parsers
 	f.RegisterParser(pytest.New())
 	f.RegisterParser(golang.New())
+	f.RegisterParser(flutter.New())
 	f.RegisterParser(jest.New())
 	// Vitest emits Jest-compatible JSON, so the Jest parser serves both. The
 	// map is keyed by GetFramework(), which can only name one slug, so the
@@ -211,6 +213,10 @@ func (f *ParserFactory) DetectFramework(filename string) (domain.Framework, erro
 		return domain.FrameworkAppium, nil
 	case strings.Contains(base, "selenium") || strings.Contains(base, "webdriver"):
 		return domain.FrameworkSelenium, nil
+	// Flutter reports are NDJSON, so content detection normally decides; this
+	// is the fallback for a file named after the tool.
+	case strings.Contains(base, "flutter"):
+		return domain.FrameworkFlutter, nil
 	case strings.Contains(base, "maestro"):
 		return domain.FrameworkMaestro, nil
 	case strings.Contains(base, "xctest") || strings.Contains(base, "xcresult"):
@@ -267,7 +273,7 @@ func (f *ParserFactory) DetectFrameworkFromContent(filename string, content []by
 
 	// Try content-based detection
 	switch ext {
-	case ".json":
+	case ".json", ".jsonl":
 		framework, err := f.detectJSONFramework(content)
 		if err == nil {
 			return framework, nil
@@ -303,33 +309,52 @@ func (f *ParserFactory) DetectFrameworkFromContent(filename string, content []by
 	return framework, nil
 }
 
+// ndjsonScanLimit bounds how much of a file detectNDJSONFramework looks at when
+// searching for the first JSON object line.
+const ndjsonScanLimit = 1 << 20
+
 // detectNDJSONFramework detects the framework from newline-delimited JSON by
-// examining the FIRST record only.
+// classifying the FIRST object line only.
 //
 // One line is enough: the object-key registry that classifies a JSON document
 // looks at top-level keys, and every record in an NDJSON stream shares a shape.
 // Reading only the first also keeps this cheap on a large go-test log, which can
 // run to tens of megabytes.
 //
+// Lines that are not a complete JSON object are skipped, but only within the
+// first 1 MiB: `flutter test -v` on a device prints tool log lines ("[  +63 ms]
+// executing: ...", sometimes a pretty-printed dump with a bare "{" line) ahead
+// of the JSON stream. The first line that parses as an object is the one
+// classified; if it is unknown the scan stops rather than hunting further.
+//
 // Deliberately no more permissive than the single-document path — it hands the
 // parsed object to the same detectJSONObjectFramework registry, so NDJSON cannot
 // match anything a single JSON object would not.
 func (f *ParserFactory) detectNDJSONFramework(content []byte) (domain.Framework, error) {
-	line := content
-	if i := bytes.IndexByte(content, '\n'); i >= 0 {
-		line = content[:i]
+	if len(content) > ndjsonScanLimit {
+		content = content[:ndjsonScanLimit]
 	}
-	line = bytes.TrimSpace(line)
+	for len(content) > 0 {
+		line := content
+		if i := bytes.IndexByte(content, '\n'); i >= 0 {
+			line, content = content[:i], content[i+1:]
+		} else {
+			content = nil
+		}
+		line = bytes.TrimSpace(line)
+		if len(line) == 0 || line[0] != '{' {
+			continue
+		}
+		var obj map[string]interface{}
+		if err := json.Unmarshal(line, &obj); err != nil {
+			// A lone "{" from a pretty-printed dump in the tool log is not a
+			// record; keep looking.
+			continue
+		}
+		return f.detectJSONObjectFramework(obj, false)
+	}
 	// A single unparseable document is not NDJSON; only an object per line is.
-	if len(line) == 0 || line[0] != '{' {
-		return "", errors.New("content is neither a JSON document nor NDJSON")
-	}
-
-	var obj map[string]interface{}
-	if err := json.Unmarshal(line, &obj); err != nil {
-		return "", err
-	}
-	return f.detectJSONObjectFramework(obj, false)
+	return "", errors.New("content is neither a JSON document nor NDJSON")
 }
 
 // detectJSONFramework detects the framework from JSON content
@@ -424,6 +449,11 @@ var jsonDetectors = []jsonDetector{
 	{func(obj map[string]interface{}, _ bool) bool { return hasKeys(obj, "site", "@version") }, domain.FrameworkZAP, false},
 	{func(obj map[string]interface{}, _ bool) bool { return hasKeys(obj, "issues", "paging") }, domain.FrameworkSonarQube, false},
 	{func(obj map[string]interface{}, _ bool) bool { return hasKeys(obj, "Action", "Package") }, domain.FrameworkGolang, false},
+	// `flutter test --reporter json` / `--file-reporter json:<path>`: the
+	// stream opens with {"protocolVersion":...,"type":"start",...}.
+	{func(obj map[string]interface{}, _ bool) bool {
+		return hasKeys(obj, "protocolVersion", "type") && obj["type"] == "start"
+	}, domain.FrameworkFlutter, false},
 	{func(obj map[string]interface{}, _ bool) bool { return hasKey(obj, "examples") }, domain.FrameworkRSpec, false},
 	{func(obj map[string]interface{}, isArray bool) bool {
 		return isArray && hasKeys(obj, "elements", "keyword")

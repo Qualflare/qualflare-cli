@@ -207,13 +207,28 @@ Run `qf <command> --help` for flags and examples.
 | **Generic (JUnit-compatible)** | JUnit, CTRF, `qualflare-json` (the Collect JSON written by every `@qualflare/*` reporter — playwright, cypress, cucumberjs, vitest, jest — for merging sharded-CI output) |
 | **Unit Testing** | pytest, Go testing, Jest/Vitest, Mocha, RSpec, PHPUnit, TestNG |
 | **BDD** | Cucumber, Karate |
-| **UI / E2E / Mobile** | Playwright, Cypress, Selenium, TestCafe, Maestro, XCTest, Espresso, Detox, WebdriverIO, Appium |
+| **UI / E2E / Mobile** | Playwright, Cypress, Selenium, TestCafe, Maestro, XCTest, Espresso, Detox, WebdriverIO, Appium, Flutter |
 | **API Testing** | Newman (Postman), k6 |
 | **Security** | OWASP ZAP, Trivy, Snyk, SonarQube |
 
 Format is auto-detected from the filename and file content. Pass `--format <name>` to override. Run `qf list-formats` for all valid format names.
 
 Any framework that emits standard JUnit XML — NUnit, MSTest, xUnit.net, Robot Framework, and others — can be uploaded using `--format junit`. Because all JUnit emitters share the same XML schema, use `--format <name>` (or a recognizable filename like `maestro-results.xml`) to disambiguate Maestro, XCTest, Espresso, and TestNG outputs from generic JUnit.
+
+### Flutter
+
+Flutter's test runner has no pluggable reporter, so `qf` reads its built-in JSON stream:
+
+```bash
+flutter test --file-reporter json:flutter-results.json
+qf myapp collect flutter-results.json
+
+# integration_test on a device: the stream never names the device
+flutter test integration_test/ -d <device> --file-reporter json:flutter-results.json
+qf myapp collect flutter-results.json --platform android   # or ios
+```
+
+Widget, unit and `integration_test` results are uploaded with their failure messages, per-attempt retries and `print` output.
 
 ### Framework artifacts on disk
 

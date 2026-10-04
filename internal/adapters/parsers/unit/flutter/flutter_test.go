@@ -493,3 +493,13 @@ func TestWidgetErrorWithoutBlock_KeepsGenericMessage(t *testing.T) {
 		t.Errorf("status=%s error=%q", c.Status, c.Error)
 	}
 }
+
+// Once flutter is in domain.AllFrameworks, the suite's category is the
+// framework itself (which the server accepts since api-service migration 0296),
+// not the "generic" fallback.
+func TestParse_SuiteCategoryIsFlutter(t *testing.T) {
+	suite := parseFixture(t, "widget-machine.jsonl")
+	if string(suite.Category) != "flutter" {
+		t.Errorf("Suite.Category = %q, want %q", suite.Category, "flutter")
+	}
+}
