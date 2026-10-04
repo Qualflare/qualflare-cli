@@ -169,3 +169,49 @@ jobs:
           distribution: goreleaser
           version: v2.15.4
           args: check
+
+  flutter-parser:
+    name: Flutter Parser
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: '1.26.8'
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2.23.0
+        with:
+          channel: stable
+
+      # The fixture fails one test on purpose (and retries another), so flutter test
+      # exits non-zero; what matters is that it wrote a results file.
+      - name: Run the Flutter fixture suite
+        working-directory: examples/flutter-project
+        run: |
+          set -euo pipefail
+          flutter pub get
+          flutter test --file-reporter json:flutter-results.json || true
+          test -s flutter-results.json
+
+      - name: Parse the results with qf
+        run: |
+          set -euo pipefail
+          go build -o "$RUNNER_TEMP/qf" ./cmd
+          # --dry-run needs a configured identifier but never contacts the API, so a
+          # throwaway config with a dummy token is enough.
+          export XDG_CONFIG_HOME="$RUNNER_TEMP/xdg"
+          mkdir -p "$XDG_CONFIG_HOME/qualflare"
+          printf 'schema_version = 1\n[identifiers.demo]\ntoken = "dry-run"\n' > "$XDG_CONFIG_HOME/qualflare/config.toml"
+          chmod 600 "$XDG_CONFIG_HOME/qualflare/config.toml"
+          "$RUNNER_TEMP/qf" demo collect examples/flutter-project/flutter-results.json --dry-run -o json > parsed.json
+          cat parsed.json
+          jq -e '.framework == "flutter"' parsed.json
+          jq -e '[.suites[].cases[]] | length == 4' parsed.json
+          jq -e '[.suites[].cases[] | select(.status == "failed")] | length == 1' parsed.json
+          jq -e '[.suites[].cases[] | select(.status == "skipped")] | length == 1' parsed.json
+          jq -e '[.suites[].cases[] | select(.isFlaky == true and (.attempts | length) == 2)] | length == 1' parsed.json

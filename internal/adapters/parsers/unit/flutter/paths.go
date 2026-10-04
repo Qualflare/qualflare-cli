@@ -1,0 +1,96 @@
+package flutter
+
+import (
+	"net/url"
+	"path"
+	"strings"
+)
+
+// normalizePath strips a file:// prefix (decoding percent escapes) and turns
+// backslashes into slashes so Windows runners compare like the others.
+func normalizePath(p string) string {
+	if rest, ok := strings.CutPrefix(p, "file://"); ok {
+		if dec, err := url.PathUnescape(rest); err == nil {
+			rest = dec
+		}
+		p = rest
+	}
+	p = strings.ReplaceAll(p, "\\", "/")
+	// file:///C:/x decodes to /C:/x; drop the slash so it matches a native C:\x.
+	if len(p) >= 3 && p[0] == '/' && p[2] == ':' && isDriveLetter(p[1]) {
+		p = p[1:]
+	}
+	return p
+}
+
+func isDriveLetter(b byte) bool {
+	return (b >= 'a' && b <= 'z') || (b >= 'A' && b <= 'Z')
+}
+
+func isTestDir(segment string) bool {
+	return segment == "test" || segment == "integration_test"
+}
+
+// projectRoot returns the Flutter project root implied by the suite paths: the
+// longest directory prefix shared by all of them that ends just before a test/
+// or integration_test/ segment. It returns "" when there is none.
+func projectRoot(suitePaths []string) string {
+	var common []string
+	for i, p := range suitePaths {
+		segs := strings.Split(path.Dir(normalizePath(p)), "/")
+		if i == 0 {
+			common = segs
+			continue
+		}
+		n := 0
+		for n < len(common) && n < len(segs) && common[n] == segs[n] {
+			n++
+		}
+		common = common[:n]
+	}
+	// The paths may diverge exactly at the test directories (test/ vs
+	// integration_test/), leaving the root as the whole shared prefix.
+	if len(suitePaths) > 0 {
+		diverge := true
+		for _, p := range suitePaths {
+			segs := strings.Split(normalizePath(p), "/")
+			if len(segs) <= len(common) || !isTestDir(segs[len(common)]) {
+				diverge = false
+				break
+			}
+		}
+		if diverge {
+			return strings.Join(common, "/")
+		}
+	}
+	for i := len(common) - 1; i >= 0; i-- {
+		if isTestDir(common[i]) {
+			return strings.Join(common[:i], "/")
+		}
+	}
+	return ""
+}
+
+// relativePath makes p relative to root. A path outside root, or with no
+// test/ or integration_test/ segment right after it, falls back to its last test/ or integration_test/
+// segment onward, or to its base name when it has neither.
+func relativePath(p, root string) string {
+	p = normalizePath(p)
+	if root != "" {
+		if rest, ok := strings.CutPrefix(p, root+"/"); ok {
+			first, _, _ := strings.Cut(rest, "/")
+			if isTestDir(first) {
+				return rest
+			}
+		}
+	}
+	// No shared root (several packages, or a stray path): keep the part from
+	// the last test/ or integration_test/ segment.
+	segs := strings.Split(p, "/")
+	for i := len(segs) - 2; i >= 0; i-- {
+		if isTestDir(segs[i]) {
+			return strings.Join(segs[i:], "/")
+		}
+	}
+	return path.Base(p)
+}

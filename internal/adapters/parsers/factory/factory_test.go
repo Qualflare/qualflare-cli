@@ -56,6 +56,7 @@ func TestParserFactory_DetectFramework_FilenamePatterns(t *testing.T) {
 		{"pytest-results.xml", domain.FrameworkPython},
 		{"cucumber-report.json", domain.FrameworkCucumber},
 		{"karate-summary.json", domain.FrameworkKarate},
+		{"flutter-results.json", domain.FrameworkFlutter},
 		{"results.xml", domain.FrameworkJUnit}, // default for XML
 	}
 

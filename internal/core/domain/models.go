@@ -26,10 +26,11 @@ const (
 	FrameworkCTRF Framework = "ctrf"
 
 	// Unit Testing Frameworks
-	FrameworkPython Framework = "python"
-	FrameworkGolang Framework = "golang"
-	FrameworkJest   Framework = "jest"
-	FrameworkVitest Framework = "vitest"
+	FrameworkPython  Framework = "python"
+	FrameworkGolang  Framework = "golang"
+	FrameworkFlutter Framework = "flutter"
+	FrameworkJest    Framework = "jest"
+	FrameworkVitest  Framework = "vitest"
 	// FrameworkDetox is an E2E framework whose reports are, at the file-format
 	// level, Jest reports — Detox drives Jest as its test runner. It gets its
 	// own Framework value (rather than reusing FrameworkJest) so a user who
@@ -156,6 +157,8 @@ func AllFrameworks() []Framework {
 		FrameworkEspresso,
 		FrameworkWebdriverIO,
 		FrameworkAppium,
+		// The server accepts category "flutter" since api-service migration 0296.
+		FrameworkFlutter,
 		FrameworkNewman,
 		FrameworkK6,
 		FrameworkZAP,

@@ -82,7 +82,7 @@ Supported frameworks:
   Unit Testing:    python, golang, jest, vitest, mocha, rspec, phpunit, testng
   BDD:             cucumber, karate
   UI/E2E/Mobile:   playwright, cypress, selenium, testcafe, maestro, xctest, espresso, detox,
-                   webdriverio, appium
+                   webdriverio, appium, flutter
   API Testing:     newman, k6
   Security:        zap, trivy, snyk, sonarqube`,
 		SilenceUsage:  true,
@@ -844,6 +844,7 @@ var frameworkDisplayGroups = map[domain.Framework]domain.FrameworkCategory{
 	domain.FrameworkDetox:       domain.CategoryE2E,
 	domain.FrameworkWebdriverIO: domain.CategoryE2E,
 	domain.FrameworkAppium:      domain.CategoryE2E,
+	domain.FrameworkFlutter:     domain.CategoryE2E,
 
 	domain.FrameworkNewman: domain.CategoryAPI,
 	domain.FrameworkK6:     domain.CategoryAPI,
