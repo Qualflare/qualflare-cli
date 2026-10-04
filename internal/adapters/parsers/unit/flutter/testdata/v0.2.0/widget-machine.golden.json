@@ -1,0 +1,128 @@
+{
+  "name": "Flutter Tests",
+  "category": "flutter",
+  "total": 8,
+  "passed": 3,
+  "failed": 1,
+  "skipped": 1,
+  "errors": 3,
+  "duration": 7890000000,
+  "timestamp": "0001-01-01T00:00:00Z",
+  "properties": {
+    "platform": "vm"
+  },
+  "cases": [
+    {
+      "id": "test/setup_all_failure_test.dart#with a broken setUpAll (setUpAll)",
+      "name": "with a broken setUpAll (setUpAll)",
+      "className": "test/setup_all_failure_test.dart",
+      "status": "error",
+      "duration": 29000000,
+      "error": "Bad state: setUpAll exploded\n\ntest/setup_all_failure_test.dart 5:20  main.\u003cfn\u003e.\u003cfn\u003e",
+      "properties": {
+        "file": "test/setup_all_failure_test.dart",
+        "line": "5"
+      }
+    },
+    {
+      "id": "test/broken_test.dart#loading test/broken_test.dart",
+      "name": "loading test/broken_test.dart",
+      "className": "test/broken_test.dart",
+      "status": "error",
+      "duration": 441000000,
+      "error": "Failed to load \"/home/runner/work/qualflare-cli/qualflare-cli/spike_app/test/broken_test.dart\":\nCompilation failed for testPath=/home/runner/work/qualflare-cli/qualflare-cli/spike_app/test/broken_test.dart: test/broken_test.dart:5:19: Error: A value of type 'String' can't be assigned to a variable of type 'int'.\n    final int x = 'not an int';\n                  ^\n.",
+      "properties": {
+        "file": "test/broken_test.dart"
+      }
+    },
+    {
+      "id": "test/widget_cases_test.dart#login screen shows a title",
+      "name": "login screen shows a title",
+      "className": "test/widget_cases_test.dart",
+      "status": "passed",
+      "duration": 380000000,
+      "properties": {
+        "file": "test/widget_cases_test.dart",
+        "line": "8"
+      }
+    },
+    {
+      "id": "test/widget_cases_test.dart#login screen fails an expectation",
+      "name": "login screen fails an expectation",
+      "className": "test/widget_cases_test.dart",
+      "status": "failed",
+      "duration": 96000000,
+      "error": "Expected: exactly one matching candidate\n  Actual: _TextWidgetFinder:\u003cFound 0 widgets with text \"Sign out\": []\u003e\n   Which: means none were found but one was expected\n\n#4      main.\u003canonymous closure\u003e.\u003canonymous closure\u003e (file:///home/runner/work/qualflare-cli/qualflare-cli/spike_app/test/widget_cases_test.dart:15:7)\n\u003casynchronous suspension\u003e\n#5      testWidgets.\u003canonymous closure\u003e.\u003canonymous closure\u003e (package:flutter_test/src/widget_tester.dart:192:15)\n\u003casynchronous suspension\u003e\n#6      TestWidgetsFlutterBinding._runTestBody (package:flutter_test/src/binding.dart:1953:5)\n\u003casynchronous suspension\u003e\n\u003casynchronous suspension\u003e\n(elided one frame from package:stack_trace)\n\nThis was caught by the test expectation on the following line:\n  file:///home/runner/work/qualflare-cli/qualflare-cli/spike_app/test/widget_cases_test.dart line 15\nThe test description was:\n  fails an expectation",
+      "properties": {
+        "file": "test/widget_cases_test.dart",
+        "line": "13"
+      }
+    },
+    {
+      "id": "test/widget_cases_test.dart#login screen throws an error",
+      "name": "login screen throws an error",
+      "className": "test/widget_cases_test.dart",
+      "status": "error",
+      "duration": 15000000,
+      "error": "StateError: Bad state: boom\n\n#0      main.\u003canonymous closure\u003e.\u003canonymous closure\u003e (file:///home/runner/work/qualflare-cli/qualflare-cli/spike_app/test/widget_cases_test.dart:19:7)\n#1      testWidgets.\u003canonymous closure\u003e.\u003canonymous closure\u003e (package:flutter_test/src/widget_tester.dart:192:29)\n\u003casynchronous suspension\u003e\n#2      TestWidgetsFlutterBinding._runTestBody (package:flutter_test/src/binding.dart:1953:5)\n\u003casynchronous suspension\u003e\n\u003casynchronous suspension\u003e\n(elided one frame from package:stack_trace)\n\nThe test description was:\n  throws an error",
+      "properties": {
+        "file": "test/widget_cases_test.dart",
+        "line": "18"
+      }
+    },
+    {
+      "id": "test/widget_cases_test.dart#login screen is skipped",
+      "name": "login screen is skipped",
+      "className": "test/widget_cases_test.dart",
+      "status": "skipped",
+      "duration": 0,
+      "properties": {
+        "file": "test/widget_cases_test.dart",
+        "line": "22"
+      }
+    },
+    {
+      "id": "test/widget_cases_test.dart#login screen prints output",
+      "name": "login screen prints output",
+      "className": "test/widget_cases_test.dart",
+      "status": "passed",
+      "duration": 8000000,
+      "properties": {
+        "file": "test/widget_cases_test.dart",
+        "line": "24",
+        "system-out": "hello from a widget test"
+      }
+    },
+    {
+      "id": "test/widget_cases_test.dart#login screen passes on the third attempt",
+      "name": "login screen passes on the third attempt",
+      "className": "test/widget_cases_test.dart",
+      "status": "passed",
+      "duration": 18000000,
+      "retryCount": 2,
+      "isFlaky": true,
+      "attempts": [
+        {
+          "attempt": 1,
+          "status": "failed",
+          "message": "Expected: \u003c3\u003e\n  Actual: \u003c1\u003e",
+          "trace": "package:matcher                                     expect\npackage:flutter_test/src/widget_tester.dart 473:18  expect\ntest/widget_cases_test.dart 31:7                    main.\u003cfn\u003e.\u003cfn\u003e"
+        },
+        {
+          "attempt": 2,
+          "status": "failed",
+          "message": "Expected: \u003c3\u003e\n  Actual: \u003c2\u003e",
+          "trace": "package:matcher                                     expect\npackage:flutter_test/src/widget_tester.dart 473:18  expect\ntest/widget_cases_test.dart 31:7                    main.\u003cfn\u003e.\u003cfn\u003e"
+        },
+        {
+          "attempt": 3,
+          "status": "passed"
+        }
+      ],
+      "properties": {
+        "file": "test/widget_cases_test.dart",
+        "line": "29"
+      }
+    }
+  ]
+}

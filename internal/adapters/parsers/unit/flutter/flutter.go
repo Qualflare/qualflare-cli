@@ -192,6 +192,11 @@ func (p *Parser) Parse(reader io.Reader) (*domain.Suite, error) {
 			if st == nil || ev.MessageType != "print" {
 				continue
 			}
+			// Markers belong to the running test; one printed after its
+			// testDone is ignored rather than surfacing as output.
+			if st.done && isMarkerLine(ev.Message) {
+				continue
+			}
 			if ev.Message == retryPrefix+st.name {
 				st.retries = append(st.retries, retryMark{len(st.errors), len(st.prints)})
 			} else {
@@ -268,6 +273,13 @@ func buildCase(st *testState, root string) domain.Case {
 	}
 
 	slices := splitAttempts(st)
+	// Marker lines become case metadata and leave each attempt's output.
+	sets := make([]markerSet, len(slices))
+	for i := range slices {
+		sets[i], slices[i].prints = extractMarkers(slices[i].prints)
+	}
+	warnings := applyMarkers(&c, sets)
+
 	final := slices[len(slices)-1]
 	finalOut := final.resolve(st.result)
 
@@ -279,6 +291,9 @@ func buildCase(st *testState, root string) domain.Case {
 		} else {
 			outLines = append(outLines, s.resolve("").out...)
 		}
+	}
+	for _, w := range warnings {
+		outLines = append(outLines, "qualflare: "+w)
 	}
 	if out := strings.Join(base.ClampOutput(outLines), "\n"); out != "" {
 		c.Properties[propSystemOut] = out
