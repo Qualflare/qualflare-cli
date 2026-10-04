@@ -1,0 +1,36 @@
+{
+  "name": "Flutter Tests",
+  "category": "flutter",
+  "total": 2,
+  "passed": 1,
+  "failed": 1,
+  "skipped": 0,
+  "duration": 204115000000,
+  "timestamp": "0001-01-01T00:00:00Z",
+  "properties": {
+    "platform": "vm"
+  },
+  "cases": [
+    {
+      "id": "integration_test/app_test.dart#counter app starts at zero",
+      "name": "counter app starts at zero",
+      "className": "integration_test/app_test.dart",
+      "status": "passed",
+      "duration": 419000000,
+      "properties": {
+        "file": "integration_test/app_test.dart"
+      }
+    },
+    {
+      "id": "integration_test/app_test.dart#counter app fails on device",
+      "name": "counter app fails on device",
+      "className": "integration_test/app_test.dart",
+      "status": "failed",
+      "duration": 16614000000,
+      "error": "Expected: exactly one matching candidate\n  Actual: _TextWidgetFinder:\u003cFound 0 widgets with text \"1\": []\u003e\n   Which: means none were found but one was expected\n\n#4      main.\u003canonymous closure\u003e.\u003canonymous closure\u003e (file:///Users/runner/work/qualflare-cli/qualflare-cli/spike_app/integration_test/app_test.dart:16:7)\n\u003casynchronous suspension\u003e\n#5      testWidgets.\u003canonymous closure\u003e.\u003canonymous closure\u003e (package:flutter_test/src/widget_tester.dart:192:15)\n\u003casynchronous suspension\u003e\n#6      TestWidgetsFlutterBinding._runTestBody (package:flutter_test/src/binding.dart:1953:5)\n\u003casynchronous suspension\u003e\n\u003casynchronous suspension\u003e\n(elided one frame from package:stack_trace)\n\nThis was caught by the test expectation on the following line:\n  file:///Users/runner/work/qualflare-cli/qualflare-cli/spike_app/integration_test/app_test.dart line 16\nThe test description was:\n  fails on device",
+      "properties": {
+        "file": "integration_test/app_test.dart"
+      }
+    }
+  ]
+}

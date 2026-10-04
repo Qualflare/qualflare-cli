@@ -123,6 +123,15 @@ const (
 	MaxAttemptTraceRunes   = 32768
 )
 
+// Inline attachment limits for attachments that travel as base64 inside the
+// report body rather than being uploaded separately. The budget is per parse,
+// matching the JVM reporters' own 8 MiB so one family-wide number governs how
+// much rides in a report body.
+const (
+	MaxInlineAttachmentBytes = 1 << 20 // 1 MiB for any single attachment
+	MaxInlineTotalBytes      = 8 << 20 // 8 MiB across the whole run
+)
+
 // ClampOutput bounds captured output by lines first, then by runes, matching how
 // the server truncates on write.
 func ClampOutput(lines []string) []string {

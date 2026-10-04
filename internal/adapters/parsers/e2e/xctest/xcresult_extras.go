@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"qualflare-cli/internal/adapters/parsers/base"
 	"qualflare-cli/internal/adapters/parsers/shared/toolrun"
 	"qualflare-cli/internal/core/domain"
 )
@@ -30,13 +31,8 @@ import (
 // nodeIdentifier, result) are safe; anything else would work in CI and break
 // on a developer's laptop.
 
-// Attachments are inlined up to these limits and take the artifact route
-// beyond them. The budget is per parse, matching the JVM reporters' own 8 MiB
-// so one family-wide number governs how much rides in a report body.
-const (
-	maxInlineAttachmentBytes = 1 << 20 // 1 MiB for any single attachment
-	maxInlineTotalBytes      = 8 << 20 // 8 MiB across the whole run
-)
+// Attachments are inlined up to base.MaxInlineAttachmentBytes and
+// base.MaxInlineTotalBytes and take the artifact route beyond them.
 
 // testDetailsResponse mirrors `xcresulttool get test-results test-details`.
 type testDetailsResponse struct {
@@ -241,7 +237,7 @@ func attachmentsFromManifest(manifest []byte, dir string) (map[string][]domain.A
 			case strings.HasPrefix(att.MimeType, "image/"):
 				att.LocalPath = path
 				att.ArtifactKind = domain.ArtifactKindImage
-			case info.Size() <= maxInlineAttachmentBytes && inlined+info.Size() <= maxInlineTotalBytes:
+			case info.Size() <= base.MaxInlineAttachmentBytes && inlined+info.Size() <= base.MaxInlineTotalBytes:
 				content, err := os.ReadFile(path)
 				if err != nil {
 					continue
