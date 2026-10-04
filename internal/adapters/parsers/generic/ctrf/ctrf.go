@@ -69,8 +69,8 @@ const (
 // there, not to enforce correctness.
 const (
 	maxCaseAttempts        = 50
-	maxAttemptMessageRunes = 8192
-	maxAttemptTraceRunes   = 32768
+	maxAttemptMessageRunes = base.MaxAttemptMessageRunes
+	maxAttemptTraceRunes   = base.MaxAttemptTraceRunes
 	maxAttemptSnippetRunes = 4096
 	maxAttemptUIDRunes     = 255
 )

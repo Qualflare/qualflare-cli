@@ -6,7 +6,11 @@ import (
 )
 
 const (
-	exceptionHeader = "══╡ EXCEPTION CAUGHT BY FLUTTER TEST FRAMEWORK ╞"
+	// exceptionHeader is the prefix of every dumpErrorToConsole header; the rest
+	// names the catching library (FLUTTER TEST FRAMEWORK, RENDERING LIBRARY, ...).
+	exceptionHeader = "══╡ EXCEPTION CAUGHT BY "
+	// maxBlockLines bounds the body of a block that never closes.
+	maxBlockLines   = 2000
 	exceptionStack  = "When the exception was thrown, this was the stack:"
 	exceptionClose  = "════"
 	genericFailure  = "Test failed. See exception logs above."
@@ -52,11 +56,16 @@ func parseExceptionBlock(prints []string) (block exceptionBlock, rest []string, 
 	}
 
 	end := len(lines)
-	for i := start + 2; i < len(lines); i++ {
+	limit := min(len(lines), start+2+maxBlockLines)
+	found := false
+	for i := start + 2; i < limit; i++ {
 		if strings.HasPrefix(lines[i], exceptionClose) {
-			end = i
+			end, found = i, true
 			break
 		}
+	}
+	if !found {
+		end = limit
 	}
 	body := lines[start+2 : end]
 	msgLines, stackLines := body, []string(nil)
@@ -73,8 +82,11 @@ func parseExceptionBlock(prints []string) (block exceptionBlock, rest []string, 
 		stack:   trimBlank(stackLines),
 	}
 	rest = append(rest, lines[:start]...)
+	if found {
+		end++
+	}
 	if end < len(lines) {
-		rest = append(rest, lines[end+1:]...)
+		rest = append(rest, lines[end:]...)
 	}
 	return block, rest, true
 }

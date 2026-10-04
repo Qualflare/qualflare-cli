@@ -391,6 +391,11 @@ func TestRetriedTest_PerAttemptHistory(t *testing.T) {
 			t.Errorf("attempt %d = %+v", i, a)
 		}
 	}
+	for i, a := range c.Attempts {
+		if a.Message != strings.TrimRight(a.Message, " \n") || a.Trace != strings.TrimRight(a.Trace, " \n") {
+			t.Errorf("attempt %d has trailing whitespace: %q / %q", i, a.Message, a.Trace)
+		}
+	}
 	if a := c.Attempts[2]; a.Number != 3 || a.Status != domain.StatusPassed {
 		t.Errorf("attempt 3 = %+v", a)
 	}

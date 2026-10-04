@@ -98,10 +98,16 @@ func (a attemptSlice) resolve(result string) outcome {
 		status = domain.StatusFailed
 	}
 	o.status = status
-	o.message = strings.Join(msgs, "\n\n")
-	o.trace = strings.Join(traces, "\n\n")
-	o.text = strings.Join(texts, "\n\n")
+	o.message = capText(strings.Join(msgs, "\n\n"), base.MaxAttemptMessageRunes)
+	o.trace = capText(strings.Join(traces, "\n\n"), base.MaxAttemptTraceRunes)
+	o.text = capText(strings.Join(texts, "\n\n"), base.MaxAttemptMessageRunes+base.MaxAttemptTraceRunes)
 	return o
+}
+
+// capText drops trailing whitespace (the stream's text ends in a newline) and
+// bounds the text to max bytes.
+func capText(s string, max int) string {
+	return base.TruncateString(strings.TrimRight(s, " \t\r\n"), max)
 }
 
 // buildAttempts renders every attempt but the last as a failed attempt, and the

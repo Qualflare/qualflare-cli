@@ -213,16 +213,17 @@ func (f *ParserFactory) DetectFramework(filename string) (domain.Framework, erro
 		return domain.FrameworkAppium, nil
 	case strings.Contains(base, "selenium") || strings.Contains(base, "webdriver"):
 		return domain.FrameworkSelenium, nil
-	// Flutter reports are NDJSON, so content detection normally decides; this
-	// is the fallback for a file named after the tool.
-	case strings.Contains(base, "flutter"):
-		return domain.FrameworkFlutter, nil
 	case strings.Contains(base, "maestro"):
 		return domain.FrameworkMaestro, nil
 	case strings.Contains(base, "xctest") || strings.Contains(base, "xcresult"):
 		return domain.FrameworkXCTest, nil
 	case strings.Contains(base, "espresso"):
 		return domain.FrameworkEspresso, nil
+	// Flutter reports are NDJSON, so content detection normally decides; this
+	// is the fallback for a file named after the tool. After the bundle rules so
+	// "flutter_ios.xcresult" stays XCTest.
+	case strings.Contains(base, "flutter"):
+		return domain.FrameworkFlutter, nil
 
 	// API tools
 	case strings.Contains(base, "newman") || strings.Contains(base, "postman"):
@@ -353,7 +354,7 @@ func (f *ParserFactory) detectNDJSONFramework(content []byte) (domain.Framework,
 		}
 		return f.detectJSONObjectFramework(obj, false)
 	}
-	// A single unparseable document is not NDJSON; only an object per line is.
+	// No object line was found within the scan window.
 	return "", errors.New("content is neither a JSON document nor NDJSON")
 }
 

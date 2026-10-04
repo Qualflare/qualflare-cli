@@ -99,6 +99,7 @@ type testState struct {
 	skipReason string
 	errors     []testError
 	prints     []string
+	noURL      bool        // testStart carried no url (a failed load pseudo-test)
 	retries    []retryMark // one per `Retry:` print, in order
 }
 
@@ -232,7 +233,7 @@ func (p *Parser) Parse(reader io.Reader) (*domain.Suite, error) {
 // flutter_test, with the user's own in root_url/root_line, so those win; a
 // location that is not a file (package:...) falls back to the suite's path.
 func newTestState(t *testInfo, suitePath string, start int64) *testState {
-	st := &testState{id: t.ID, name: t.Name, file: suitePath, start: start}
+	st := &testState{id: t.ID, name: t.Name, file: suitePath, start: start, noURL: t.URL == nil && t.RootURL == nil}
 	if t.Metadata.SkipReason != nil {
 		st.skipReason = *t.Metadata.SkipReason
 	}
@@ -250,7 +251,7 @@ func buildCase(st *testState, root string) domain.Case {
 	file := relativePath(st.file, root)
 	name := st.name
 	// A failed load is named after the file; its raw name carries an absolute path.
-	if rest, ok := strings.CutPrefix(name, "loading "); ok {
+	if rest, ok := strings.CutPrefix(name, "loading "); ok && st.noURL {
 		name = "loading " + relativePath(rest, root)
 	}
 

@@ -72,7 +72,8 @@ func projectRoot(suitePaths []string) string {
 }
 
 // relativePath makes p relative to root. A path outside root, or with no
-// test/ or integration_test/ segment right after it, falls back to its base name.
+// test/ or integration_test/ segment right after it, falls back to its last test/ or integration_test/
+// segment onward, or to its base name when it has neither.
 func relativePath(p, root string) string {
 	p = normalizePath(p)
 	if root != "" {
@@ -81,6 +82,14 @@ func relativePath(p, root string) string {
 			if isTestDir(first) {
 				return rest
 			}
+		}
+	}
+	// No shared root (several packages, or a stray path): keep the part from
+	// the last test/ or integration_test/ segment.
+	segs := strings.Split(p, "/")
+	for i := len(segs) - 2; i >= 0; i-- {
+		if isTestDir(segs[i]) {
+			return strings.Join(segs[i:], "/")
 		}
 	}
 	return path.Base(p)

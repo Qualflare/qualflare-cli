@@ -159,3 +159,19 @@ func TestDetect_GoTestJSONUnchanged(t *testing.T) {
 		t.Errorf("detected %q, want %q", got, domain.FrameworkGolang)
 	}
 }
+
+// A directory named after flutter but holding an .xcresult is an XCTest bundle
+// (DetectFramework is called directly for directories); a flutter-named JSON
+// file is still flutter.
+func TestDetectFramework_FlutterNameDoesNotShadowBundles(t *testing.T) {
+	f := NewParserFactory()
+	for name, want := range map[string]domain.Framework{
+		"flutter_ios.xcresult": domain.FrameworkXCTest,
+		"flutter-results.json": domain.FrameworkFlutter,
+	} {
+		got, err := f.DetectFramework(name)
+		if err != nil || got != want {
+			t.Errorf("DetectFramework(%q) = %q, %v; want %q", name, got, err, want)
+		}
+	}
+}

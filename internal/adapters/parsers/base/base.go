@@ -117,6 +117,12 @@ const (
 	MaxOutputLines = 200
 )
 
+// Error text limits mirroring api-service's MaxAttempt* group.
+const (
+	MaxAttemptMessageRunes = 8192
+	MaxAttemptTraceRunes   = 32768
+)
+
 // ClampOutput bounds captured output by lines first, then by runes, matching how
 // the server truncates on write.
 func ClampOutput(lines []string) []string {

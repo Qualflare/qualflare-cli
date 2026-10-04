@@ -26,10 +26,8 @@ const (
 	FrameworkCTRF Framework = "ctrf"
 
 	// Unit Testing Frameworks
-	FrameworkPython Framework = "python"
-	FrameworkGolang Framework = "golang"
-	// FrameworkFlutter is registered with the parser in a later step; it is not in
-	// AllFrameworks until then.
+	FrameworkPython  Framework = "python"
+	FrameworkGolang  Framework = "golang"
 	FrameworkFlutter Framework = "flutter"
 	FrameworkJest    Framework = "jest"
 	FrameworkVitest  Framework = "vitest"
