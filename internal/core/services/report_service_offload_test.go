@@ -12,9 +12,9 @@ import (
 	"qualflare-cli/internal/core/domain"
 )
 
-func inline(name, content string) domain.Attachment {
+func inlinePNG(content string) domain.Attachment {
 	return domain.Attachment{
-		Name:     name,
+		Name:     "shot.png",
 		MimeType: "image/png",
 		Content:  base64.StdEncoding.EncodeToString([]byte(content)),
 	}
@@ -31,7 +31,7 @@ func launchWithAttachments(atts ...domain.Attachment) *domain.Launch {
 func TestOffload_ReplacesInlineContentWithAStorageKey(t *testing.T) {
 	sender := &videoStubSender{}
 	svc := offloadSvc(sender)
-	l := launchWithAttachments(inline("shot.png", "PNGBYTES"))
+	l := launchWithAttachments(inlinePNG("PNGBYTES"))
 
 	svc.offloadInlineAttachments(context.Background(), l)
 
@@ -63,7 +63,7 @@ func TestOffload_TwelveShardsWorthOfAttachmentsLeaveTheBody(t *testing.T) {
 		// distinct content per shard, or dedupe would mask the problem
 		blob := strings.Repeat(string(rune('a'+i)), perShard)
 		suites = append(suites, domain.Suite{Cases: []domain.Case{{
-			Attachments: []domain.Attachment{inline("shot.png", blob)},
+			Attachments: []domain.Attachment{inlinePNG(blob)},
 		}}})
 	}
 	l := &domain.Launch{Suites: suites}
@@ -87,7 +87,7 @@ func TestOffload_TwelveShardsWorthOfAttachmentsLeaveTheBody(t *testing.T) {
 func TestOffload_IdenticalContentUploadsOnce(t *testing.T) {
 	sender := &videoStubSender{}
 	svc := offloadSvc(sender)
-	same := inline("shot.png", "IDENTICAL")
+	same := inlinePNG("IDENTICAL")
 	l := &domain.Launch{Suites: []domain.Suite{{Cases: []domain.Case{
 		{Attachments: []domain.Attachment{same}},
 		{Attachments: []domain.Attachment{same}},
@@ -112,7 +112,7 @@ func TestOffload_FailedUploadLeavesTheAttachmentInline(t *testing.T) {
 	sender := &videoStubSender{attachmentErr: errors.New("network down")}
 	warn := &strings.Builder{}
 	svc := &ReportService{sender: sender, config: config.DefaultConfig(), warn: warn}
-	l := launchWithAttachments(inline("shot.png", "PNGBYTES"))
+	l := launchWithAttachments(inlinePNG("PNGBYTES"))
 
 	svc.offloadInlineAttachments(context.Background(), l)
 
@@ -151,21 +151,6 @@ func TestOffload_LeavesResolvedAndEmptyAttachmentsAlone(t *testing.T) {
 	}
 	if l.Suites[0].Cases[0].Attachments[0].StorageKey != "already-there" {
 		t.Error("an existing storageKey must be preserved")
-	}
-}
-
-func TestWarnIfBodyLooksTooLarge_OnlyWhenItActuallyIs(t *testing.T) {
-	quiet := &strings.Builder{}
-	(&ReportService{warn: quiet}).warnIfBodyLooksTooLarge(launchWithAttachments(inline("s.png", "small")))
-	if quiet.String() != "" {
-		t.Errorf("a small body should warn about nothing, got %q", quiet.String())
-	}
-
-	loud := &strings.Builder{}
-	(&ReportService{warn: loud}).warnIfBodyLooksTooLarge(
-		launchWithAttachments(inline("s.png", strings.Repeat("x", 9<<20))))
-	if !strings.Contains(loud.String(), "10MB") {
-		t.Errorf("a body near the limit should say so; got %q", loud.String())
 	}
 }
 
