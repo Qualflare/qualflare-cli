@@ -72,9 +72,10 @@ func (a attemptSlice) resolve(result string) outcome {
 		}
 	default:
 		status = domain.StatusFailed
-		if result == "error" {
+		switch result {
+		case "error":
 			status = domain.StatusError
-		} else if result == "" {
+		case "":
 			for _, e := range a.errors {
 				if !e.isFailure {
 					status = domain.StatusError

@@ -24,7 +24,7 @@ type exceptionBlock struct {
 // flattenPrints splits print messages (one line each, or several in one
 // message) into lines.
 func flattenPrints(prints []string) []string {
-	var lines []string
+	lines := make([]string, 0, len(prints))
 	for _, msg := range prints {
 		lines = append(lines, strings.Split(strings.TrimSuffix(msg, "\n"), "\n")...)
 	}

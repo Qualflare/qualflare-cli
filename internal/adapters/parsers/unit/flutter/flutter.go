@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"strconv"
 	"strings"
 	"time"
 
@@ -262,7 +263,7 @@ func buildCase(st *testState, root string) domain.Case {
 		},
 	}
 	if st.line != nil {
-		c.Properties[propLine] = fmt.Sprint(*st.line)
+		c.Properties[propLine] = strconv.Itoa(*st.line)
 	}
 
 	slices := splitAttempts(st)
