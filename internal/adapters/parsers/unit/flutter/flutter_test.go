@@ -1,6 +1,7 @@
 package flutter
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"strings"
@@ -334,5 +335,161 @@ func TestParserMetadata(t *testing.T) {
 	exts := p.SupportedFileExtensions()
 	if len(exts) != 2 || exts[0] != ".json" || exts[1] != ".jsonl" {
 		t.Errorf("SupportedFileExtensions = %v", exts)
+	}
+}
+
+func TestWidgetExpectFailure_IsFailedWithRealMessage(t *testing.T) {
+	c := mustCase(t, byID(parseFixture(t, "widget-machine.jsonl")), idFails)
+	if c.Status != domain.StatusFailed {
+		t.Errorf("status = %s, want failed", c.Status)
+	}
+	if !strings.HasPrefix(c.Error, "Expected: exactly one matching candidate") {
+		t.Errorf("error = %q", c.Error)
+	}
+	if !strings.Contains(c.Error, "widget_cases_test.dart:15:7") {
+		t.Errorf("error lacks the user's stack frame: %q", c.Error)
+	}
+	if strings.Contains(c.Error, "See exception logs above") {
+		t.Errorf("generic message leaked into error: %q", c.Error)
+	}
+	if strings.Contains(c.Properties["system-out"], "EXCEPTION CAUGHT") {
+		t.Errorf("exception block left in system-out: %q", c.Properties["system-out"])
+	}
+}
+
+func TestWidgetThrow_IsErrorWithKind(t *testing.T) {
+	c := mustCase(t, byID(parseFixture(t, "widget-machine.jsonl")), idThrows)
+	if c.Status != domain.StatusError {
+		t.Errorf("status = %s, want error", c.Status)
+	}
+	if !strings.HasPrefix(c.Error, "StateError: Bad state: boom") {
+		t.Errorf("error = %q", c.Error)
+	}
+}
+
+func TestDeviceFailure_IsFailed(t *testing.T) {
+	for _, name := range []string{"device-android.jsonl", "device-ios.jsonl"} {
+		c := mustCase(t, byID(parseFixture(t, name)), "integration_test/app_test.dart#counter app fails on device")
+		if c.Status != domain.StatusFailed {
+			t.Errorf("%s: status = %s, want failed", name, c.Status)
+		}
+		if !strings.HasPrefix(c.Error, "Expected: exactly one matching candidate") {
+			t.Errorf("%s: error = %q", name, c.Error)
+		}
+	}
+}
+
+func TestRetriedTest_PerAttemptHistory(t *testing.T) {
+	c := mustCase(t, byID(parseFixture(t, "widget-machine.jsonl")), idThirdTry)
+	if len(c.Attempts) != 3 {
+		t.Fatalf("got %d attempts, want 3", len(c.Attempts))
+	}
+	for i, want := range []string{"Actual: <1>", "Actual: <2>"} {
+		a := c.Attempts[i]
+		if a.Number != i+1 || a.Status != domain.StatusFailed ||
+			!strings.Contains(a.Message, "Expected: <3>") || !strings.Contains(a.Message, want) {
+			t.Errorf("attempt %d = %+v", i, a)
+		}
+	}
+	if a := c.Attempts[2]; a.Number != 3 || a.Status != domain.StatusPassed {
+		t.Errorf("attempt 3 = %+v", a)
+	}
+	if c.RetryCount == nil || *c.RetryCount != 2 || c.IsFlaky == nil || !*c.IsFlaky {
+		t.Errorf("retryCount=%v isFlaky=%v", c.RetryCount, c.IsFlaky)
+	}
+	if c.Status != domain.StatusPassed || c.Error != "" {
+		t.Errorf("status=%s error=%q", c.Status, c.Error)
+	}
+	if strings.Contains(c.Properties["system-out"], "Retry:") {
+		t.Errorf("Retry line in system-out: %q", c.Properties["system-out"])
+	}
+}
+
+// captureBlock returns the exception block the widget capture printed for the
+// failing-expectation test, as one message.
+func captureBlock(t *testing.T) string {
+	t.Helper()
+	for _, l := range strings.Split(readFixture(t, "widget-machine.jsonl"), "\n") {
+		var ev event
+		if json.Unmarshal([]byte(l), &ev) == nil && ev.TestID == 13 && strings.HasPrefix(ev.Message, exceptionHeader) {
+			return ev.Message
+		}
+	}
+	t.Fatal("capture has no exception block")
+	return ""
+}
+
+func jsonl(t *testing.T, events ...map[string]any) string {
+	t.Helper()
+	var b strings.Builder
+	for _, e := range events {
+		raw, err := json.Marshal(e)
+		if err != nil {
+			t.Fatal(err)
+		}
+		b.Write(raw)
+		b.WriteByte('\n')
+	}
+	return b.String()
+}
+
+// Synthetic: no capture has a widget test that fails, retries and fails again.
+// The blocks are the capture's own text, the second with a different expectation.
+func TestRetriedWidgetTest_BlocksPerAttempt(t *testing.T) {
+	block1 := captureBlock(t)
+	block2 := strings.Replace(block1, "Sign out", "Log out", 1)
+	if block1 == block2 {
+		t.Fatal("capture block changed shape")
+	}
+	const name = "flaky widget"
+	suite := parseString(t, jsonl(t,
+		map[string]any{"type": "start", "time": 0},
+		map[string]any{"type": "suite", "suite": map[string]any{"id": 0, "platform": "vm", "path": "test/a_test.dart"}},
+		map[string]any{"type": "testStart", "time": 1, "test": map[string]any{"id": 1, "name": name, "suiteID": 0, "metadata": map[string]any{}}},
+		map[string]any{"type": "print", "testID": 1, "messageType": "print", "message": block1},
+		map[string]any{"type": "error", "testID": 1, "error": genericFailure, "stackTrace": ""},
+		map[string]any{"type": "print", "testID": 1, "messageType": "print", "message": "Retry: " + name},
+		map[string]any{"type": "print", "testID": 1, "messageType": "print", "message": block2},
+		map[string]any{"type": "error", "testID": 1, "error": genericFailure, "stackTrace": ""},
+		map[string]any{"type": "testDone", "time": 5, "testID": 1, "result": "error"},
+	))
+	if len(suite.Cases) != 1 {
+		t.Fatalf("got %d cases", len(suite.Cases))
+	}
+	c := suite.Cases[0]
+	if len(c.Attempts) != 2 || c.Status != domain.StatusFailed {
+		t.Fatalf("attempts=%d status=%s", len(c.Attempts), c.Status)
+	}
+	if !strings.Contains(c.Attempts[0].Message, `"Sign out"`) || !strings.Contains(c.Attempts[1].Message, `"Log out"`) {
+		t.Errorf("attempt messages: %q / %q", c.Attempts[0].Message, c.Attempts[1].Message)
+	}
+	for i, a := range c.Attempts {
+		if a.Status != domain.StatusFailed || strings.Contains(a.Message, "See exception logs") {
+			t.Errorf("attempt %d = %+v", i, a)
+		}
+	}
+	if c.RetryCount == nil || *c.RetryCount != 1 || c.IsFlaky == nil || *c.IsFlaky {
+		t.Errorf("retryCount=%v isFlaky=%v", c.RetryCount, c.IsFlaky)
+	}
+	if !strings.Contains(c.Error, `"Log out"`) || strings.Contains(c.Error, `"Sign out"`) {
+		t.Errorf("case error should describe the final attempt only: %q", c.Error)
+	}
+	if out := c.Properties["system-out"]; out != "" {
+		t.Errorf("system-out = %q, want empty", out)
+	}
+}
+
+// Synthetic: no capture has a widget error with no exception block.
+func TestWidgetErrorWithoutBlock_KeepsGenericMessage(t *testing.T) {
+	suite := parseString(t, jsonl(t,
+		map[string]any{"type": "start", "time": 0},
+		map[string]any{"type": "suite", "suite": map[string]any{"id": 0, "platform": "vm", "path": "test/a_test.dart"}},
+		map[string]any{"type": "testStart", "time": 1, "test": map[string]any{"id": 1, "name": "no block", "suiteID": 0, "metadata": map[string]any{}}},
+		map[string]any{"type": "error", "testID": 1, "error": genericFailure + "\nThe test description was: no block", "stackTrace": ""},
+		map[string]any{"type": "testDone", "time": 5, "testID": 1, "result": "error"},
+	))
+	c := suite.Cases[0]
+	if c.Status != domain.StatusError || !strings.Contains(c.Error, "Test failed") {
+		t.Errorf("status=%s error=%q", c.Status, c.Error)
 	}
 }

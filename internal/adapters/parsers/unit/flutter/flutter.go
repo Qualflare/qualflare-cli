@@ -98,7 +98,12 @@ type testState struct {
 	skipReason string
 	errors     []testError
 	prints     []string
+	retries    []retryMark // one per `Retry:` print, in order
 }
+
+// retryMark records how many errors and prints a test had when a `Retry:` line
+// closed one of its failed attempts.
+type retryMark struct{ errors, prints int }
 
 // Parse parses Flutter JSON reporter output. A file holding several runs
 // (the reporter's `start` event resets the ID space) yields one suite.
@@ -181,7 +186,13 @@ func (p *Parser) Parse(reader io.Reader) (*domain.Suite, error) {
 			}
 
 		case "print":
-			if st := tests[ev.TestID]; st != nil && ev.MessageType == "print" {
+			st := tests[ev.TestID]
+			if st == nil || ev.MessageType != "print" {
+				continue
+			}
+			if ev.Message == retryPrefix+st.name {
+				st.retries = append(st.retries, retryMark{len(st.errors), len(st.prints)})
+			} else {
 				st.prints = append(st.prints, ev.Message)
 			}
 		}
@@ -253,7 +264,21 @@ func buildCase(st *testState, root string) domain.Case {
 	if st.line != nil {
 		c.Properties[propLine] = fmt.Sprint(*st.line)
 	}
-	if out := printsToOutput(st.prints); out != "" {
+
+	slices := splitAttempts(st)
+	final := slices[len(slices)-1]
+	finalOut := final.resolve(st.result)
+
+	// system-out is every attempt's output, exception blocks removed.
+	var outLines []string
+	for i, s := range slices {
+		if i == len(slices)-1 {
+			outLines = append(outLines, finalOut.out...)
+		} else {
+			outLines = append(outLines, s.resolve("").out...)
+		}
+	}
+	if out := strings.Join(base.ClampOutput(outLines), "\n"); out != "" {
 		c.Properties[propSystemOut] = out
 	}
 
@@ -272,35 +297,16 @@ func buildCase(st *testState, root string) domain.Case {
 		c.Error = st.skipReason
 	case st.result == "success":
 		c.Status = domain.StatusPassed
-	case st.result == "failure":
-		c.Status = domain.StatusFailed
-		c.Error = joinErrors(st.errors)
-	default:
-		c.Status = domain.StatusError
-		c.Error = joinErrors(st.errors)
+	case st.result != "success":
+		c.Status = finalOut.status
+		c.Error = finalOut.text
+	}
+	if len(slices) > 1 {
+		c.Attempts = buildAttempts(slices, c.Status, finalOut)
+		c.RetryCount = domain.IntPtr(len(slices) - 1)
+		c.IsFlaky = domain.BoolPtr(c.Status == domain.StatusPassed)
 	}
 	return c
-}
-
-// joinErrors formats every error event, in order, separated by a blank line.
-func joinErrors(errs []testError) string {
-	parts := make([]string, 0, len(errs))
-	for _, e := range errs {
-		if s := domain.FormatError(e.message, e.stack, ""); s != "" {
-			parts = append(parts, s)
-		}
-	}
-	return strings.Join(parts, "\n\n")
-}
-
-// printsToOutput flattens print messages to lines, clamps them like the CTRF
-// parser clamps captured output, and joins them back.
-func printsToOutput(prints []string) string {
-	var lines []string
-	for _, msg := range prints {
-		lines = append(lines, strings.Split(strings.TrimSuffix(msg, "\n"), "\n")...)
-	}
-	return strings.Join(base.ClampOutput(lines), "\n")
 }
 
 // GetFramework returns the framework type
