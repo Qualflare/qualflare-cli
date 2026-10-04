@@ -214,6 +214,7 @@ func (p *Parser) Parse(reader io.Reader) (*domain.Suite, error) {
 	}
 
 	root := projectRoot(allPaths)
+	budget := &inlineBudget{}
 	suite := &domain.Suite{
 		Name:      "Flutter Tests",
 		Category:  domain.FrameworkFlutter.GetCategory(),
@@ -228,7 +229,7 @@ func (p *Parser) Parse(reader io.Reader) (*domain.Suite, error) {
 		if st.hidden {
 			continue
 		}
-		suite.Cases = append(suite.Cases, buildCase(st, root))
+		suite.Cases = append(suite.Cases, buildCase(st, root, budget))
 	}
 	suite.RecomputeCounts()
 	return suite, nil
@@ -251,8 +252,9 @@ func newTestState(t *testInfo, suitePath string, start int64) *testState {
 	return st
 }
 
-// buildCase turns a finished (or unfinished) test into a domain case.
-func buildCase(st *testState, root string) domain.Case {
+// buildCase turns a finished (or unfinished) test into a domain case. budget
+// is the run's inline attachment budget, shared by every case.
+func buildCase(st *testState, root string, budget *inlineBudget) domain.Case {
 	file := relativePath(st.file, root)
 	name := st.name
 	// A failed load is named after the file; its raw name carries an absolute path.
@@ -278,12 +280,13 @@ func buildCase(st *testState, root string) domain.Case {
 	for i := range slices {
 		sets[i], slices[i].prints = extractMarkers(slices[i].prints)
 	}
-	warnings := applyMarkers(&c, sets)
+	warnings := applyMarkers(&c, sets, budget)
 
 	final := slices[len(slices)-1]
 	finalOut := final.resolve(st.result)
 
-	// system-out is every attempt's output, exception blocks removed.
+	// system-out is every attempt's output, exception blocks removed, clamped;
+	// then the warnings, after the clamp so a long output cannot hide them.
 	var outLines []string
 	for i, s := range slices {
 		if i == len(slices)-1 {
@@ -292,10 +295,11 @@ func buildCase(st *testState, root string) domain.Case {
 			outLines = append(outLines, s.resolve("").out...)
 		}
 	}
+	outLines = base.ClampOutput(outLines)
 	for _, w := range warnings {
 		outLines = append(outLines, "qualflare: "+w)
 	}
-	if out := strings.Join(base.ClampOutput(outLines), "\n"); out != "" {
+	if out := strings.Join(outLines, "\n"); out != "" {
 		c.Properties[propSystemOut] = out
 	}
 

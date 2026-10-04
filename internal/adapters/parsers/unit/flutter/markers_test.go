@@ -82,6 +82,9 @@ func assertPackageCapture(t *testing.T, fixture, dir string, wantNative bool) {
 	assertNoMarkersInOutput(t, suite)
 
 	pays := mustCase(t, cases, dir+"#pays for the cart")
+	if pays.Status != domain.StatusPassed {
+		t.Errorf("pays for the cart: status = %s, want passed", pays.Status)
+	}
 	if want := []domain.Label{{Name: "feature", Value: "checkout"}}; !reflect.DeepEqual(pays.Labels, want) {
 		t.Errorf("labels = %+v, want %+v", pays.Labels, want)
 	}
@@ -443,7 +446,7 @@ func TestMarkers_TestCapAcrossAttempts(t *testing.T) {
 	warnings := applyMarkers(&c, []markerSet{
 		{attachments: []domain.Attachment{att("a.png"), att("b.png"), att("c.png")}},
 		{attachments: []domain.Attachment{att("d.png"), att("e.png")}},
-	})
+	}, &inlineBudget{})
 	if got, want := attNames(c), []string{"attempt 1: a.png", "attempt 1: b.png", "attempt 1: c.png", "d.png"}; !reflect.DeepEqual(got, want) {
 		t.Errorf("attachments = %q, want %q", got, want)
 	}

@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"qualflare-cli/internal/adapters/parsers/base"
 	"qualflare-cli/internal/core/domain"
 )
 
@@ -33,6 +34,35 @@ const (
 	stepUnfinishedMessage = "step did not finish"
 	defaultAttachmentMIME = "application/octet-stream"
 )
+
+// offloadableMIME is the set the upload offloads out of the report body
+// (offloadableExtensions in internal/core/services/report_service.go). Any
+// other attachment travels base64 inside the body and counts against the
+// run's inline budget.
+var offloadableMIME = map[string]bool{
+	"image/png":  true,
+	"image/jpeg": true,
+	"image/gif":  true,
+}
+
+// inlineBudget is the run-wide total of attachment bytes that stay inline in
+// the report body, shared by every case of one parse.
+type inlineBudget struct{ used int }
+
+// admit reports why an attachment of size bytes cannot stay inline, or ""
+// when it can, in which case it is counted. Offloadable images always pass.
+func (b *inlineBudget) admit(mime string, size int) string {
+	switch {
+	case offloadableMIME[mime]:
+		return ""
+	case size > base.MaxInlineAttachmentBytes:
+		return fmt.Sprintf("over the %d-byte limit for an attachment sent inline (only PNG, JPEG and GIF are uploaded separately)", base.MaxInlineAttachmentBytes)
+	case b.used+size > base.MaxInlineTotalBytes:
+		return fmt.Sprintf("would take this run's inline attachments past %d bytes", base.MaxInlineTotalBytes)
+	}
+	b.used += size
+	return ""
+}
 
 // markerSet is what one attempt's marker lines amount to.
 type markerSet struct {
@@ -359,8 +389,9 @@ func testCapWarning(name string) string {
 // and returns the warnings for its output. Labels, links and tags are
 // deduplicated across attempts and the last priority wins; steps come from the
 // final attempt; attachments come from every attempt, an earlier attempt's
-// renamed `attempt <n>: <name>`, within the per-test cap.
-func applyMarkers(c *domain.Case, sets []markerSet) []string {
+// renamed `attempt <n>: <name>`, within the per-test cap and the run's inline
+// budget.
+func applyMarkers(c *domain.Case, sets []markerSet, budget *inlineBudget) []string {
 	var warnings []string
 	seen := map[string]bool{}
 	total := 0
@@ -389,6 +420,10 @@ func applyMarkers(c *domain.Case, sets []markerSet) []string {
 			size := decodedSize(a.Content)
 			if total+size > maxTestAttachmentBytes {
 				pending = append(pending, testCapWarning(a.Name))
+				continue
+			}
+			if why := budget.admit(a.MimeType, size); why != "" {
+				pending = append(pending, fmt.Sprintf("attachment %q (%d bytes, %s) dropped: %s", a.Name, size, a.MimeType, why))
 				continue
 			}
 			total += size
