@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"qualflare-cli/internal/adapters/artifacts"
+	"qualflare-cli/internal/adapters/parsers/generic/allure"
 	"qualflare-cli/internal/auth"
 	"qualflare-cli/internal/config"
 	"qualflare-cli/internal/core/domain"
@@ -344,6 +345,13 @@ func expandDirectories(paths []string) ([]string, error) {
 			continue
 		}
 		if !info.IsDir() {
+			out = append(out, p)
+			continue
+		}
+		// An Allure results directory is ONE input: a retry is a second
+		// *-result.json, so attempts can only be grouped with every file in view.
+		// Passed through whole to the Allure PathAwareParser.
+		if allure.IsResultsDir(p) {
 			out = append(out, p)
 			continue
 		}
@@ -820,6 +828,7 @@ func (c *CLI) createListFormatsCommand() *cobra.Command {
 var frameworkDisplayGroups = map[domain.Framework]domain.FrameworkCategory{
 	domain.FrameworkJUnit:         domain.CategoryGeneric,
 	domain.FrameworkCTRF:          domain.CategoryGeneric,
+	domain.FrameworkAllure:        domain.CategoryGeneric,
 	domain.FrameworkQualflareJSON: domain.CategoryGeneric,
 
 	domain.FrameworkPython:  domain.CategoryUnitTest,

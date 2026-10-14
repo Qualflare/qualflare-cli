@@ -1,0 +1,3 @@
+{"uuid":"33333333","historyId":"h-db","name":"test_db_setup","status":"broken","start":1760000003000,"stop":1760000003100,
+ "statusDetails":{"message":"ConnectionRefusedError: [Errno 111]"},
+ "labels":[{"name":"suite","value":"test_db"},{"name":"framework","value":"pytest"}]}

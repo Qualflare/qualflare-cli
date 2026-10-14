@@ -71,3 +71,21 @@ func TestExpandDirectories(t *testing.T) {
 		t.Fatal("an empty directory must error")
 	}
 }
+
+// An allure-results directory is ONE input: retries span files, so it must reach
+// the Allure parser whole instead of being split into its *.json files.
+func TestExpandDirectories_KeepsAllureResultsWhole(t *testing.T) {
+	dir := t.TempDir()
+	for _, n := range []string{"a-result.json", "b-result.json", "c-container.json", "executor.json"} {
+		if err := os.WriteFile(filepath.Join(dir, n), []byte("{}"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	out, err := expandDirectories([]string{dir})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(out) != 1 || out[0] != dir {
+		t.Fatalf("expected the directory itself, got %v", out)
+	}
+}

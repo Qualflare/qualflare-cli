@@ -1,0 +1,8 @@
+{"uuid":"11111111","historyId":"h-login","testCaseId":"tc-login","fullName":"tests.auth.test_login.TestAuth#test_login_ok","name":"test_login_ok","status":"passed","stage":"finished","start":1760000000000,"stop":1760000001500,
+ "labels":[{"name":"parentSuite","value":"tests.auth"},{"name":"suite","value":"test_login"},{"name":"subSuite","value":"TestAuth"},{"name":"framework","value":"pytest"},{"name":"language","value":"cpython3"},{"name":"severity","value":"critical"},{"name":"tag","value":"smoke"},{"name":"feature","value":"Login"},{"name":"testClass","value":"tests.auth.test_login.TestAuth"}],
+ "links":[{"type":"issue","name":"QF-1","url":"https://tracker.example/QF-1"}],
+ "parameters":[{"name":"browser","value":"chrome"},{"name":"password","value":"hunter2","mode":"masked"},{"name":"internal","value":"x","mode":"hidden"},{"name":"run","value":"3","excluded":true}],
+ "steps":[{"name":"open login page","status":"passed","start":1760000000000,"stop":1760000000500,"parameters":[{"name":"url","value":"/login"}],
+   "steps":[{"name":"wait for form","status":"passed","start":1760000000100,"stop":1760000000300}]},
+  {"name":"submit credentials","status":"passed","start":1760000000500,"stop":1760000001400}],
+ "attachments":[{"name":"after login","source":"aaaaaaaa-attachment.png","type":"image/png"},{"name":"gone","source":"missing-attachment.txt","type":"text/plain"}]}
