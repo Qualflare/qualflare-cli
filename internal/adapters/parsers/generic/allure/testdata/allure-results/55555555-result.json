@@ -1,0 +1,3 @@
+{"uuid":"55555555","historyId":"h-flaky","name":"test_search","status":"failed","start":1760000005000,"stop":1760000005400,
+ "statusDetails":{"message":"TimeoutError"},
+ "labels":[{"name":"suite","value":"test_search"},{"name":"framework","value":"pytest"}]}

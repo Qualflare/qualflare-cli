@@ -24,6 +24,11 @@ const (
 	// particular can otherwise only arrive as generic JUnit XML.
 	// See internal/adapters/parsers/generic/ctrf.
 	FrameworkCTRF Framework = "ctrf"
+	// FrameworkAllure ingests an Allure 2 results directory (allure-results/):
+	// one *-result.json per test execution, written by the Allure adapter of
+	// whatever framework ran the tests. Like CTRF it is a FORMAT, not a tool —
+	// the producing framework comes from each result's "framework" label.
+	FrameworkAllure Framework = "allure"
 
 	// Unit Testing Frameworks
 	FrameworkPython  Framework = "python"
@@ -137,6 +142,7 @@ func AllFrameworks() []Framework {
 	return []Framework{
 		FrameworkJUnit,
 		FrameworkCTRF,
+		FrameworkAllure,
 		FrameworkPython,
 		FrameworkGolang,
 		FrameworkJest,
@@ -195,7 +201,7 @@ const (
 // degrades to CategoryGeneric instead of round-tripping verbatim.
 func (f Framework) GetCategory() FrameworkCategory {
 	switch f {
-	case FrameworkQualflareJSON, FrameworkCTRF:
+	case FrameworkQualflareJSON, FrameworkCTRF, FrameworkAllure:
 		// Both are PASSTHROUGH formats: the real per-suite category comes from
 		// the file's own embedded producer identity — qualflare-json from its
 		// `framework` field, CTRF from `results.tool.name` — not from this

@@ -148,7 +148,8 @@ func TestAllFrameworksAreValidAndCategorised(t *testing.T) {
 		// FrameworkCategory("ctrf") would fail the server's oneof and reject the
 		// whole launch, so this expectation is what pins the safe behaviour.
 		want := FrameworkCategory(f)
-		if f == FrameworkQualflareJSON || f == FrameworkCTRF {
+		// Allure is the same case as CTRF: "allure" is not in the server's oneof.
+		if f == FrameworkQualflareJSON || f == FrameworkCTRF || f == FrameworkAllure {
 			want = CategoryGeneric
 		}
 		// Detox is the third exception, and for the same reason as CTRF rather

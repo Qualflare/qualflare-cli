@@ -538,7 +538,7 @@ func unwrapPassthrough(f domain.Framework, suites []domain.Suite) domain.Framewo
 // isPassthroughFormat reports whether a framework value names a TRANSPORT rather
 // than a producing tool.
 func isPassthroughFormat(f domain.Framework) bool {
-	return f == domain.FrameworkQualflareJSON || f == domain.FrameworkCTRF
+	return f == domain.FrameworkQualflareJSON || f == domain.FrameworkCTRF || f == domain.FrameworkAllure
 }
 
 // producersOf returns the distinct producing frameworks the suites recorded, in a

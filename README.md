@@ -204,7 +204,7 @@ Run `qf <command> --help` for flags and examples.
 
 | Category | Frameworks |
 |----------|-----------|
-| **Generic (JUnit-compatible)** | JUnit, CTRF, `qualflare-json` (the Collect JSON written by every `@qualflare/*` reporter — playwright, cypress, cucumberjs, vitest, jest — for merging sharded-CI output) |
+| **Generic (JUnit-compatible)** | JUnit, CTRF, Allure (`allure-results/`), `qualflare-json` (the Collect JSON written by every `@qualflare/*` reporter — playwright, cypress, cucumberjs, vitest, jest — for merging sharded-CI output) |
 | **Unit Testing** | pytest, Go testing, Jest/Vitest, Mocha, RSpec, PHPUnit, TestNG |
 | **BDD** | Cucumber, Karate |
 | **UI / E2E / Mobile** | Playwright, Cypress, Selenium, TestCafe, Maestro, XCTest, Espresso, Detox, WebdriverIO, Appium, Flutter |
@@ -214,6 +214,27 @@ Run `qf <command> --help` for flags and examples.
 Format is auto-detected from the filename and file content. Pass `--format <name>` to override. Run `qf list-formats` for all valid format names.
 
 Any framework that emits standard JUnit XML — NUnit, MSTest, xUnit.net, Robot Framework, and others — can be uploaded using `--format junit`. Because all JUnit emitters share the same XML schema, use `--format <name>` (or a recognizable filename like `maestro-results.xml`) to disambiguate Maestro, XCTest, Espresso, and TestNG outputs from generic JUnit.
+
+### Allure
+
+Already writing Allure results? Point `qf` at the results directory — no reporter change:
+
+```bash
+pytest --alluredir=allure-results
+qf myapp collect allure-results/
+```
+
+Any framework's Allure 2 adapter works (allure-pytest, allure-junit5, allure-testng,
+allure-playwright, allure-cucumber-jvm, …). The directory is read as one input, so
+retries (a second `*-result.json` with the same `historyId`) become attempts on one test
+and a failed-then-passed test is marked flaky. The launch is labelled with the framework
+that ran the tests, taken from each result's `framework` label.
+
+Mapped: status (`broken` → error), the `parentSuite > suite > subSuite` path, labels,
+tags, severity, links, nested steps, parameters (honouring `masked` and `hidden`), and
+attachments (screenshots, videos and Playwright traces go through the artifact upload;
+other small files are inlined). Not yet read: `*-container.json` fixtures — a failing
+fixture already marks its test `broken`, so statuses are still right.
 
 ### Flutter
 

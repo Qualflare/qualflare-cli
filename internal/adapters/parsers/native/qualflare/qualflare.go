@@ -252,7 +252,7 @@ func buildSuite(collect Collect, sourceDir string) (*domain.Suite, error) {
 	// and until this the launch was labelled "qualflare-json" — the format it
 	// arrived in.
 	if f := domain.Framework(collect.Framework); f.IsValid() &&
-		f != domain.FrameworkQualflareJSON && f != domain.FrameworkCTRF {
+		f != domain.FrameworkQualflareJSON && f != domain.FrameworkCTRF && f != domain.FrameworkAllure {
 		if suite.Properties == nil {
 			suite.Properties = map[string]string{}
 		}

@@ -1,0 +1,3 @@
+{"uuid":"22222222","historyId":"h-logout","fullName":"tests.auth.test_logout#test_logout","name":"test_logout","status":"failed","start":1760000002000,"stop":1760000002250,
+ "statusDetails":{"message":"AssertionError: expected 200, got 500","trace":"Traceback (most recent call last):\n  File \"test_logout.py\", line 9"},
+ "labels":[{"name":"parentSuite","value":"tests.auth"},{"name":"suite","value":"test_logout"},{"name":"framework","value":"pytest"}]}

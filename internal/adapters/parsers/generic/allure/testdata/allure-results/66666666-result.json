@@ -1,0 +1,2 @@
+{"uuid":"66666666","historyId":"h-flaky","name":"test_search","status":"passed","start":1760000006000,"stop":1760000006300,
+ "labels":[{"name":"suite","value":"test_search"},{"name":"framework","value":"pytest"}]}

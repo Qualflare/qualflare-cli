@@ -31,6 +31,7 @@ import (
 	"qualflare-cli/internal/adapters/parsers/e2e/xctest"
 
 	// Generic parsers
+	"qualflare-cli/internal/adapters/parsers/generic/allure"
 	"qualflare-cli/internal/adapters/parsers/generic/ctrf"
 	"qualflare-cli/internal/adapters/parsers/generic/junit"
 
@@ -68,6 +69,7 @@ func NewParserFactory() *ParserFactory {
 	// Generic (JUnit-compatible) Parsers
 	f.RegisterParser(junit.New())
 	f.RegisterParser(ctrf.New())
+	f.RegisterParser(allure.New())
 
 	// Native Qualflare JSON (sharded-CI merge workflow)
 	f.RegisterParser(qualflare.New())
@@ -175,6 +177,13 @@ func hasWordToken(s, token string) bool {
 func (f *ParserFactory) DetectFramework(filename string) (domain.Framework, error) {
 	ext := strings.ToLower(filepath.Ext(filename))
 	base := strings.ToLower(filepath.Base(filename))
+
+	// An Allure results directory is recognised by what is in it, not by its
+	// name: adapters write wherever they are told (allure-results, build/...,
+	// target/allure-results), so a name rule would miss most of them.
+	if allure.IsResultsDir(filename) {
+		return domain.FrameworkAllure, nil
+	}
 
 	// Try to detect based on filename patterns
 	switch {
@@ -423,6 +432,9 @@ var jsonDetectors = []jsonDetector{
 	{func(obj map[string]interface{}, _ bool) bool {
 		return hasKeys(obj, "framework", "metadata", "suites")
 	}, domain.FrameworkQualflareJSON, false},
+	// One Allure result (*-result.json): uuid + historyId + status + start + stop
+	// together are carried by no other supported format.
+	{func(obj map[string]interface{}, _ bool) bool { return allure.IsResultDocument(obj) }, domain.FrameworkAllure, false},
 	{func(obj map[string]interface{}, _ bool) bool { return hasKey(obj, "testResults") }, domain.FrameworkJest, false},
 	{func(obj map[string]interface{}, _ bool) bool { return hasKey(obj, "numTotalTests") }, domain.FrameworkJest, false},
 	{func(obj map[string]interface{}, _ bool) bool { return hasKeys(obj, "config", "suites") }, domain.FrameworkPlaywright, false},
