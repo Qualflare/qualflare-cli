@@ -1,5 +1,5 @@
 blank_issues_enabled: false
 contact_links:
   - name: Documentation
-    url: https://docs.qualflare.com
-    about: Check the docs before opening an issue.
+    url: https://docs.qualflare.com/docs/cli/troubleshooting
+    about: Check the CLI troubleshooting guide before opening an issue.
