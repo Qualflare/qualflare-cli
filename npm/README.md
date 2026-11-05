@@ -90,7 +90,7 @@ Homebrew, Docker (GHCR + Docker Hub), and direct binary downloads are documented
 
 ## Links
 
-- **Documentation:** https://docs.qualflare.com
+- **Documentation:** https://docs.qualflare.com/docs/cli
 - **Source & issues:** https://github.com/Qualflare/qualflare-cli
 - **Releases / changelog:** https://github.com/Qualflare/qualflare-cli/releases
 

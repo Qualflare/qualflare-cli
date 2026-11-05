@@ -183,7 +183,7 @@ Add a single step after your test run. Store your token in a repository secret n
     QF_COMMIT: ${{ github.sha }}
 ```
 
-`qf` is a single static binary with no runtime dependencies. If you're using GitLab CI, CircleCI, Jenkins, or another platform, download the binary from [Releases](https://github.com/qualflare/qualflare-cli/releases/latest) and run the same two commands. See [the documentation](https://docs.qualflare.com) for platform-specific snippets.
+`qf` is a single static binary with no runtime dependencies. If you're using GitLab CI, CircleCI, Jenkins, or another platform, download the binary from [Releases](https://github.com/qualflare/qualflare-cli/releases/latest) and run the same two commands. See [the CI/CD guides](https://docs.qualflare.com/docs/cli/ci-cd) for platform-specific snippets.
 
 ## Commands
 
