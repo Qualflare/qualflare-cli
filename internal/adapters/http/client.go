@@ -16,6 +16,7 @@ import (
 	"qualflare-cli/internal/version"
 	"strings"
 	"time"
+	"unicode"
 
 	"resty.dev/v3"
 )
@@ -143,7 +144,8 @@ func (c *Client) SendReport(ctx context.Context, report *domain.Launch) error {
 // success body, in order. It returns nil for anything it cannot read (an empty or
 // non-JSON body, JSON that is not an object, a missing or malformed `warnings`
 // key) and skips warnings with an empty reason, since there is nothing to print.
-// It never errors: the upload already succeeded.
+// Each reason is put on one line (see oneLine). It never errors: the upload
+// already succeeded.
 func parseCollectWarnings(body []byte) []string {
 	var parsed struct {
 		Warnings []struct {
@@ -156,10 +158,23 @@ func parseCollectWarnings(body []byte) []string {
 	var reasons []string
 	for _, w := range parsed.Warnings {
 		if w.Reason != "" {
-			reasons = append(reasons, w.Reason)
+			reasons = append(reasons, oneLine(w.Reason))
 		}
 	}
 	return reasons
+}
+
+// oneLine replaces every control character in server text with a space. A
+// reason or message from the server reaches stderr as it arrives, and one
+// carrying a line break or an escape sequence could forge a second line in a CI
+// log, one that looks like the CLI's own.
+func oneLine(s string) string {
+	return strings.Map(func(r rune) rune {
+		if unicode.IsControl(r) {
+			return ' '
+		}
+		return r
+	}, s)
 }
 
 // uploadURLRequest is the body of the presign POST.
@@ -414,7 +429,9 @@ func (e *APIError) Error() string {
 // outside this adapter can see why a request was refused without importing it.
 func (e *APIError) ErrorCode() string { return e.Code }
 
-func (e *APIError) ErrorMessage() string { return e.Message }
+// ErrorMessage is the server's message on one line (see oneLine), since callers
+// print it as it is. Error() is not changed.
+func (e *APIError) ErrorMessage() string { return oneLine(e.Message) }
 
 func (e *APIError) Unwrap() error {
 	return e.Err

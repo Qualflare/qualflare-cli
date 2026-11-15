@@ -143,6 +143,22 @@ A skipped artifact is left out of the launch entirely rather than uploaded as an
 gated run shows no unopenable placeholders. An artifact that was asked for but *failed* to upload is
 different — it stays, so the failure is visible rather than hidden.
 
+A full storage is different again. The server refuses a file that no longer fits and still saves
+the results, so `collect` stops asking for files of that size or larger, keeps uploading smaller
+ones that still fit, sends the results, and says once what was left out. The text after the count
+is the server's own message:
+
+```
+storage is full: 3 file(s) were not uploaded. Storage is full (1.2 GB of 1.0 GB). Results are still saved, but new files are not. Delete old runs, wait for run files older than 30 days to expire, or upgrade the plan.
+```
+
+A refused video or trace stays as a name-only row, like a failed upload. A refused screenshot is
+left out of the launch.
+
+A frozen workspace, one with more members or projects than its plan allows, accepts nothing new:
+`collect` stops asking for upload slots after the first refusal, and the run ends with the
+server's reason.
+
 Traces additionally need an api-service that accepts `application/zip` on the attachment-upload
 endpoint.
 

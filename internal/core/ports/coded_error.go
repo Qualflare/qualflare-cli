@@ -16,5 +16,5 @@ const (
 type CodedError interface {
 	error
 	ErrorCode() string    // the server's error code, "" when it sent none
-	ErrorMessage() string // the server's message alone: no operation, no status, no hint
+	ErrorMessage() string // the server's message alone, on one line: no operation, no status, no hint
 }

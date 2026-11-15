@@ -152,6 +152,19 @@ func TestSendReport_402CarriesCode(t *testing.T) {
 	}
 }
 
+// The server's message reaches stderr as it arrives; a line break or an escape
+// sequence in it could forge a second line in a CI log. ErrorMessage puts it on
+// one line; Error() keeps the message as sent.
+func TestAPIError_ErrorMessageIsOneLine(t *testing.T) {
+	e := &APIError{Op: "send", Message: "a\r\nb", Code: ports.CodeStorageExceeded, StatusCode: http.StatusPaymentRequired}
+	if got := e.ErrorMessage(); got != "a  b" {
+		t.Errorf("ErrorMessage() = %q, want %q", got, "a  b")
+	}
+	if !strings.Contains(e.Error(), "a\r\nb") {
+		t.Errorf("Error() = %q, want the message unchanged", e.Error())
+	}
+}
+
 func TestSendReport_TransportError(t *testing.T) {
 	c := NewHTTPClient(&stubConfig{endpoint: "http://127.0.0.1:1"})
 	defer c.Close()

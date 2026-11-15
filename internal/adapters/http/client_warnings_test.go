@@ -40,6 +40,11 @@ func TestParseCollectWarnings(t *testing.T) {
 		{name: "null", body: `null`},
 		{name: "array body", body: `[]`},
 		{name: "string body", body: `"ok"`},
+		{
+			name: "control characters become spaces",
+			body: `{"warnings":[{"reason":"one\ntwo\u001b[31m"}]}`,
+			want: []string{"one two [31m"},
+		},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
