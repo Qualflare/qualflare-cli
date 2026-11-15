@@ -345,6 +345,13 @@ func (e *APIError) actionHint() string {
 	case http.StatusForbidden:
 		return " — the token lacks access to this project"
 	case http.StatusPaymentRequired:
+		// The server's message for these two refusals already says what to do
+		// (remove members, delete old runs, upgrade), so the generic hint would
+		// only dilute it. Every other 402, including one from an older server
+		// that sends no code, keeps the hint.
+		if e.Code == ports.CodeWorkspaceFrozen || e.Code == ports.CodeStorageExceeded {
+			return ""
+		}
 		return " — a plan limit was reached; check your Qualflare subscription"
 	}
 	return ""
@@ -364,6 +371,12 @@ func (e *APIError) Error() string {
 	}
 	return fmt.Sprintf("%s: %s%s", e.Op, e.Message, suffix)
 }
+
+// ErrorCode and ErrorMessage make *APIError a ports.CodedError, so callers
+// outside this adapter can see why a request was refused without importing it.
+func (e *APIError) ErrorCode() string { return e.Code }
+
+func (e *APIError) ErrorMessage() string { return e.Message }
 
 func (e *APIError) Unwrap() error {
 	return e.Err
