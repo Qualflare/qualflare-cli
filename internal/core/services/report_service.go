@@ -84,8 +84,7 @@ func (s *ReportService) ProcessTestResults(ctx context.Context, files []string, 
 	// video upload is fail-open, the failure is silent (a warning, but collect
 	// still exits 0). Using context.Background() here lets UploadVideo's own
 	// internal timeout be the only deadline governing upload duration.
-	s.resolveArtifactAttachments(context.Background(), report)
-	s.offloadInlineAttachments(context.Background(), report)
+	s.uploadFiles(context.Background(), report)
 	// After the offload, so only what genuinely could not leave the body (non-image
 	// types, and images whose upload failed) is at risk of being dropped.
 	if err := s.enforceBodyLimit(report); err != nil {
@@ -93,6 +92,107 @@ func (s *ReportService) ProcessTestResults(ctx context.Context, files []string, 
 	}
 
 	return s.sender.SendReport(ctx, report)
+}
+
+// uploadFiles runs a run's two upload steps, artifacts then inline
+// screenshots, with one refusal shared between them.
+//
+// Shared, because a refusal is about the workspace, not about the file: once
+// the artifact step is refused, the offload would earn the same answer for
+// every screenshot. And the storage-full line is printed here, once, after both
+// steps, with the total over both; each step printing its own would tell the
+// user the same thing twice with two partial counts.
+func (s *ReportService) uploadFiles(ctx context.Context, launch *domain.Launch) {
+	refusal := &uploadRefusal{}
+	s.resolveArtifacts(ctx, launch, refusal)
+	s.offloadInline(ctx, launch, refusal)
+	s.warnStorageFull(refusal)
+}
+
+// uploadRefusal is one run's record of whether the server has refused an
+// upload slot because the workspace's storage is full or the workspace is
+// frozen.
+//
+// WHY THE FIRST REFUSAL STOPS THE RUN'S UPLOADS. Both refusals are about the
+// workspace, not the file. Once one comes back, every later slot request in the
+// run would earn the same 402, so asking again for each file only spends a
+// round-trip per file to print the same reason once per file. The flag is read
+// before each slot request and set when a refusal comes back. A request already
+// in flight when it flips still finishes: if it succeeded, its upload is used;
+// if it was refused too, it is treated like the requests never asked. The first
+// refusal decides what is printed.
+//
+// The eight concurrent offload uploads share it, hence the mutex. It lives for
+// one run only: ReportService instances are reused across ProcessTestResults
+// calls, and an earlier run's refusal must not stop a later run from asking.
+type uploadRefusal struct {
+	mu    sync.Mutex
+	first ports.CodedError
+	// notUploaded counts the attachments, over both steps, that were refused or
+	// never asked because of the refusal. Only the storage-full line reads it.
+	notUploaded int
+}
+
+// observe reports whether err is one of the two refusals, and records it as
+// the run's refusal if it is the first. Any other error, a network fault or a
+// server too old to accept the upload, is not a refusal and keeps today's
+// per-file handling. Detected by code through ports.CodedError, never by
+// matching the message, which is the server's prose and free to change.
+func (r *uploadRefusal) observe(err error) bool {
+	var coded ports.CodedError
+	if !errors.As(err, &coded) {
+		return false
+	}
+	switch coded.ErrorCode() {
+	case ports.CodeStorageExceeded, ports.CodeWorkspaceFrozen:
+	default:
+		return false
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.first == nil {
+		r.first = coded
+	}
+	return true
+}
+
+// refused reports whether the run has been refused, so no slot is asked.
+func (r *uploadRefusal) refused() bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.first != nil
+}
+
+// storageFull reports whether the run's refusal is a full workspace storage,
+// the one refusal under which a file left behind is worth counting and dropping.
+func (r *uploadRefusal) storageFull() bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.first != nil && r.first.ErrorCode() == ports.CodeStorageExceeded
+}
+
+func (r *uploadRefusal) countNotUploaded(n int) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.notUploaded += n
+}
+
+// warnStorageFull prints the run's one storage-full line, ending with the
+// server's own message, which already says what the user can do about it.
+//
+// A frozen workspace prints nothing here: the send that follows is refused
+// with the frozen 402, and that error carries the full reason. Saying it here
+// as well would only print it twice.
+func (s *ReportService) warnStorageFull(r *uploadRefusal) {
+	r.mu.Lock()
+	first, n := r.first, r.notUploaded
+	r.mu.Unlock()
+	if first == nil || first.ErrorCode() != ports.CodeStorageExceeded || n == 0 {
+		return
+	}
+	fmt.Fprintf(s.warnWriter(),
+		"storage is full: %d file(s) were not uploaded; results are still sent. %s\n",
+		n, first.ErrorMessage())
 }
 
 // resolveArtifactAttachments walks every attachment in the merged launch and
@@ -116,6 +216,15 @@ func (s *ReportService) ProcessTestResults(ctx context.Context, files []string, 
 // leaving the placeholder: a fault is worth seeing in the UI, a deliberate skip
 // is not.
 //
+// A REFUSED upload, when the workspace's storage is full or the workspace is
+// frozen (see uploadRefusal), leaves the same placeholder, and so does every
+// artifact after it, for which no slot is asked at all. What changes is the
+// telling: no per-file `skipping` line. A refusal is one fact about the
+// workspace, so repeating it per file buries it. When storage is full, one line
+// for the whole run says how many files were not uploaded and why; when the
+// workspace is frozen, nothing is said here, because the send that follows is
+// refused with the full reason.
+//
 // Fail-open per attachment otherwise, matching the policy the reporters
 // themselves used before this responsibility moved here.
 //
@@ -123,7 +232,19 @@ func (s *ReportService) ProcessTestResults(ctx context.Context, files []string, 
 // deadline-bearing --timeout ctx — see the call site's comment — so a caller
 // whose ctx is already expired or near-expired does not, by itself, prevent an
 // upload from being attempted here.
+//
+// Called on its own, it keeps the refusal to itself and prints the
+// storage-full line itself; a run goes through uploadFiles instead, which
+// shares the refusal with the offload and prints the line once for both.
 func (s *ReportService) resolveArtifactAttachments(ctx context.Context, launch *domain.Launch) {
+	refusal := &uploadRefusal{}
+	s.resolveArtifacts(ctx, launch, refusal)
+	s.warnStorageFull(refusal)
+}
+
+// resolveArtifacts is resolveArtifactAttachments' work, against a refusal the
+// caller may share with the offload.
+func (s *ReportService) resolveArtifacts(ctx context.Context, launch *domain.Launch, refusal *uploadRefusal) {
 	// Memoizes one upload's result per distinct absolute LocalPath, so an
 	// artifact referenced by more than one attachment (e.g. a spec-level
 	// recording attached to several test cases) is uploaded once, not once per
@@ -134,6 +255,9 @@ func (s *ReportService) resolveArtifactAttachments(ctx context.Context, launch *
 		storageKey string
 		fileSize   int64
 		err        error
+		// refused: the slot was refused, or never asked because the run
+		// already had been.
+		refused bool
 	}
 	uploaded := make(map[string]uploadResult)
 	skipped := make(map[string]int)
@@ -159,11 +283,27 @@ func (s *ReportService) resolveArtifactAttachments(ctx context.Context, launch *
 				localPath := attachments[k].LocalPath
 				result, ok := uploaded[localPath]
 				if !ok {
-					storageKey, fileSize, err := s.sender.UploadVideo(ctx, localPath, attachments[k].MimeType)
-					result = uploadResult{storageKey: storageKey, fileSize: fileSize, err: err}
+					if refusal.refused() {
+						result = uploadResult{refused: true}
+					} else {
+						storageKey, fileSize, err := s.sender.UploadVideo(ctx, localPath, attachments[k].MimeType)
+						result = uploadResult{storageKey: storageKey, fileSize: fileSize, err: err, refused: refusal.observe(err)}
+					}
 					uploaded[localPath] = result
 				}
 
+				if result.refused {
+					// The failure's placeholder without the failure's line: see
+					// the refusal note above. Counted per attachment, not per
+					// file on disk: the count is of what the report will lack.
+					if refusal.storageFull() {
+						refusal.countNotUploaded(1)
+					}
+					attachments[k].LocalPath = ""
+					attachments[k].ArtifactKind = ""
+					kept = append(kept, attachments[k])
+					continue
+				}
 				if result.err != nil {
 					fmt.Fprintf(s.warnWriter(), "skipping %s attachment %q (%s): %v\n",
 						kind, attachments[k].Name, localPath, result.err)
@@ -244,7 +384,29 @@ func offloadFilename(name, mimeType string) (string, bool) {
 // fails leaves the attachment inline and warns. Dropping a user's screenshot to
 // save a request would be the wrong trade — worst case we are back to today's
 // behaviour for that one file.
+//
+// A REFUSED upload is the exception, and the two refusals differ (see
+// uploadRefusal; either way no slot is asked once the first comes back).
+// When storage is full, /collect still saves the results but removes every
+// inline file from the request and says so in its answer, so a screenshot left
+// inline is never stored: it would only spend the body budget the results
+// need. A refused screenshot is therefore removed from its case, as
+// dropDeclinedInlineImages removes a declined one, and counted for the run's
+// one storage-full line instead of the per-file "left inline" warning. When the
+// workspace is frozen the send itself is refused, with the reason, so the
+// screenshots are left exactly as they were and nothing is said here.
+//
+// Called on its own, it keeps the refusal to itself and prints the
+// storage-full line itself; a run goes through uploadFiles instead.
 func (s *ReportService) offloadInlineAttachments(ctx context.Context, launch *domain.Launch) {
+	refusal := &uploadRefusal{}
+	s.offloadInline(ctx, launch, refusal)
+	s.warnStorageFull(refusal)
+}
+
+// offloadInline is offloadInlineAttachments' work, against a refusal the
+// caller may share with the artifact step.
+func (s *ReportService) offloadInline(ctx context.Context, launch *domain.Launch, refusal *uploadRefusal) {
 	// Declining images has to decline the inline ones too. A reporter older
 	// than the localImagePath contract still base64-inlines its screenshots, so
 	// gating only the LocalPath path would leave --upload-artifacts=none
@@ -295,6 +457,9 @@ func (s *ReportService) offloadInlineAttachments(ctx context.Context, launch *do
 		storageKey string
 		size       int64
 		err        error
+		// refused: the slot was refused, or never asked because the run
+		// already had been.
+		refused bool
 	}
 	var mu sync.Mutex
 	byHash := make(map[string]*uploaded)
@@ -324,19 +489,46 @@ func (s *ReportService) offloadInlineAttachments(ctx context.Context, launch *do
 		go func() {
 			defer wg.Done()
 			defer func() { <-sem }()
+			// Read here, after taking a slot, not when the goroutine is
+			// started: the refusal is recorded before the refused upload
+			// releases its slot, so every upload started after it sees it, and
+			// at most the ones already in flight are asked.
+			if refusal.refused() {
+				mu.Lock()
+				byHash[h] = &uploaded{refused: true}
+				mu.Unlock()
+				return
+			}
 			att := launch.Suites[t.suite].Cases[t.kase].Attachments[t.att]
 			key, size, err := s.sender.UploadAttachment(ctx, t.data, att.MimeType, t.filename)
+			res := &uploaded{storageKey: key, size: size, err: err, refused: refusal.observe(err)}
 			mu.Lock()
-			byHash[h] = &uploaded{storageKey: key, size: size, err: err}
+			byHash[h] = res
 			mu.Unlock()
 		}()
 	}
 	wg.Wait()
 
+	// Read once, after every upload has answered: by now the run's first
+	// refusal, the one that decides, can no longer change.
+	storageFull := refusal.storageFull()
+	var drop []inlineCandidate
 	failed := 0
 	var firstErr error
 	for i, t := range targets {
 		res := byHash[hashes[i]]
+		if res != nil && res.refused {
+			// Frozen: left inline and untouched, see the refusal note above.
+			// Storage full: removed, but only once every target is resolved,
+			// so no removal shifts an index still to be read; removeAttachments
+			// (body_limit.go) takes every position at once. Identical content
+			// is one request, so every attachment sharing a refused payload
+			// goes, and each counts.
+			if storageFull {
+				drop = append(drop, inlineCandidate{suite: t.suite, kase: t.kase, att: t.att})
+			}
+			continue
+		}
 		if res == nil || res.err != nil {
 			failed++
 			if firstErr == nil && res != nil {
@@ -349,6 +541,13 @@ func (s *ReportService) offloadInlineAttachments(ctx context.Context, launch *do
 		att.FileSize = res.size
 		att.Content = ""
 	}
+	if len(drop) > 0 {
+		removeAttachments(launch, drop)
+		refusal.countNotUploaded(len(drop))
+	}
+	// Counts only the uploads that failed for another reason: a refusal has its
+	// own line (or, frozen, none), so a run where every failure is the refusal
+	// does not print this.
 	if failed > 0 {
 		// The cause, not just the count. "could not be uploaded" alone sends the
 		// reader to the server logs for something the client already knows — and
