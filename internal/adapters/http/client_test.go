@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"qualflare-cli/internal/core/domain"
+	"qualflare-cli/internal/core/ports"
 )
 
 // stubConfig is a ports.ConfigProvider that keeps the client pointed at an httptest
@@ -129,6 +130,38 @@ func TestSendReport_APIError(t *testing.T) {
 	// The server's own message wins over any hardcoded friendly string (SYNC-01/10).
 	if apiErr.Message != "token expired" {
 		t.Errorf("Message = %q, want the server's message", apiErr.Message)
+	}
+}
+
+func TestSendReport_402CarriesCode(t *testing.T) {
+	c := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusPaymentRequired)
+		_, _ = w.Write([]byte(`{"code":"billing.workspace_frozen","message":"m"}`))
+	})
+
+	err := c.SendReport(context.Background(), &domain.Launch{})
+	var coded ports.CodedError
+	if !errors.As(err, &coded) {
+		t.Fatalf("error %v (%T) does not implement ports.CodedError", err, err)
+	}
+	if coded.ErrorCode() != ports.CodeWorkspaceFrozen {
+		t.Errorf("ErrorCode() = %q, want %q", coded.ErrorCode(), ports.CodeWorkspaceFrozen)
+	}
+	if coded.ErrorMessage() != "m" {
+		t.Errorf("ErrorMessage() = %q, want the server's message alone", coded.ErrorMessage())
+	}
+}
+
+// The server's message reaches stderr as it arrives; a line break or an escape
+// sequence in it could forge a second line in a CI log. ErrorMessage puts it on
+// one line; Error() keeps the message as sent.
+func TestAPIError_ErrorMessageIsOneLine(t *testing.T) {
+	e := &APIError{Op: "send", Message: "a\r\nb", Code: ports.CodeStorageExceeded, StatusCode: http.StatusPaymentRequired}
+	if got := e.ErrorMessage(); got != "a  b" {
+		t.Errorf("ErrorMessage() = %q, want %q", got, "a  b")
+	}
+	if !strings.Contains(e.Error(), "a\r\nb") {
+		t.Errorf("Error() = %q, want the message unchanged", e.Error())
 	}
 }
 
@@ -319,6 +352,52 @@ func TestAPIError_Error(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+const (
+	frozenMessage  = "This workspace is larger than its plan allows (4 of 3 members, 2 of 2 projects), so nothing new can be created. Remove members or projects until it fits, or upgrade the plan."
+	storageMessage = "Storage is full (1.2 GB of 1.0 GB). Results are still saved, but new files are not. Delete old runs, wait for run files older than 30 days to expire, or upgrade the plan."
+)
+
+const genericPlanHint = "a plan limit was reached"
+
+// assertNoHintKeepsRest checks that a self-explaining 402 drops only the generic
+// hint: the status and the request id suffix stay.
+func assertNoHintKeepsRest(t *testing.T, code, message, mustContain string) {
+	t.Helper()
+	e := &APIError{Op: "send", Message: message, StatusCode: 402, Code: code}
+	got := e.Error()
+	if !strings.Contains(got, mustContain) {
+		t.Errorf("Error() = %q, missing %q", got, mustContain)
+	}
+	if strings.Contains(got, genericPlanHint) {
+		t.Errorf("Error() = %q, must not carry the generic plan-limit hint", got)
+	}
+	if !strings.HasSuffix(got, "(status: 402)") {
+		t.Errorf("Error() = %q, want it to end with (status: 402)", got)
+	}
+	e.RequestID = "abc"
+	if got := e.Error(); !strings.HasSuffix(got, "(status: 402) [request_id: abc]") {
+		t.Errorf("Error() = %q, want the request id appended after the status", got)
+	}
+}
+
+func TestAPIError_Error_FrozenWorkspaceHasNoGenericHint(t *testing.T) {
+	assertNoHintKeepsRest(t, "billing.workspace_frozen", frozenMessage, "4 of 3 members")
+}
+
+func TestAPIError_Error_StorageFullHasNoGenericHint(t *testing.T) {
+	assertNoHintKeepsRest(t, "quota.storage_exceeded", storageMessage, "1.2 GB of 1.0 GB")
+}
+
+func TestAPIError_Error_OtherPlanLimitKeepsHint(t *testing.T) {
+	// An older server sends no code at all; it keeps the hint too.
+	for _, code := range []string{"quota.exceeded", ""} {
+		e := &APIError{Op: "send", Message: "limit", StatusCode: 402, Code: code}
+		if got := e.Error(); !strings.Contains(got, genericPlanHint) {
+			t.Errorf("code %q: Error() = %q, missing %q", code, got, genericPlanHint)
+		}
 	}
 }
 

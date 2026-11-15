@@ -6,6 +6,7 @@ import (
 	"crypto/rand"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 	"os"
@@ -15,6 +16,7 @@ import (
 	"qualflare-cli/internal/version"
 	"strings"
 	"time"
+	"unicode"
 
 	"resty.dev/v3"
 )
@@ -26,6 +28,11 @@ type Client struct {
 	resty    *resty.Client
 	config   ports.ConfigProvider
 	endpoint string
+	// warn receives operator-facing lines the server asks us to show (today: the
+	// warnings on an accepted upload). It is unexported and defaults to stderr so
+	// stdout stays machine-readable; tests swap in a buffer, as ReportService does
+	// with its own warn writer.
+	warn io.Writer
 }
 
 // ClientOption is a function that configures the client
@@ -83,6 +90,7 @@ func NewHTTPClient(config ports.ConfigProvider, opts ...ClientOption) *Client {
 		resty:    rc,
 		config:   config,
 		endpoint: strings.TrimRight(config.GetAPIEndpoint(), "/"),
+		warn:     os.Stderr,
 	}
 
 	for _, opt := range opts {
@@ -118,10 +126,55 @@ func (c *Client) SendReport(ctx context.Context, report *domain.Launch) error {
 	}
 
 	if resp.IsStatusSuccess() {
+		// The server can accept an upload and still say something was not kept
+		// (for example files it did not store because storage is full). Show each
+		// reason so the user is not left thinking everything arrived. This only
+		// reads the body: whatever it holds, a success stays a success, so no
+		// path here may return an error. Printed with or without --verbose.
+		for _, reason := range parseCollectWarnings(resp.Bytes()) {
+			fmt.Fprintf(c.warn, "warning: %s\n", reason)
+		}
 		return nil
 	}
 
 	return c.buildAPIError("send", resp)
+}
+
+// parseCollectWarnings returns the reasons from the `warnings` list of a /collect
+// success body, in order. It returns nil for anything it cannot read (an empty or
+// non-JSON body, JSON that is not an object, a missing or malformed `warnings`
+// key) and skips warnings with an empty reason, since there is nothing to print.
+// Each reason is put on one line (see oneLine). It never errors: the upload
+// already succeeded.
+func parseCollectWarnings(body []byte) []string {
+	var parsed struct {
+		Warnings []struct {
+			Reason string `json:"reason"`
+		} `json:"warnings"`
+	}
+	if err := json.Unmarshal(body, &parsed); err != nil {
+		return nil
+	}
+	var reasons []string
+	for _, w := range parsed.Warnings {
+		if w.Reason != "" {
+			reasons = append(reasons, oneLine(w.Reason))
+		}
+	}
+	return reasons
+}
+
+// oneLine replaces every control character in server text with a space. A
+// reason or message from the server reaches stderr as it arrives, and one
+// carrying a line break or an escape sequence could forge a second line in a CI
+// log, one that looks like the CLI's own.
+func oneLine(s string) string {
+	return strings.Map(func(r rune) rune {
+		if unicode.IsControl(r) {
+			return ' '
+		}
+		return r
+	}, s)
 }
 
 // uploadURLRequest is the body of the presign POST.
@@ -345,6 +398,13 @@ func (e *APIError) actionHint() string {
 	case http.StatusForbidden:
 		return " — the token lacks access to this project"
 	case http.StatusPaymentRequired:
+		// The server's message for these two refusals already says what to do
+		// (remove members, delete old runs, upgrade), so the generic hint would
+		// only dilute it. Every other 402, including one from an older server
+		// that sends no code, keeps the hint.
+		if e.Code == ports.CodeWorkspaceFrozen || e.Code == ports.CodeStorageExceeded {
+			return ""
+		}
 		return " — a plan limit was reached; check your Qualflare subscription"
 	}
 	return ""
@@ -364,6 +424,14 @@ func (e *APIError) Error() string {
 	}
 	return fmt.Sprintf("%s: %s%s", e.Op, e.Message, suffix)
 }
+
+// ErrorCode and ErrorMessage make *APIError a ports.CodedError, so callers
+// outside this adapter can see why a request was refused without importing it.
+func (e *APIError) ErrorCode() string { return e.Code }
+
+// ErrorMessage is the server's message on one line (see oneLine), since callers
+// print it as it is. Error() is not changed.
+func (e *APIError) ErrorMessage() string { return oneLine(e.Message) }
 
 func (e *APIError) Unwrap() error {
 	return e.Err

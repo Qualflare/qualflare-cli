@@ -63,9 +63,10 @@ type inlineCandidate struct {
 
 // enforceBodyLimit keeps the /collect body under maxCollectBodyBytes.
 //
-// It runs after offloadInlineAttachments, so whatever is still inline either
-// has a type the upload endpoint does not accept (JSON, logs, markdown) or is an
-// image whose upload failed. Losing some of those beats losing the whole launch
+// It runs after offloadInline, so whatever is still inline either has a type
+// the upload endpoint does not accept (JSON, logs, markdown), is an image whose
+// upload failed, or is an image left inline because the workspace is frozen
+// (the send that follows is then refused). Losing some of those beats losing the whole launch
 // to a 413, so while the body is over the limit it drops inline attachments:
 // every non-image before any image (an image the user can look at is the more
 // valuable thing to keep), and within each group the largest first, so the
