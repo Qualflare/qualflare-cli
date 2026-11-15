@@ -6,6 +6,7 @@ import (
 	"crypto/rand"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 	"os"
@@ -26,6 +27,11 @@ type Client struct {
 	resty    *resty.Client
 	config   ports.ConfigProvider
 	endpoint string
+	// warn receives operator-facing lines the server asks us to show (today: the
+	// warnings on an accepted upload). It is unexported and defaults to stderr so
+	// stdout stays machine-readable; tests swap in a buffer, as ReportService does
+	// with its own warn writer.
+	warn io.Writer
 }
 
 // ClientOption is a function that configures the client
@@ -83,6 +89,7 @@ func NewHTTPClient(config ports.ConfigProvider, opts ...ClientOption) *Client {
 		resty:    rc,
 		config:   config,
 		endpoint: strings.TrimRight(config.GetAPIEndpoint(), "/"),
+		warn:     os.Stderr,
 	}
 
 	for _, opt := range opts {
@@ -118,10 +125,41 @@ func (c *Client) SendReport(ctx context.Context, report *domain.Launch) error {
 	}
 
 	if resp.IsStatusSuccess() {
+		// The server can accept an upload and still say something was not kept
+		// (for example files it did not store because storage is full). Show each
+		// reason so the user is not left thinking everything arrived. This only
+		// reads the body: whatever it holds, a success stays a success, so no
+		// path here may return an error. Printed with or without --verbose.
+		for _, reason := range parseCollectWarnings(resp.Bytes()) {
+			fmt.Fprintf(c.warn, "warning: %s\n", reason)
+		}
 		return nil
 	}
 
 	return c.buildAPIError("send", resp)
+}
+
+// parseCollectWarnings returns the reasons from the `warnings` list of a /collect
+// success body, in order. It returns nil for anything it cannot read (an empty or
+// non-JSON body, JSON that is not an object, a missing or malformed `warnings`
+// key) and skips warnings with an empty reason, since there is nothing to print.
+// It never errors: the upload already succeeded.
+func parseCollectWarnings(body []byte) []string {
+	var parsed struct {
+		Warnings []struct {
+			Reason string `json:"reason"`
+		} `json:"warnings"`
+	}
+	if err := json.Unmarshal(body, &parsed); err != nil {
+		return nil
+	}
+	var reasons []string
+	for _, w := range parsed.Warnings {
+		if w.Reason != "" {
+			reasons = append(reasons, w.Reason)
+		}
+	}
+	return reasons
 }
 
 // uploadURLRequest is the body of the presign POST.
