@@ -281,7 +281,7 @@ func localFileSize(path string) int64 {
 //
 // A REFUSED upload, when the workspace is frozen or its storage is full (see
 // uploadRefusal), is told differently: no per-file `skipping` line, because the
-// refusal is one fact about the workspace and repeating it per file buries it.
+// reason is the same for every file left out and repeating it per file buries it.
 // The same goes for a file not asked because of an earlier refusal: after a
 // freeze, every later one; after a storage refusal, every later one at least as
 // large as the smallest refused size. Smaller files are still asked, in walk
@@ -518,8 +518,8 @@ func (s *ReportService) offloadInline(ctx context.Context, launch *domain.Launch
 		storageKey string
 		size       int64
 		err        error
-		// refused: the slot was refused, or never asked because the run
-		// already had been.
+		// refused: the slot was refused, or never asked because of an earlier
+		// refusal.
 		refused bool
 	}
 	var mu sync.Mutex
