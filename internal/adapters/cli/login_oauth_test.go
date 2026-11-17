@@ -373,3 +373,46 @@ func TestLogin_TimeoutNamesAlias(t *testing.T) {
 		t.Errorf("timeout message = %q, want it to name myapp", err)
 	}
 }
+
+// --no-browser is a browser sign-in. It is refused, with nothing saved, where a
+// token source would win or there is no terminal to paste the code into,
+// instead of being silently ignored.
+func TestLogin_NoBrowserRefusedWhereItCannotApply(t *testing.T) {
+	cases := []struct {
+		name    string
+		env     string
+		tty     bool
+		piped   string
+		args    []string
+		wantErr string
+	}{
+		{name: "with --with-token", tty: true, args: []string{"myapp", "--no-browser", "--with-token"},
+			wantErr: "[no-browser with-token] were all set"},
+		{name: "token argument", tty: true, args: []string{"myapp", "qf_arg", "--no-browser"},
+			wantErr: "--no-browser signs in through the browser and cannot be used with a token argument"},
+		{name: "QF_TOKEN", env: "qf_env", tty: true, args: []string{"myapp", "--no-browser"},
+			wantErr: "--no-browser signs in through the browser, but QF_TOKEN is set: unset it, or drop --no-browser"},
+		{name: "stdin not a terminal", piped: "qf_piped\n", args: []string{"myapp", "--no-browser"},
+			wantErr: "--no-browser needs a terminal to paste the sign-in code into, and stdin is not one"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Setenv("QF_TOKEN", tc.env)
+			c, storePath := newCLIForLoginTest(t)
+			h := stubLoginHooks(t, tc.tty)
+			if tc.piped != "" {
+				withPipedStdin(t, tc.piped)
+			}
+			_, err := runLoginCmd(t, c, tc.args...)
+			if err == nil || !strings.Contains(err.Error(), tc.wantErr) {
+				t.Fatalf("login = %v, want an error containing %q", err, tc.wantErr)
+			}
+			if h.discoverCalls != 0 {
+				t.Error("discovery ran")
+			}
+			if _, ok := reloadEntry(t, storePath); ok {
+				t.Error("an entry was saved")
+			}
+		})
+	}
+}

@@ -103,6 +103,7 @@ Examples:
 	cmd.Flags().BoolVar(&flags.force, "force", false, "Overwrite an existing identifier without confirmation")
 	cmd.Flags().BoolVar(&flags.noBrowser, "no-browser", false, "Sign in without opening a browser here: open the printed URL anywhere and paste the code")
 	cmd.Flags().BoolVar(&flags.withToken, "with-token", false, "Paste an API token at a hidden prompt instead of signing in through the browser")
+	cmd.MarkFlagsMutuallyExclusive("no-browser", "with-token")
 	return cmd
 }
 
@@ -114,6 +115,11 @@ func (c *CLI) runLogin(cmd *cobra.Command, args []string, flags loginFlags) erro
 	id := args[0]
 	if err := auth.Validate(id); err != nil {
 		return err
+	}
+	if flags.noBrowser {
+		if err := checkNoBrowser(args); err != nil {
+			return err
+		}
 	}
 	if useBrowserSignIn(args, flags) {
 		return c.loginWithOAuth(cmd, id, flags)
@@ -136,6 +142,21 @@ func (c *CLI) runLogin(cmd *cobra.Command, args []string, flags loginFlags) erro
 // the terminal: no token argument, no QF_TOKEN, no --with-token, stdin a TTY.
 func useBrowserSignIn(args []string, flags loginFlags) bool {
 	return len(args) < 2 && os.Getenv("QF_TOKEN") == "" && !flags.withToken && stdinIsTerminal()
+}
+
+// checkNoBrowser refuses --no-browser where it cannot apply: a token source
+// would be used instead (stdin would even be read for a token), or there is no
+// terminal to paste the code into.
+func checkNoBrowser(args []string) error {
+	switch {
+	case len(args) == 2:
+		return errors.New("--no-browser signs in through the browser and cannot be used with a token argument")
+	case os.Getenv("QF_TOKEN") != "":
+		return errors.New("--no-browser signs in through the browser, but QF_TOKEN is set: unset it, or drop --no-browser")
+	case !stdinIsTerminal():
+		return errors.New("--no-browser needs a terminal to paste the sign-in code into, and stdin is not one")
+	}
+	return nil
 }
 
 // loginWithOAuth confirms an overwrite first, then signs in through the
