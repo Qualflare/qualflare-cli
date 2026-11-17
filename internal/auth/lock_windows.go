@@ -15,7 +15,7 @@ import (
 // lock is released when fn returns. The parent directory is created (0700) if
 // missing, as on a fresh install.
 func WithFileLock(path string, fn func() error) error {
-	if err := os.MkdirAll(filepath.Dir(path), dirMode); err != nil {
+	if err := os.MkdirAll(filepath.Dir(path), dirMode); err != nil { //nolint:gosec // path derives from the config location
 		return fmt.Errorf("create config dir: %w", err)
 	}
 	f, err := os.OpenFile(path+".lock", os.O_CREATE|os.O_RDWR, fileMode) //nolint:gosec // path derives from the config location

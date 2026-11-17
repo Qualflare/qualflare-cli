@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -54,7 +55,7 @@ func TestWithFileLock_Serializes(t *testing.T) {
 	}
 	for range 2 {
 		wg.Go(func() {
-			cmd := exec.Command(os.Args[0], "-test.run=NONE") //nolint:gosec // re-executing the test binary
+			cmd := exec.CommandContext(t.Context(), os.Args[0], "-test.run=NONE") //nolint:gosec // re-executing the test binary
 			cmd.Env = append(os.Environ(), lockHelperEnv+"="+path)
 			out, err := cmd.CombinedOutput()
 			if err != nil {
@@ -84,7 +85,7 @@ func TestWithFileLock_Serializes(t *testing.T) {
 func TestWithFileLock_ReturnsFnError(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "c.toml")
 	want := os.ErrInvalid
-	if got := WithFileLock(path, func() error { return want }); got != want {
+	if got := WithFileLock(path, func() error { return want }); !errors.Is(got, want) {
 		t.Fatalf("got %v, want %v", got, want)
 	}
 	// Lock is released: a second call must not block.
