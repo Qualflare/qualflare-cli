@@ -60,7 +60,7 @@ This opens your browser to sign in. On a remote or SSH machine, add `--no-browse
 qf login myapp --no-browser
 ```
 
-Credentials, including the refresh token, are written to `~/.config/qualflare/config.toml` (`0600`) and renewed automatically. Run `qf login --help` for options.
+Credentials, including the refresh token, are written to `qualflare/config.toml` in your user configuration directory (`0600`; see [Configuration](#configuration) for the path on each OS) and renewed automatically. Run `qf login --help` for options.
 
 **Using an API token instead**
 
@@ -293,13 +293,21 @@ The directory is never guessed: without the flag, nothing is scanned.
 
 ## Configuration
 
-Credentials are stored per identifier in `$XDG_CONFIG_HOME/qualflare/config.toml` (permissions `0600`). It holds access and refresh tokens, so treat it like an SSH key.
+Credentials are stored per identifier in `config.toml` (permissions `0600`), in the user configuration directory:
+
+| OS | Path |
+|----|------|
+| macOS | `~/Library/Application Support/qualflare/config.toml` |
+| Linux | `$XDG_CONFIG_HOME/qualflare/config.toml`, or `~/.config/qualflare/config.toml` when `XDG_CONFIG_HOME` is unset |
+| Windows | `%AppData%\qualflare\config.toml` |
+
+It holds access and refresh tokens, so treat it like an SSH key.
 
 Key environment variables:
 
 | Variable | Description |
 |----------|-------------|
-| `QF_API_URL` | Override the API endpoint, e.g. for a self-hosted or stage server (`https`, or `http` on loopback) |
+| `QF_API_URL` | Override the API endpoint (`https`, or `http` on loopback) |
 | `QF_VERBOSE` | Set to `true` for debug request/response logging |
 | `QF_BRANCH` / `QF_COMMIT` | Git context (auto-detected from common CI vars if unset) |
 | `QF_ENVIRONMENT` | Environment uid to upload into. Overrides the environment recorded in a `qualflare-json` report; `--environment` overrides both. Falls back to `development`. |
