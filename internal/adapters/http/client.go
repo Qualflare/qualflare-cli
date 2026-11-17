@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -15,13 +16,17 @@ import (
 	"qualflare-cli/internal/core/ports"
 	"qualflare-cli/internal/version"
 	"strings"
+	"sync"
 	"time"
 	"unicode"
 
 	"resty.dev/v3"
 )
 
-const apiBasePath = "/api/v1"
+const (
+	apiBasePath = "/api/v1"
+	tokenHeader = "QF_TOKEN"
+)
 
 // Client handles HTTP communication with the API
 type Client struct {
@@ -33,10 +38,29 @@ type Client struct {
 	// stdout stays machine-readable; tests swap in a buffer, as ReportService does
 	// with its own warn writer.
 	warn io.Writer
+
+	// onUnauthorized supplies a new token after a 401 (WithUnauthorizedRetry).
+	onUnauthorized UnauthorizedRetry
+	// tokenMu guards token, the token onUnauthorized handed out. Once set it is
+	// sent instead of the configured key, by every goroutine's requests.
+	tokenMu sync.RWMutex
+	token   string
 }
 
 // ClientOption is a function that configures the client
 type ClientOption func(*Client)
+
+// UnauthorizedRetry is called when the API answers 401, with the token the
+// rejected request carried. It returns the token to retry with, "" to keep the
+// 401 (nothing to refresh, as for a pasted token), or an error to return in
+// place of the 401 (for instance that the sign-in has ended).
+type UnauthorizedRetry func(ctx context.Context, rejected string) (string, error)
+
+// WithUnauthorizedRetry makes a request answered 401 run once more with the
+// token fn returns. One retry per request: a second 401 is the answer.
+func WithUnauthorizedRetry(fn UnauthorizedRetry) ClientOption {
+	return func(c *Client) { c.onUnauthorized = fn }
+}
 
 // NewHTTPClient creates a new HTTP client
 func NewHTTPClient(config ports.ConfigProvider, opts ...ClientOption) *Client {
@@ -70,14 +94,6 @@ func NewHTTPClient(config ports.ConfigProvider, opts ...ClientOption) *Client {
 				sc == http.StatusGatewayTimeout
 		})
 
-	// Add auth header middleware
-	rc.AddRequestMiddleware(func(_ *resty.Client, req *resty.Request) error {
-		if apiKey := config.GetAPIKey(); apiKey != "" {
-			req.SetHeader("QF_TOKEN", apiKey)
-		}
-		return nil
-	})
-
 	// --debug logs the full request/response to stderr. The OnDebugLog callback
 	// runs BEFORE resty formats the output, so redacting the token header here
 	// guarantees the credential never appears in the log (OBS-06).
@@ -93,11 +109,71 @@ func NewHTTPClient(config ports.ConfigProvider, opts ...ClientOption) *Client {
 		warn:     os.Stderr,
 	}
 
+	// Add auth header middleware. It runs on every attempt, retries included,
+	// so a token replaced after a 401 is picked up.
+	rc.AddRequestMiddleware(func(_ *resty.Client, req *resty.Request) error {
+		if token := c.currentToken(); token != "" {
+			req.SetHeader(tokenHeader, token)
+		}
+		return nil
+	})
+
 	for _, opt := range opts {
 		opt(c)
 	}
 
 	return c
+}
+
+// currentToken is the token to send: the one a 401 retry obtained, else the
+// configured key.
+func (c *Client) currentToken() string {
+	c.tokenMu.RLock()
+	token := c.token
+	c.tokenMu.RUnlock()
+	if token != "" {
+		return token
+	}
+	return c.config.GetAPIKey()
+}
+
+// retryError carries the UnauthorizedRetry hook's error past the callers'
+// transport-error wrapping, so the user reads it as the hook wrote it.
+type retryError struct{ err error }
+
+func (e *retryError) Error() string { return e.err.Error() }
+func (e *retryError) Unwrap() error { return e.err }
+
+// send executes the request build returns. When the answer is a 401 and the
+// unauthorized hook supplies a different token, it builds and sends the
+// request once more: build runs again so the retry carries its body afresh.
+func (c *Client) send(ctx context.Context, method, reqURL string, build func() *resty.Request) (*resty.Response, error) {
+	resp, err := build().SetContext(ctx).Execute(method, reqURL)
+	if err != nil || c.onUnauthorized == nil || resp.StatusCode() != http.StatusUnauthorized {
+		return resp, err
+	}
+	rejected := resp.Request.Header.Get(tokenHeader)
+	token, err := c.onUnauthorized(ctx, rejected)
+	if err != nil {
+		return nil, &retryError{err: err}
+	}
+	if token == "" || token == rejected {
+		return resp, nil
+	}
+	c.tokenMu.Lock()
+	c.token = token
+	c.tokenMu.Unlock()
+	return build().SetContext(ctx).Execute(method, reqURL)
+}
+
+// requestError wraps a failed send as an APIError, except the unauthorized
+// hook's own error, which is returned as it is.
+func requestError(op, message string, err error) error {
+	var re *retryError
+	if errors.As(err, &re) {
+		return re.err
+	}
+	return &APIError{Op: op, Message: message, Err: err}
 }
 
 // Close releases resources held by the client
@@ -111,18 +187,20 @@ func (c *Client) SendReport(ctx context.Context, report *domain.Launch) error {
 	if c.config.IsVerbose() {
 		fmt.Fprintf(os.Stderr, "POST %s\n", reqURL) // diagnostics on stderr (BUG-04)
 	}
-	req := c.resty.R().
-		SetContext(ctx).
-		SetBody(report)
 	// Idempotency-Key dedupes retries server-side: resty reuses this same request
 	// across its retry attempts, so a 5xx/timeout that fires after the server
 	// already committed won't create a duplicate launch (or double-count quota).
-	if key := newIdempotencyKey(); key != "" {
-		req.SetHeader("Idempotency-Key", key)
-	}
-	resp, err := req.Post(reqURL)
+	// A 401 retry rebuilds the request with the same key.
+	key := newIdempotencyKey()
+	resp, err := c.send(ctx, http.MethodPost, reqURL, func() *resty.Request {
+		req := c.resty.R().SetBody(report)
+		if key != "" {
+			req.SetHeader("Idempotency-Key", key)
+		}
+		return req
+	})
 	if err != nil {
-		return &APIError{Op: "send", Message: "failed to send request", Err: err}
+		return requestError("send", "failed to send request", err)
 	}
 
 	if resp.IsStatusSuccess() {
@@ -241,17 +319,17 @@ func (c *Client) uploadBytes(ctx context.Context, body []byte, mimeType, filenam
 
 	reqURL := c.endpoint + apiBasePath + "/attachments/upload-url"
 	var presign uploadURLResponse
-	resp, err := c.resty.R().
-		SetContext(uploadCtx).
-		SetBody(uploadURLRequest{
-			Filename: filename,
-			MimeType: mimeType,
-			FileSize: size,
-		}).
-		SetResult(&presign).
-		Post(reqURL)
+	resp, err := c.send(uploadCtx, http.MethodPost, reqURL, func() *resty.Request {
+		return c.resty.R().
+			SetBody(uploadURLRequest{
+				Filename: filename,
+				MimeType: mimeType,
+				FileSize: size,
+			}).
+			SetResult(&presign)
+	})
 	if err != nil {
-		return "", 0, &APIError{Op: "upload-url", Message: "failed to request upload URL", Err: err}
+		return "", 0, requestError("upload-url", "failed to request upload URL", err)
 	}
 	if !resp.IsStatusSuccess() {
 		return "", 0, c.buildAPIError("upload-url", resp)
@@ -311,14 +389,15 @@ func (c *Client) Get(ctx context.Context, path string, params url.Values) (json.
 		fmt.Fprintf(os.Stderr, "GET %s\n", display) // diagnostics on stderr (BUG-04)
 	}
 
-	req := c.resty.R().SetContext(ctx)
-	if len(params) > 0 {
-		req.SetQueryParamsFromValues(params)
-	}
-
-	resp, err := req.Get(reqURL)
+	resp, err := c.send(ctx, http.MethodGet, reqURL, func() *resty.Request {
+		req := c.resty.R()
+		if len(params) > 0 {
+			req.SetQueryParamsFromValues(params)
+		}
+		return req
+	})
 	if err != nil {
-		return nil, &APIError{Op: "get", Message: "failed to send request", Err: err}
+		return nil, requestError("get", "failed to send request", err)
 	}
 
 	if resp.IsStatusSuccess() {
@@ -335,8 +414,8 @@ func redactDebugLog(dl *resty.DebugLog) {
 	if dl == nil || dl.Request == nil || dl.Request.Header == nil {
 		return
 	}
-	if dl.Request.Header.Get("QF_TOKEN") != "" {
-		dl.Request.Header.Set("QF_TOKEN", "***REDACTED***")
+	if dl.Request.Header.Get(tokenHeader) != "" {
+		dl.Request.Header.Set(tokenHeader, "***REDACTED***")
 	}
 	dl.Request.Header.Del("Authorization")
 }

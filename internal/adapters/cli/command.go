@@ -38,6 +38,9 @@ type CLI struct {
 	parserFactory ports.ParserFactory
 	apiClient     ports.APIClient
 	store         *auth.Store
+	// activeID is the alias the running command was invoked under, set before
+	// any request is made; "" for a flat command.
+	activeID string
 }
 
 // NewCLI creates a new CLI instance
@@ -132,13 +135,28 @@ Supported frameworks:
 // createIdentifierCommand builds a parent subcommand for one saved identifier
 // and attaches a fresh authed subtree under it. PersistentPreRunE injects the
 // token into config so the http client middleware picks it up at request time.
+// For an OAuth sign-in the access token is read from the store and refreshed
+// first if it is about to expire; validate, which never calls the API, skips
+// the refresh.
 func (c *CLI) createIdentifierCommand(identifier, token string) *cobra.Command {
 	parent := &cobra.Command{
 		Use:           identifier,
 		Short:         "Commands scoped to project " + identifier,
 		SilenceUsage:  true,
 		SilenceErrors: true,
-		PersistentPreRunE: func(_ *cobra.Command, _ []string) error {
+		PersistentPreRunE: func(cmd *cobra.Command, _ []string) error {
+			c.activeID = identifier
+			if entry, ok := c.store.Entry(identifier); ok && entry.Kind == auth.KindOAuth {
+				if cmd.Name() == "validate" {
+					c.config.SetAPIKey(entry.AccessToken)
+					return nil
+				}
+				fresh, err := c.tokenFor(cmd.Context(), identifier, false, "")
+				if err != nil {
+					return err
+				}
+				token = fresh
+			}
 			c.config.SetAPIKey(token)
 			return nil
 		},

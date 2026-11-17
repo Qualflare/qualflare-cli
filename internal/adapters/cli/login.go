@@ -232,19 +232,31 @@ func (c *CLI) savePastedToken(id, token string) error {
 // saveLocked applies change to the store as it is on disk, under the store's
 // file lock, so a concurrent qf process writing another entry is not undone.
 func (c *CLI) saveLocked(change func(*auth.Store)) error {
+	return c.updateLocked(func(s *auth.Store) error { change(s); return nil })
+}
+
+// updateLocked is saveLocked for a change that can refuse: its error is
+// returned as it is and nothing is saved.
+func (c *CLI) updateLocked(change func(*auth.Store) error) error {
 	path := c.store.Path()
+	var changeErr error
 	err := auth.WithFileLock(path, func() error {
 		fresh, err := auth.Load(path)
 		if err != nil {
 			return err
 		}
-		change(fresh)
+		if changeErr = change(fresh); changeErr != nil {
+			return changeErr
+		}
 		if err := fresh.Save(); err != nil {
 			return err
 		}
 		c.store = fresh
 		return nil
 	})
+	if changeErr != nil {
+		return changeErr
+	}
 	if err != nil {
 		return fmt.Errorf("save credentials: %w", err)
 	}

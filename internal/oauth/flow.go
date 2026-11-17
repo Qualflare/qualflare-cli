@@ -6,6 +6,8 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -205,4 +207,57 @@ func humanDuration(d time.Duration) string {
 	default:
 		return d.String()
 	}
+}
+
+// ErrInvalidGrant means the authorization server refused the refresh token: it
+// was revoked, expired, or superseded too long ago. Only a new sign-in helps.
+var ErrInvalidGrant = errors.New("the sign-in was refused (invalid_grant)")
+
+const revokeTimeout = 10 * time.Second
+
+// Refresh exchanges refreshToken for a new token pair at md's token endpoint.
+// The server rotates refresh tokens, so the returned RefreshToken replaces the
+// one passed in. A refused refresh token wraps ErrInvalidGrant.
+func Refresh(ctx context.Context, md Metadata, refreshToken string) (Credential, error) {
+	cfg := &oauth2.Config{
+		ClientID: ClientID,
+		Endpoint: oauth2.Endpoint{TokenURL: md.TokenEndpoint, AuthStyle: oauth2.AuthStyleInParams},
+	}
+	ctx = context.WithValue(ctx, oauth2.HTTPClient, noRedirectClient(exchangeTimeout))
+	tok, err := cfg.TokenSource(ctx, &oauth2.Token{RefreshToken: refreshToken}).Token()
+	if err != nil {
+		var re *oauth2.RetrieveError
+		if errors.As(err, &re) && re.ErrorCode == "invalid_grant" {
+			return Credential{}, fmt.Errorf("%w: %w", ErrInvalidGrant, err)
+		}
+		return Credential{}, fmt.Errorf("refresh the sign-in: %w", err)
+	}
+	if !strings.EqualFold(tok.Type(), "Bearer") {
+		return Credential{}, fmt.Errorf("refresh the sign-in: unexpected token type %q", clip(tok.Type()))
+	}
+	return Credential{AccessToken: tok.AccessToken, RefreshToken: tok.RefreshToken, ExpiresAt: tok.Expiry}, nil
+}
+
+// Revoke asks md's revocation endpoint (RFC 7009) to revoke refreshToken, and
+// with it the sign-in's grant. Any status other than 200 is an error.
+func Revoke(ctx context.Context, md Metadata, refreshToken string) error {
+	if md.RevocationEndpoint == "" {
+		return errors.New("the server has no revocation endpoint")
+	}
+	form := url.Values{"token": {refreshToken}, "client_id": {ClientID}}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, md.RevocationEndpoint, strings.NewReader(form.Encode()))
+	if err != nil {
+		return fmt.Errorf("build the revocation request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	resp, err := noRedirectClient(revokeTimeout).Do(req)
+	if err != nil {
+		return fmt.Errorf("revoke the sign-in: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, maxMetadataSize))
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("revoke the sign-in: unexpected status %d", resp.StatusCode)
+	}
+	return nil
 }

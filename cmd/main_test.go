@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	qfhttp "qualflare-cli/internal/adapters/http"
+	"qualflare-cli/internal/auth"
 )
 
 // TestExitCodeForError (API-04) pins the CI-facing exit-code contract: transient
@@ -31,6 +32,11 @@ func TestExitCodeForError(t *testing.T) {
 		if got := exitCodeForError(err); got != tc.want {
 			t.Errorf("status %d: exit code = %d, want %d", tc.status, got, tc.want)
 		}
+	}
+
+	// An ended OAuth sign-in exits like a rejected token.
+	if got := exitCodeForError(fmt.Errorf("list: %w", auth.ErrSignInAgain)); got != exitAuth {
+		t.Errorf("ErrSignInAgain: exit code = %d, want %d", got, exitAuth)
 	}
 
 	// A non-API error is generic.
