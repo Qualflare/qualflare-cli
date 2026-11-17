@@ -196,7 +196,7 @@ func (c *CLI) loginWithOAuth(cmd *cobra.Command, id string, flags loginFlags) er
 	defer restore()
 	cred, err := runOAuthLogin(ctx, md, oauth.LoginOptions{
 		NoBrowser:   flags.noBrowser,
-		OpenBrowser: func(u string) error { return oauth.OpenBrowser(ctx, u) },
+		OpenBrowser: oauth.OpenBrowser,
 		Prompt:      func(label string) (string, error) { return readSecret(out, label) },
 		Out:         out,
 		Timeout:     oauth.DefaultTimeout,
