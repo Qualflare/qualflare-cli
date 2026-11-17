@@ -80,6 +80,7 @@ Project-scoped commands (run as ` + "`qf <identifier> <command>`" + `):
   defects / defect       List and view defects
   clusters / cluster     List and view failure clusters
   milestones / milestone List and view milestones
+  overview               The dashboard's six numbers (--days 7|28)
 
 Other:
   list-formats     List supported test frameworks

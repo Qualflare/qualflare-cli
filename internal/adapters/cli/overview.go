@@ -17,18 +17,23 @@ func (c *CLI) createOverviewCommand() *cobra.Command {
 		Short: "Show the project overview: the dashboard's six numbers",
 		Long: `Show the project overview, as the dashboard's Overview shows it.
 
-Six numbers, each with the previous period's value, the change, the trend,
-the daily values and the project's target:
+Six numbers:
 
   successRate     passed / (passed + failed), percent
   flakeRate       flaky runs / all runs, percent
   launchP90       launch duration p90, seconds
   automationRate  automated cases, percent
-  defectsOpened   defects opened today (UTC)
-  launches        launches today (UTC)
+  defectsOpened   defects opened, per day
+  launches        launches, per day
 
-dataThrough says how current the numbers are: they lag a finished run by a
-few minutes.`,
+For each one, latest is its most recent day with a reading (for
+defectsOpened and launches, today's UTC count so far), not a total over the
+window. previous is the daily average over the 7 or 28 days before the
+window; percentChange and trend compare the two. values holds one reading
+per day in buckets, and target is the project's target (null when unset).
+
+warnings carries the server's notes about the data. dataThrough says how
+current the numbers are: they lag a finished run by a few minutes.`,
 		Example: `  # The last 7 days
   qf <id> overview
 
