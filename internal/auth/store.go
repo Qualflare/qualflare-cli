@@ -6,7 +6,9 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"sort"
+	"time"
 
 	"github.com/BurntSushi/toml"
 )
@@ -25,8 +27,17 @@ const (
 var ErrNotFound = errors.New("identifier not found")
 
 // Identifier holds the credentials saved for one project alias.
+//
+// A pasted token fills Token only. An OAuth sign-in fills Kind, AccessToken,
+// RefreshToken, ExpiresAt and Issuer instead. Every field is omitted when empty,
+// so a pasted entry serialises exactly as it did before OAuth existed.
 type Identifier struct {
-	Token string `toml:"token"`
+	Token        string    `toml:"token,omitempty"`
+	Kind         string    `toml:"kind,omitempty"`
+	AccessToken  string    `toml:"access_token,omitempty"`
+	RefreshToken string    `toml:"refresh_token,omitempty"`
+	ExpiresAt    time.Time `toml:"expires_at,omitempty"`
+	Issuer       string    `toml:"issuer,omitempty"`
 }
 
 type fileFormat struct {
@@ -93,9 +104,30 @@ func Load(path string) (*Store, error) {
 // Path returns the file path the store was loaded from.
 func (s *Store) Path() string { return s.path }
 
-// Get returns the token for id and whether it exists.
+// KindOAuth marks an entry created by a browser sign-in.
+const KindOAuth = "oauth"
+
+// Entry returns the full stored entry for id.
+func (s *Store) Entry(id string) (Identifier, bool) {
+	v, ok := s.data.Identifiers[id]
+	return v, ok
+}
+
+// SetOAuth inserts or replaces id with an OAuth entry. It sets Kind itself and
+// drops any pasted Token, so the entry is always read as OAuth.
+func (s *Store) SetOAuth(id string, c Identifier) {
+	c.Kind = KindOAuth
+	c.Token = ""
+	s.data.Identifiers[id] = c
+}
+
+// Get returns the bearer token for id (the access token for an OAuth entry,
+// the pasted token otherwise) and whether the entry exists.
 func (s *Store) Get(id string) (string, bool) {
 	v, ok := s.data.Identifiers[id]
+	if v.Kind == KindOAuth {
+		return v.AccessToken, ok
+	}
 	return v.Token, ok
 }
 
@@ -173,8 +205,32 @@ func (s *Store) Save() error {
 		return fmt.Errorf("close temp file: %w", err)
 	}
 
-	if err := os.Rename(tmpPath, s.path); err != nil {
+	if err := renameRetrying(runtime.GOOS, os.Rename, tmpPath, s.path); err != nil {
 		return fmt.Errorf("rename temp file: %w", err)
 	}
 	return nil
+}
+
+// renameAttemptsWindows bounds the rename retries on Windows, where another
+// process holding the file open (a qf reading it, a virus scan) makes the
+// rename fail for a moment. Between tries it waits 20ms, 40ms, ... (200ms in
+// all).
+const renameAttemptsWindows = 5
+
+// renameRetrying renames from to to, retrying briefly on Windows.
+func renameRetrying(goos string, rename func(string, string) error, from, to string) error {
+	attempts := 1
+	if goos == "windows" {
+		attempts = renameAttemptsWindows
+	}
+	var err error
+	for i := range attempts {
+		if i > 0 {
+			time.Sleep(time.Duration(i) * 20 * time.Millisecond)
+		}
+		if err = rename(from, to); err == nil {
+			return nil
+		}
+	}
+	return err
 }

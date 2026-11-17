@@ -46,7 +46,7 @@ func TestPlatformAndMilestone(t *testing.T) {
 	t.Setenv("QF_PLATFORM", "web")
 	t.Setenv("QF_MILESTONE", "42")
 	c := DefaultConfig()
-	c.LoadFromEnv()
+	_ = c.LoadFromEnv()
 	if c.GetPlatform() != "web" {
 		t.Fatalf("platform = %q, want web", c.GetPlatform())
 	}
@@ -76,7 +76,7 @@ func TestLoadFromEnv_QFEnvironmentWins(t *testing.T) {
 	t.Setenv("QF_LANGUAGE", "fr-FR")
 
 	c := DefaultConfig()
-	c.LoadFromEnv()
+	_ = c.LoadFromEnv()
 
 	if c.Environment != "prod-ci" {
 		t.Fatalf("Environment = %q, want %q", c.Environment, "prod-ci")
@@ -256,7 +256,7 @@ func TestDetectGit_SkipsWhenAlreadySet(t *testing.T) {
 
 func TestNewConfig_AppliesEnv(t *testing.T) {
 	t.Setenv("QF_ENVIRONMENT", "from-env")
-	c := NewConfig()
+	c, _ := NewConfig()
 	if c == nil {
 		t.Fatal("NewConfig() = nil")
 	}
@@ -265,5 +265,45 @@ func TestNewConfig_AppliesEnv(t *testing.T) {
 	}
 	if c.Timeout <= 0 {
 		t.Errorf("Timeout = %v, want the default to be applied", c.Timeout)
+	}
+}
+
+func TestConfig_QFAPIURL(t *testing.T) {
+	cases := []struct {
+		name, env, want string
+		wantErr         bool
+	}{
+		{"unset", "", "https://api.qualflare.com", false},
+		{"stage https", "https://stage-api.qualflare.com", "https://stage-api.qualflare.com", false},
+		{"trailing slash", "https://stage-api.qualflare.com/", "https://stage-api.qualflare.com", false},
+		{"loopback ip", "http://127.0.0.1:8080", "http://127.0.0.1:8080", false},
+		{"loopback v6", "http://[::1]:8080", "http://[::1]:8080", false},
+		{"localhost", "http://localhost:8080", "http://localhost:8080", false},
+		{"localhost upper case", "http://LOCALHOST:8080", "http://LOCALHOST:8080", false},
+		{"http remote", "http://example.com", "", true},
+		{"no host", "https://", "", true},
+		{"bad scheme", "ftp://example.com", "", true},
+		{"no scheme", "example.com", "", true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Setenv("QF_API_URL", tc.env)
+			c, err := NewConfig()
+			if tc.wantErr {
+				if err == nil {
+					t.Fatalf("want error for %q", tc.env)
+				}
+				if !strings.Contains(err.Error(), "QF_API_URL") {
+					t.Errorf("error %q should name QF_API_URL", err)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("NewConfig: %v", err)
+			}
+			if got := c.GetAPIEndpoint(); got != tc.want {
+				t.Errorf("GetAPIEndpoint() = %q, want %q", got, tc.want)
+			}
+		})
 	}
 }

@@ -320,7 +320,7 @@ func TestAPIError_Error(t *testing.T) {
 		{
 			"status and request id",
 			&APIError{Op: "send", Message: "nope", StatusCode: 401, RequestID: "req-1"},
-			[]string{"send: nope", "status: 401", "qf login", "request_id: req-1"},
+			[]string{"send: nope", "status: 401", "run 'qf login <id>' to sign in again", "request_id: req-1"},
 		},
 		{
 			"forbidden hint",

@@ -15,8 +15,10 @@ import (
 	"qualflare-cli/internal/config"
 	"qualflare-cli/internal/core/domain"
 	"qualflare-cli/internal/core/ports"
+	"qualflare-cli/internal/oauth"
 	"qualflare-cli/internal/version"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -38,6 +40,11 @@ type CLI struct {
 	parserFactory ports.ParserFactory
 	apiClient     ports.APIClient
 	store         *auth.Store
+	// activeID is the alias the running command was invoked under, set before
+	// any request is made; "" for a flat command.
+	activeID string
+	// errOut receives warnings; nil means os.Stderr.
+	errOut io.Writer
 }
 
 // NewCLI creates a new CLI instance
@@ -59,8 +66,8 @@ func (c *CLI) CreateRootCommand() *cobra.Command {
 		Long: `qf is a CLI tool for Qualflare — parse test results and manage test data.
 
 Authentication:
-  login            Save credentials for a project (qf login <id> <token>)
-  logout           Remove saved credentials
+  login            Sign in to a project (qf login <id>)
+  logout           Sign out and remove saved credentials
   projects         List locally saved project identifiers
 
 Project-scoped commands (run as ` + "`qf <identifier> <command>`" + `):
@@ -90,7 +97,7 @@ Supported frameworks:
 		SilenceErrors: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if len(args) == 0 && len(c.store.List()) == 0 {
-				fmt.Println("No projects configured. Run 'qf login <identifier> <token>' to get started.")
+				fmt.Println("No projects configured. Run 'qf login <identifier>' to sign in.")
 				return nil
 			}
 			return cmd.Help()
@@ -132,13 +139,31 @@ Supported frameworks:
 // createIdentifierCommand builds a parent subcommand for one saved identifier
 // and attaches a fresh authed subtree under it. PersistentPreRunE injects the
 // token into config so the http client middleware picks it up at request time.
+// For an OAuth sign-in the access token is read from the store and refreshed
+// first if it is about to expire; validate, which never calls the API, skips
+// the refresh.
 func (c *CLI) createIdentifierCommand(identifier, token string) *cobra.Command {
 	parent := &cobra.Command{
 		Use:           identifier,
 		Short:         "Commands scoped to project " + identifier,
 		SilenceUsage:  true,
 		SilenceErrors: true,
-		PersistentPreRunE: func(_ *cobra.Command, _ []string) error {
+		PersistentPreRunE: func(cmd *cobra.Command, _ []string) error {
+			c.activeID = identifier
+			if entry, ok := c.store.Entry(identifier); ok && entry.Kind == auth.KindOAuth {
+				if cmd.Name() == "validate" {
+					c.config.SetAPIKey(entry.AccessToken)
+					return nil
+				}
+				if err := checkIssuer(identifier, entry.Issuer, c.config.GetAPIEndpoint()); err != nil {
+					return err
+				}
+				fresh, err := c.tokenFor(cmd.Context(), identifier, false, "")
+				if err != nil {
+					return err
+				}
+				token = fresh
+			}
 			c.config.SetAPIKey(token)
 			return nil
 		},
@@ -147,6 +172,24 @@ func (c *CLI) createIdentifierCommand(identifier, token string) *cobra.Command {
 		parent.AddCommand(sub)
 	}
 	return parent
+}
+
+// checkIssuer refuses an OAuth alias whose issuer is not the API endpoint's
+// origin. Its tokens were issued by that server alone: sending them, or
+// refreshing them on a 401, against another endpoint (a QF_API_URL override, or
+// the default for a stage sign-in) would hand them to the wrong server.
+func checkIssuer(id, issuer, endpoint string) error {
+	if oauth.SameOrigin(issuer, endpoint) {
+		return nil
+	}
+	return issuerMismatchError{id: id, issuer: issuer, endpoint: endpoint}
+}
+
+type issuerMismatchError struct{ id, issuer, endpoint string }
+
+func (e issuerMismatchError) Error() string {
+	return strconv.Quote(e.id) + " was signed in at " + e.issuer + ", but the API endpoint is " + e.endpoint +
+		". Unset QF_API_URL, or run qf login " + e.id + " again."
 }
 
 // buildAuthedSubtree returns a fresh slice of authed subcommands. Each call

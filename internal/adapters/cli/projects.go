@@ -14,7 +14,7 @@ func (c *CLI) createProjectsCommand() *cobra.Command {
 		RunE: func(_ *cobra.Command, _ []string) error {
 			ids := c.store.List()
 			if len(ids) == 0 {
-				fmt.Println("No projects configured. Run 'qf login <identifier> <token>' to get started.")
+				fmt.Println("No projects configured. Run 'qf login <identifier>' to sign in.")
 				return nil
 			}
 			for _, id := range ids {

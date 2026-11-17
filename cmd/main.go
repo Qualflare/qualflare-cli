@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"net/http"
@@ -28,6 +29,10 @@ const (
 
 // exitCodeForError maps an error (unwrapping to *qfhttp.APIError) to an exit code.
 func exitCodeForError(err error) int {
+	// An OAuth sign-in that can no longer be refreshed is a rejected token.
+	if errors.Is(err, auth.ErrSignInAgain) {
+		return exitAuth
+	}
 	var apiErr *qfhttp.APIError
 	if errors.As(err, &apiErr) {
 		switch {
@@ -50,13 +55,22 @@ func main() {
 
 func run() int {
 	// Initialize configuration
-	cfg := config.NewConfig()
+	cfg, err := config.NewConfig()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		return 1
+	}
 
 	// Initialize parser factory
 	parserFactory := factory.NewParserFactory()
 
-	// Initialize HTTP client
-	httpClient := qfhttp.NewHTTPClient(cfg)
+	// Initialize HTTP client. A 401 asks the CLI for a refreshed OAuth token
+	// (cliApp is assigned below, before any command runs).
+	var cliApp *cli.CLI
+	httpClient := qfhttp.NewHTTPClient(cfg, qfhttp.WithUnauthorizedRetry(
+		func(ctx context.Context, rejected string) (string, error) {
+			return cliApp.RetryUnauthorized(ctx, rejected)
+		}))
 	defer httpClient.Close()
 
 	// Initialize report service
@@ -75,7 +89,7 @@ func run() int {
 	}
 
 	// Initialize CLI
-	cliApp := cli.NewCLI(reportService, cfg, parserFactory, httpClient, store)
+	cliApp = cli.NewCLI(reportService, cfg, parserFactory, httpClient, store)
 
 	// Create and execute root command
 	cmd := cliApp.CreateRootCommand()
@@ -103,5 +117,5 @@ func rewriteUnknownCommandError(err error) error {
 	if auth.Validate(candidate) != nil {
 		return err
 	}
-	return fmt.Errorf("no identifier %q configured. Run 'qf login %s <token>' to add it. (See 'qf projects' for the list.)", candidate, candidate)
+	return fmt.Errorf("no identifier %q configured. Run 'qf login %s' to sign in. (See 'qf projects' for the list.)", candidate, candidate)
 }

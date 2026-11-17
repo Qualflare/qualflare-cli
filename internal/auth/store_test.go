@@ -5,7 +5,9 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
+	"time"
 )
 
 func newTempStorePath(t *testing.T) string {
@@ -176,5 +178,138 @@ func TestLoad_LoosePermsStillLoads(t *testing.T) {
 	}
 	if _, err := Load(path); err != nil {
 		t.Fatalf("Load must not fail on a 0644 file (warn only): %v", err)
+	}
+}
+
+const pastedFixture = `schema_version = 1
+
+[identifiers]
+  [identifiers.alpha]
+    token = "qf_alpha_token"
+  [identifiers.beta]
+    token = "qf_beta_token"
+`
+
+func TestStore_PastedTokensRoundTripUnchanged(t *testing.T) {
+	path := newTempStorePath(t)
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte(pastedFixture), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	s, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	// Re-saving with no changes must reproduce the file byte for byte.
+	if err := s.Save(); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+	got, _ := os.ReadFile(path)
+	if string(got) != pastedFixture {
+		t.Fatalf("unchanged save differs:\n%s\nwant:\n%s", got, pastedFixture)
+	}
+
+	s.SetOAuth("gamma", Identifier{
+		Kind: KindOAuth, AccessToken: "at", RefreshToken: "rt",
+		ExpiresAt: time.Date(2026, 11, 17, 10, 0, 0, 0, time.UTC), Issuer: "https://api.qualflare.com",
+	})
+	if err := s.Save(); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+	got, _ = os.ReadFile(path)
+	for _, block := range []string{
+		"  [identifiers.alpha]\n    token = \"qf_alpha_token\"\n",
+		"  [identifiers.beta]\n    token = \"qf_beta_token\"\n",
+	} {
+		if !strings.Contains(string(got), block) {
+			t.Errorf("pasted entry changed; missing block %q in:\n%s", block, got)
+		}
+	}
+	if n := strings.Count(string(got), "expires_at"); n != 1 {
+		t.Errorf("expires_at appears %d times, want 1 (only the OAuth entry):\n%s", n, got)
+	}
+	if !strings.Contains(string(got), "schema_version = 1") {
+		t.Errorf("schema_version changed:\n%s", got)
+	}
+}
+
+func TestStore_OAuthEntryRoundTrip(t *testing.T) {
+	path := newTempStorePath(t)
+	s, err := Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := Identifier{
+		Kind: KindOAuth, AccessToken: "at", RefreshToken: "rt",
+		ExpiresAt: time.Date(2026, 11, 17, 10, 0, 0, 0, time.UTC), Issuer: "https://api.qualflare.com",
+	}
+	s.SetOAuth("proj", want)
+	if err := s.Save(); err != nil {
+		t.Fatal(err)
+	}
+	s2, err := Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, ok := s2.Entry("proj")
+	if !ok {
+		t.Fatal("Entry missing")
+	}
+	if got.Kind != want.Kind || got.AccessToken != want.AccessToken || got.RefreshToken != want.RefreshToken ||
+		got.Issuer != want.Issuer || !got.ExpiresAt.Equal(want.ExpiresAt) || got.Token != "" {
+		t.Fatalf("Entry = %+v, want %+v", got, want)
+	}
+	if tok, _ := s2.Get("proj"); tok != "at" {
+		t.Fatalf("Get = %q, want access token", tok)
+	}
+	if _, ok := s2.Entry("nope"); ok {
+		t.Fatal("Entry for unknown id reported ok")
+	}
+}
+
+// SetOAuth marks the entry as OAuth itself, so a caller that forgets Kind still
+// gets an entry whose Get returns the access token.
+func TestStore_SetOAuthSetsKind(t *testing.T) {
+	s, err := Load(newTempStorePath(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	s.SetOAuth("proj", Identifier{AccessToken: "at", RefreshToken: "rt", Token: "stale"})
+	got, _ := s.Entry("proj")
+	if got.Kind != KindOAuth {
+		t.Fatalf("Kind = %q, want %q", got.Kind, KindOAuth)
+	}
+	if tok, _ := s.Get("proj"); tok != "at" {
+		t.Fatalf("Get = %q, want the access token", tok)
+	}
+}
+
+// On Windows a reader holding config.toml open (another qf, a virus scan) makes
+// the rename over it fail for a moment, so it is retried a few times there.
+func TestRenameRetrying(t *testing.T) {
+	flaky := func(failures int) (func(string, string) error, *int) {
+		calls := 0
+		return func(string, string) error {
+			calls++
+			if calls <= failures {
+				return errors.New("access is denied")
+			}
+			return nil
+		}, &calls
+	}
+
+	rename, calls := flaky(2)
+	if err := renameRetrying("windows", rename, "a", "b"); err != nil || *calls != 3 {
+		t.Errorf("windows: err = %v after %d calls, want success after 3", err, *calls)
+	}
+	rename, calls = flaky(100)
+	if err := renameRetrying("windows", rename, "a", "b"); err == nil || *calls != renameAttemptsWindows {
+		t.Errorf("windows: err = %v after %d calls, want failure after %d", err, *calls, renameAttemptsWindows)
+	}
+	rename, calls = flaky(1)
+	if err := renameRetrying("linux", rename, "a", "b"); err == nil || *calls != 1 {
+		t.Errorf("linux: err = %v after %d calls, want failure after 1", err, *calls)
 	}
 }

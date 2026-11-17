@@ -35,14 +35,16 @@ Prebuilt binaries are provided for:
 ## Quick start
 
 ```bash
-# Save your project API token (Project → Settings → Access Tokens in the dashboard)
-qf login myapp qf_your_token_here
+# Sign in through the browser (add --no-browser on a remote machine)
+qf login myapp
 
 # Upload a report — the framework is auto-detected from the file
 qf myapp collect path/to/results.xml
 ```
 
 ## In CI
+
+CI signs in with an API token instead of the browser:
 
 ```bash
 qf login ci "$QF_TOKEN" --force

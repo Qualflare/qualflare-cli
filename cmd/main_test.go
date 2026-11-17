@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	qfhttp "qualflare-cli/internal/adapters/http"
+	"qualflare-cli/internal/auth"
 )
 
 // TestExitCodeForError (API-04) pins the CI-facing exit-code contract: transient
@@ -33,6 +34,11 @@ func TestExitCodeForError(t *testing.T) {
 		}
 	}
 
+	// An ended OAuth sign-in exits like a rejected token.
+	if got := exitCodeForError(fmt.Errorf("list: %w", auth.ErrSignInAgain)); got != exitAuth {
+		t.Errorf("ErrSignInAgain: exit code = %d, want %d", got, exitAuth)
+	}
+
 	// A non-API error is generic.
 	if got := exitCodeForError(errors.New("boom")); got != exitGeneric {
 		t.Errorf("non-API error: exit code = %d, want %d", got, exitGeneric)
@@ -47,7 +53,7 @@ func TestRewriteUnknownCommandError(t *testing.T) {
 	t.Run("rewrites a valid identifier", func(t *testing.T) {
 		err := rewriteUnknownCommandError(errors.New(`unknown command "myapp" for "qf"`))
 		got := err.Error()
-		for _, want := range []string{`no identifier "myapp"`, "qf login myapp <token>", "qf projects"} {
+		for _, want := range []string{`no identifier "myapp"`, "qf login myapp", "to sign in", "qf projects"} {
 			if !strings.Contains(got, want) {
 				t.Errorf("message %q missing %q", got, want)
 			}
