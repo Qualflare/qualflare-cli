@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"time"
 
 	"github.com/BurntSushi/toml"
 )
@@ -25,8 +26,17 @@ const (
 var ErrNotFound = errors.New("identifier not found")
 
 // Identifier holds the credentials saved for one project alias.
+//
+// A pasted token fills Token only. An OAuth sign-in fills Kind, AccessToken,
+// RefreshToken, ExpiresAt and Issuer instead. Every field is omitted when empty,
+// so a pasted entry serialises exactly as it did before OAuth existed.
 type Identifier struct {
-	Token string `toml:"token"`
+	Token        string    `toml:"token,omitempty"`
+	Kind         string    `toml:"kind,omitempty"`
+	AccessToken  string    `toml:"access_token,omitempty"`
+	RefreshToken string    `toml:"refresh_token,omitempty"`
+	ExpiresAt    time.Time `toml:"expires_at,omitempty"`
+	Issuer       string    `toml:"issuer,omitempty"`
 }
 
 type fileFormat struct {
@@ -93,9 +103,27 @@ func Load(path string) (*Store, error) {
 // Path returns the file path the store was loaded from.
 func (s *Store) Path() string { return s.path }
 
-// Get returns the token for id and whether it exists.
+// KindOAuth marks an entry created by a browser sign-in.
+const KindOAuth = "oauth"
+
+// Entry returns the full stored entry for id.
+func (s *Store) Entry(id string) (Identifier, bool) {
+	v, ok := s.data.Identifiers[id]
+	return v, ok
+}
+
+// SetOAuth inserts or replaces id with an OAuth entry.
+func (s *Store) SetOAuth(id string, c Identifier) {
+	s.data.Identifiers[id] = c
+}
+
+// Get returns the bearer token for id (the access token for an OAuth entry,
+// the pasted token otherwise) and whether the entry exists.
 func (s *Store) Get(id string) (string, bool) {
 	v, ok := s.data.Identifiers[id]
+	if v.Kind == KindOAuth {
+		return v.AccessToken, ok
+	}
 	return v.Token, ok
 }
 

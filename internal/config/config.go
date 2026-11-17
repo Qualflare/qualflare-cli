@@ -4,6 +4,7 @@ package config
 import (
 	"context"
 	"fmt"
+	"net/url"
 	"os"
 	"strconv"
 	"strings"
@@ -19,12 +20,17 @@ const (
 	MaxFileSize   = 100 * 1024 * 1024 // 100 MB
 )
 
-var apiEndpoint = "https://api.qualflare.com"
+const defaultAPIEndpoint = "https://api.qualflare.com"
+
+var apiEndpoint = defaultAPIEndpoint
 
 // Config holds the application configuration
 type Config struct {
 	// API settings
 	APIKey string
+	// APIEndpoint is the API base URL; empty means the built-in default.
+	// QF_API_URL sets it.
+	APIEndpoint string
 
 	// Project settings
 	Environment string
@@ -111,16 +117,29 @@ func DefaultConfig() *Config {
 }
 
 // NewConfig creates a new configuration instance with environment variable overrides
-func NewConfig() *Config {
+func NewConfig() (*Config, error) {
 	cfg := DefaultConfig()
-	cfg.LoadFromEnv()
-	return cfg
+	if err := cfg.LoadFromEnv(); err != nil {
+		return nil, err
+	}
+	return cfg, nil
 }
 
 // LoadFromEnv loads configuration from environment variables.
 // Note: QF_API_KEY is intentionally NOT read here — tokens come from the
 // auth store via `qf login <identifier> <token>`.
-func (c *Config) LoadFromEnv() {
+//
+// QF_API_URL overrides the API endpoint. It must be https, or http on a loopback
+// host; anything else is returned as an error rather than ignored, because a
+// token sent to a mistyped or plaintext endpoint is worse than a refusal.
+func (c *Config) LoadFromEnv() error {
+	if raw := os.Getenv("QF_API_URL"); raw != "" {
+		endpoint, err := parseAPIURL(raw)
+		if err != nil {
+			return err
+		}
+		c.APIEndpoint = endpoint
+	}
 	if os.Getenv("QF_ENVIRONMENT") != "" {
 		c.environmentSet = true
 	}
@@ -153,6 +172,27 @@ func (c *Config) LoadFromEnv() {
 	envBool(&c.Quiet, "QF_QUIET")
 	envBool(&c.Debug, "QF_DEBUG")
 	envBool(&c.NoCaptureOutput, "QF_NO_CAPTURE_OUTPUT")
+	return nil
+}
+
+// parseAPIURL validates a QF_API_URL value and returns it without a trailing slash.
+func parseAPIURL(raw string) (string, error) {
+	u, err := url.Parse(strings.TrimSpace(raw))
+	if err != nil || u.Host == "" || u.Hostname() == "" {
+		return "", fmt.Errorf("invalid QF_API_URL %q: want an https URL with a host", raw)
+	}
+	switch u.Scheme {
+	case "https":
+	case "http":
+		switch u.Hostname() {
+		case "127.0.0.1", "::1", "localhost":
+		default:
+			return "", fmt.Errorf("invalid QF_API_URL %q: http is only allowed for a loopback host (127.0.0.1, ::1, localhost); use https", raw)
+		}
+	default:
+		return "", fmt.Errorf("invalid QF_API_URL %q: scheme must be https", raw)
+	}
+	return strings.TrimRight(u.String(), "/"), nil
 }
 
 // The env* helpers share one rule: an unset, empty, or unparseable variable leaves the
@@ -327,6 +367,9 @@ func (c *Config) GetAPIKey() string {
 
 // GetAPIEndpoint returns the API endpoint
 func (c *Config) GetAPIEndpoint() string {
+	if c.APIEndpoint != "" {
+		return c.APIEndpoint
+	}
 	return apiEndpoint
 }
 

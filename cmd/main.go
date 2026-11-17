@@ -50,7 +50,11 @@ func main() {
 
 func run() int {
 	// Initialize configuration
-	cfg := config.NewConfig()
+	cfg, err := config.NewConfig()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		return 1
+	}
 
 	// Initialize parser factory
 	parserFactory := factory.NewParserFactory()

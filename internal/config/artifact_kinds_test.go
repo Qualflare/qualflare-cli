@@ -113,7 +113,7 @@ func TestQFUploadArtifactsAcceptsEveryKindTheFlagDoes(t *testing.T) {
 	for _, kind := range domain.AllArtifactKinds() {
 		t.Setenv("QF_UPLOAD_ARTIFACTS", kind)
 		cfg := DefaultConfig()
-		cfg.LoadFromEnv()
+		_ = cfg.LoadFromEnv()
 		if !cfg.IsArtifactUploadEnabled(kind) {
 			t.Errorf("QF_UPLOAD_ARTIFACTS=%s should enable %s", kind, kind)
 		}
@@ -123,7 +123,7 @@ func TestQFUploadArtifactsAcceptsEveryKindTheFlagDoes(t *testing.T) {
 func TestQFUploadArtifactsNoneDeclinesEverything(t *testing.T) {
 	t.Setenv("QF_UPLOAD_ARTIFACTS", "none")
 	cfg := DefaultConfig()
-	cfg.LoadFromEnv()
+	_ = cfg.LoadFromEnv()
 	for _, kind := range domain.AllArtifactKinds() {
 		if cfg.IsArtifactUploadEnabled(kind) {
 			t.Errorf("QF_UPLOAD_ARTIFACTS=none should decline %s", kind)
@@ -134,7 +134,7 @@ func TestQFUploadArtifactsNoneDeclinesEverything(t *testing.T) {
 func TestQFUploadArtifactsEnvVarOptsIn(t *testing.T) {
 	t.Setenv("QF_UPLOAD_ARTIFACTS", "trace")
 	cfg := DefaultConfig()
-	cfg.LoadFromEnv()
+	_ = cfg.LoadFromEnv()
 
 	if !cfg.IsArtifactUploadEnabled("trace") {
 		t.Error("QF_UPLOAD_ARTIFACTS=trace should enable traces")

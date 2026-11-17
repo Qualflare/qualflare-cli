@@ -31,7 +31,7 @@ func TestEnvironmentFallback_FlagWinsOverTheFile(t *testing.T) {
 func TestEnvironmentFallback_EnvVarWinsOverTheFile(t *testing.T) {
 	t.Setenv("QF_ENVIRONMENT", "production")
 	cfg := DefaultConfig()
-	cfg.LoadFromEnv()
+	_ = cfg.LoadFromEnv()
 	cfg.SetEnvironmentFallback("staging")
 	if got := cfg.GetEnvironment(); got != "production" {
 		t.Errorf("QF_ENVIRONMENT must outrank the report; got %q", got)
