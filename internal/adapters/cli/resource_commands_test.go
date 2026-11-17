@@ -319,3 +319,46 @@ func TestResourceDetailCommands_Paths(t *testing.T) {
 		})
 	}
 }
+
+func TestOverview_DefaultsToSevenDays(t *testing.T) {
+	c, api := newAPICLI(t)
+
+	if err := run(t, c.createOverviewCommand()); err != nil {
+		t.Fatalf("overview = %v", err)
+	}
+	if api.calls != 1 {
+		t.Fatalf("api called %d times, want 1", api.calls)
+	}
+	if api.path != apiV1+"/overview" {
+		t.Errorf("path = %q, want %q", api.path, apiV1+"/overview")
+	}
+	if got := api.params.Get("days"); got != "7" {
+		t.Errorf("days = %q, want 7", got)
+	}
+}
+
+func TestOverview_TwentyEightDays(t *testing.T) {
+	c, api := newAPICLI(t)
+
+	if err := run(t, c.createOverviewCommand(), "--days", "28"); err != nil {
+		t.Fatalf("overview --days 28 = %v", err)
+	}
+	if got := api.params.Get("days"); got != "28" {
+		t.Errorf("days = %q, want 28", got)
+	}
+}
+
+// The endpoint only knows the website's windows; anything else is refused here,
+// before a request, with an error that names the flag.
+func TestOverview_RejectsOtherDays(t *testing.T) {
+	for _, days := range []string{"30", "0", "-1"} {
+		c, api := newAPICLI(t)
+		err := run(t, c.createOverviewCommand(), "--days", days)
+		if err == nil || !strings.Contains(err.Error(), "--days") {
+			t.Errorf("--days %s = %v, want an error naming --days", days, err)
+		}
+		if api.calls != 0 {
+			t.Errorf("--days %s: a request was made", days)
+		}
+	}
+}

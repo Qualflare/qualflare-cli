@@ -186,6 +186,7 @@ qf myapp cases list --suite 5
 qf myapp plans list
 qf myapp launches list --milestone 3
 qf myapp defects list --severity critical,high
+qf myapp overview --days 28
 ```
 
 Run `qf myapp <command> --help` for pagination, filtering, and sorting options.
@@ -219,6 +220,7 @@ CI and scripts sign in with an API token, not the browser. Add a single step aft
 | `qf <id> collect [files...]` | Parse and upload test results |
 | `qf <id> validate [files...]` | Parse and validate without uploading |
 | `qf <id> suites\|cases\|plans\|launches\|defects\|clusters\|milestones ...` | Read project data |
+| `qf <id> overview [--days 7\|28]` | The dashboard's six numbers (success rate, flake rate, launch p90, automation, defects opened, launches) with their change and daily values |
 
 Run `qf <command> --help` for flags and examples.
 

@@ -213,6 +213,7 @@ func (c *CLI) buildAuthedSubtree() []*cobra.Command {
 		c.createClusterCommand(),
 		c.createMilestonesCommand(),
 		c.createMilestoneCommand(),
+		c.createOverviewCommand(),
 	}
 }
 
