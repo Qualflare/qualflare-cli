@@ -283,3 +283,39 @@ func TestLogin_NoBrowserEmptyCode(t *testing.T) {
 		t.Errorf("exchanges = %d, want 0", n)
 	}
 }
+
+// On an SSH session the browser would open on the remote machine, if at all,
+// so the --no-browser hint comes first, before the URL.
+func TestLogin_SSHHintFirst(t *testing.T) {
+	cases := []struct {
+		name, conn, tty string
+		hintFirst       bool
+	}{
+		{"SSH_CONNECTION", "203.0.113.5 52000 192.0.2.10 22", "", true},
+		{"SSH_TTY", "", "/dev/pts/3", true},
+		{"local", "", "", false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Setenv("SSH_CONNECTION", tc.conn)
+			t.Setenv("SSH_TTY", tc.tty)
+			f := newFakeAS(t)
+			_, out, err := loginWithBrowser(t, f, 50*time.Millisecond, func(string) {})
+			if !errors.Is(err, ErrTimeout) {
+				t.Fatalf("Login = %v, want ErrTimeout", err)
+			}
+			const hint = "This looks like an SSH session"
+			url := authURLPattern.FindStringIndex(out)
+			if url == nil {
+				t.Fatalf("authorize URL not printed; out = %q", out)
+			}
+			at := strings.Index(out, hint)
+			if tc.hintFirst && (at < 0 || at > url[0] || !strings.Contains(out[:url[0]], "--no-browser")) {
+				t.Errorf("out = %q, want the SSH --no-browser hint before the URL", out)
+			}
+			if !tc.hintFirst && at >= 0 {
+				t.Errorf("out = %q, want no SSH hint", out)
+			}
+		})
+	}
+}

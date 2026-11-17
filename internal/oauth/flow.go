@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -132,6 +133,10 @@ func codeFromLoopback(ctx context.Context, cfg *oauth2.Config, md Metadata, stat
 	cfg.RedirectURL = lb.redirectURI
 	authURL := authCodeURL(cfg, md, state, verifier)
 
+	if overSSH() {
+		_, _ = fmt.Fprint(out, "This looks like an SSH session: a browser opened here may not reach you.\n"+
+			"If none opens, press Ctrl-C and run qf login again with --no-browser.\n\n")
+	}
 	_, _ = fmt.Fprintf(out, "Opening your browser to sign in. If it does not open, visit the URL below,\n"+
 		"or on a remote or SSH session run qf login again with --no-browser:\n\n  %s\n\n", authURL)
 	if opts.OpenBrowser != nil {
@@ -151,6 +156,12 @@ func codeFromLoopback(ctx context.Context, cfg *oauth2.Config, md Metadata, stat
 	case <-ctx.Done():
 		return "", fmt.Errorf("sign-in interrupted: %w", ctx.Err())
 	}
+}
+
+// overSSH reports whether qf runs in an SSH session, where the loopback
+// sign-in usually cannot reach the user's browser.
+func overSSH() bool {
+	return os.Getenv("SSH_CONNECTION") != "" || os.Getenv("SSH_TTY") != ""
 }
 
 // codeFromUser prints the authorize URL with the server's code page as the
