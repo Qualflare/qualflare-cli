@@ -285,3 +285,31 @@ func TestStore_SetOAuthSetsKind(t *testing.T) {
 		t.Fatalf("Get = %q, want the access token", tok)
 	}
 }
+
+// On Windows a reader holding config.toml open (another qf, a virus scan) makes
+// the rename over it fail for a moment, so it is retried a few times there.
+func TestRenameRetrying(t *testing.T) {
+	flaky := func(failures int) (func(string, string) error, *int) {
+		calls := 0
+		return func(string, string) error {
+			calls++
+			if calls <= failures {
+				return errors.New("access is denied")
+			}
+			return nil
+		}, &calls
+	}
+
+	rename, calls := flaky(2)
+	if err := renameRetrying("windows", rename, "a", "b"); err != nil || *calls != 3 {
+		t.Errorf("windows: err = %v after %d calls, want success after 3", err, *calls)
+	}
+	rename, calls = flaky(100)
+	if err := renameRetrying("windows", rename, "a", "b"); err == nil || *calls != renameAttemptsWindows {
+		t.Errorf("windows: err = %v after %d calls, want failure after %d", err, *calls, renameAttemptsWindows)
+	}
+	rename, calls = flaky(1)
+	if err := renameRetrying("linux", rename, "a", "b"); err == nil || *calls != 1 {
+		t.Errorf("linux: err = %v after %d calls, want failure after 1", err, *calls)
+	}
+}

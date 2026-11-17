@@ -43,6 +43,8 @@ type CLI struct {
 	// activeID is the alias the running command was invoked under, set before
 	// any request is made; "" for a flat command.
 	activeID string
+	// errOut receives warnings; nil means os.Stderr.
+	errOut io.Writer
 }
 
 // NewCLI creates a new CLI instance

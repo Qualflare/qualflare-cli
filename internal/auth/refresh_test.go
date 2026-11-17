@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"path/filepath"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -72,7 +73,7 @@ func (r *rotatingServer) refresh(_ context.Context, rt string) (Identifier, erro
 func TestFreshToken_NotExpiring(t *testing.T) {
 	path := writeOAuthEntry(t, "at-0", "rt-0", time.Now().Add(10*time.Minute))
 	srv := &rotatingServer{}
-	got, err := FreshToken(t.Context(), mustLoad(t, path), "myapp", srv.refresh, false, "")
+	got, err := FreshToken(t.Context(), mustLoad(t, path), "myapp", srv.refresh, false, "", nil)
 	if err != nil {
 		t.Fatalf("FreshToken: %v", err)
 	}
@@ -87,7 +88,7 @@ func TestFreshToken_NotExpiring(t *testing.T) {
 func TestFreshToken_Within60s(t *testing.T) {
 	path := writeOAuthEntry(t, "at-0", "rt-0", time.Now().Add(30*time.Second))
 	srv := &rotatingServer{}
-	got, err := FreshToken(t.Context(), mustLoad(t, path), "myapp", srv.refresh, false, "")
+	got, err := FreshToken(t.Context(), mustLoad(t, path), "myapp", srv.refresh, false, "", nil)
 	if err != nil {
 		t.Fatalf("FreshToken: %v", err)
 	}
@@ -125,7 +126,7 @@ func TestFreshToken_ConcurrentProcesses(t *testing.T) {
 	errs := make([]error, len(stores))
 	for i, s := range stores {
 		wg.Go(func() {
-			tokens[i], errs[i] = FreshToken(t.Context(), s, "myapp", srv.refresh, false, "")
+			tokens[i], errs[i] = FreshToken(t.Context(), s, "myapp", srv.refresh, false, "", nil)
 		})
 	}
 	wg.Wait()
@@ -150,7 +151,7 @@ func TestFreshToken_ConcurrentProcesses(t *testing.T) {
 func TestFreshToken_InvalidGrant(t *testing.T) {
 	path := writeOAuthEntry(t, "at-0", "rt-0", time.Now().Add(-time.Minute))
 	srv := &rotatingServer{refused: fmt.Errorf("oauth2: %w", ErrInvalidGrant)}
-	_, err := FreshToken(t.Context(), mustLoad(t, path), "myapp", srv.refresh, false, "")
+	_, err := FreshToken(t.Context(), mustLoad(t, path), "myapp", srv.refresh, false, "", nil)
 	if !errors.Is(err, ErrSignInAgain) {
 		t.Fatalf("err = %v, want ErrSignInAgain", err)
 	}
@@ -166,7 +167,7 @@ func TestFreshToken_InvalidGrant(t *testing.T) {
 func TestFreshToken_OtherRefreshErrorIsNotSignInAgain(t *testing.T) {
 	path := writeOAuthEntry(t, "at-0", "rt-0", time.Now().Add(-time.Minute))
 	srv := &rotatingServer{refused: errors.New("connection refused")}
-	_, err := FreshToken(t.Context(), mustLoad(t, path), "myapp", srv.refresh, false, "")
+	_, err := FreshToken(t.Context(), mustLoad(t, path), "myapp", srv.refresh, false, "", nil)
 	if err == nil || errors.Is(err, ErrSignInAgain) {
 		t.Fatalf("err = %v, want a plain refresh error", err)
 	}
@@ -175,7 +176,7 @@ func TestFreshToken_OtherRefreshErrorIsNotSignInAgain(t *testing.T) {
 func TestFreshToken_NoRefreshTokenIsSignInAgain(t *testing.T) {
 	path := writeOAuthEntry(t, "at-0", "", time.Now().Add(-time.Minute))
 	srv := &rotatingServer{}
-	_, err := FreshToken(t.Context(), mustLoad(t, path), "myapp", srv.refresh, false, "")
+	_, err := FreshToken(t.Context(), mustLoad(t, path), "myapp", srv.refresh, false, "", nil)
 	if !errors.Is(err, ErrSignInAgain) {
 		t.Fatalf("err = %v, want ErrSignInAgain", err)
 	}
@@ -188,7 +189,7 @@ func TestFreshToken_NoRefreshTokenIsSignInAgain(t *testing.T) {
 func TestFreshToken_ForceRefreshesTheRejectedToken(t *testing.T) {
 	path := writeOAuthEntry(t, "at-0", "rt-0", time.Now().Add(time.Hour))
 	srv := &rotatingServer{}
-	got, err := FreshToken(t.Context(), mustLoad(t, path), "myapp", srv.refresh, true, "at-0")
+	got, err := FreshToken(t.Context(), mustLoad(t, path), "myapp", srv.refresh, true, "at-0", nil)
 	if err != nil {
 		t.Fatalf("FreshToken: %v", err)
 	}
@@ -202,7 +203,7 @@ func TestFreshToken_ForceRefreshesTheRejectedToken(t *testing.T) {
 func TestFreshToken_ForceSkipsWhenAlreadyReplaced(t *testing.T) {
 	path := writeOAuthEntry(t, "at-1", "rt-1", time.Now().Add(time.Hour))
 	srv := &rotatingServer{gen: 1}
-	got, err := FreshToken(t.Context(), mustLoad(t, path), "myapp", srv.refresh, true, "at-0")
+	got, err := FreshToken(t.Context(), mustLoad(t, path), "myapp", srv.refresh, true, "at-0", nil)
 	if err != nil {
 		t.Fatalf("FreshToken: %v", err)
 	}
@@ -226,7 +227,7 @@ func TestFreshToken_StaleViewUsesTheFile(t *testing.T) {
 		t.Fatal(err)
 	}
 	srv := &rotatingServer{gen: 1}
-	got, err := FreshToken(t.Context(), stale, "myapp", srv.refresh, false, "")
+	got, err := FreshToken(t.Context(), stale, "myapp", srv.refresh, false, "", nil)
 	if err != nil {
 		t.Fatalf("FreshToken: %v", err)
 	}
@@ -240,7 +241,7 @@ func TestFreshToken_PastedTokenUntouched(t *testing.T) {
 	s := mustLoad(t, path)
 	s.Set("myapp", "qf_pasted")
 	srv := &rotatingServer{}
-	got, err := FreshToken(t.Context(), s, "myapp", srv.refresh, true, "qf_pasted")
+	got, err := FreshToken(t.Context(), s, "myapp", srv.refresh, true, "qf_pasted", nil)
 	if err != nil {
 		t.Fatalf("FreshToken: %v", err)
 	}
@@ -251,7 +252,104 @@ func TestFreshToken_PastedTokenUntouched(t *testing.T) {
 
 func TestFreshToken_UnknownAlias(t *testing.T) {
 	s := mustLoad(t, filepath.Join(t.TempDir(), "config.toml"))
-	if _, err := FreshToken(t.Context(), s, "nope", (&rotatingServer{}).refresh, false, ""); !errors.Is(err, ErrNotFound) {
+	if _, err := FreshToken(t.Context(), s, "nope", (&rotatingServer{}).refresh, false, "", nil); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("err = %v, want ErrNotFound", err)
+	}
+}
+
+// collectWarnings returns a warn func and the warnings it received.
+func collectWarnings() (func(string), *[]string) {
+	var got []string
+	return func(s string) { got = append(got, s) }, &got
+}
+
+// The server has rotated the refresh token by the time the save fails, so
+// failing the command would lose the new pair for nothing: the new access
+// token is used, with a warning that names no token.
+func TestFreshToken_SaveFailureKeepsTheNewToken(t *testing.T) {
+	path := writeOAuthEntry(t, "at-0", "rt-0", time.Now().Add(-time.Minute))
+	orig := saveRefreshed
+	t.Cleanup(func() { saveRefreshed = orig })
+	saveRefreshed = func(*Store) error { return errors.New("disk full") }
+	warn, warnings := collectWarnings()
+
+	srv := &rotatingServer{}
+	got, err := FreshToken(t.Context(), mustLoad(t, path), "myapp", srv.refresh, false, "", warn)
+	if err != nil {
+		t.Fatalf("FreshToken: %v", err)
+	}
+	if got != "at-1" {
+		t.Errorf("token = %q, want the refreshed at-1", got)
+	}
+	if len(*warnings) != 1 || !strings.Contains((*warnings)[0], "could not save") ||
+		!strings.Contains((*warnings)[0], "disk full") {
+		t.Fatalf("warnings = %q, want one about the failed save", *warnings)
+	}
+	for _, tok := range []string{"at-0", "rt-0", "at-1", "rt-1"} {
+		if strings.Contains((*warnings)[0], tok) {
+			t.Errorf("warning quotes token %s: %q", tok, (*warnings)[0])
+		}
+	}
+}
+
+// A refresh that fails for a reason other than invalid_grant (the network, a
+// 5xx) does not stop a command while the current access token is still valid.
+func TestFreshToken_TransientFailureUsesTheValidToken(t *testing.T) {
+	path := writeOAuthEntry(t, "at-0", "rt-0", time.Now().Add(30*time.Second))
+	srv := &rotatingServer{refused: errors.New("token endpoint: unexpected status 503")}
+	warn, warnings := collectWarnings()
+	got, err := FreshToken(t.Context(), mustLoad(t, path), "myapp", srv.refresh, false, "", warn)
+	if err != nil {
+		t.Fatalf("FreshToken: %v", err)
+	}
+	if got != "at-0" {
+		t.Errorf("token = %q, want the current at-0", got)
+	}
+	if len(*warnings) != 1 || !strings.Contains((*warnings)[0], "could not refresh") ||
+		!strings.Contains((*warnings)[0], "503") {
+		t.Fatalf("warnings = %q, want one about the failed refresh", *warnings)
+	}
+	if e, _ := mustLoad(t, path).Entry("myapp"); e.AccessToken != "at-0" || e.RefreshToken != "rt-0" {
+		t.Errorf("file holds %q/%q, want it unchanged", e.AccessToken, e.RefreshToken)
+	}
+}
+
+// Once the token has expired, or the server has rejected it, there is nothing
+// to fall back on: the refresh error stands, and invalid_grant still says sign
+// in again whatever the expiry.
+func TestFreshToken_FailuresWithoutAValidToken(t *testing.T) {
+	transient := errors.New("connection refused")
+	cases := []struct {
+		name     string
+		expires  time.Time
+		force    bool
+		refused  error
+		signedIn bool // ErrSignInAgain expected
+	}{
+		{name: "expired", expires: time.Now().Add(-time.Minute), refused: transient},
+		{name: "rejected by the server", expires: time.Now().Add(time.Hour), force: true, refused: transient},
+		{name: "invalid_grant before expiry", expires: time.Now().Add(30 * time.Second),
+			refused: fmt.Errorf("oauth2: %w", ErrInvalidGrant), signedIn: true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			path := writeOAuthEntry(t, "at-0", "rt-0", tc.expires)
+			srv := &rotatingServer{refused: tc.refused}
+			warn, warnings := collectWarnings()
+			rejected := ""
+			if tc.force {
+				rejected = "at-0"
+			}
+			got, err := FreshToken(t.Context(), mustLoad(t, path), "myapp", srv.refresh, tc.force, rejected, warn)
+			if err == nil || got != "" {
+				t.Fatalf("FreshToken = %q, %v; want an error", got, err)
+			}
+			if errors.Is(err, ErrSignInAgain) != tc.signedIn {
+				t.Errorf("err = %v, ErrSignInAgain want %v", err, tc.signedIn)
+			}
+			if len(*warnings) != 0 {
+				t.Errorf("warnings = %q, want none", *warnings)
+			}
+		})
 	}
 }

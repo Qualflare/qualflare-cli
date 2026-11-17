@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"sort"
 	"time"
 
@@ -204,8 +205,32 @@ func (s *Store) Save() error {
 		return fmt.Errorf("close temp file: %w", err)
 	}
 
-	if err := os.Rename(tmpPath, s.path); err != nil {
+	if err := renameRetrying(runtime.GOOS, os.Rename, tmpPath, s.path); err != nil {
 		return fmt.Errorf("rename temp file: %w", err)
 	}
 	return nil
+}
+
+// renameAttemptsWindows bounds the rename retries on Windows, where another
+// process holding the file open (a qf reading it, a virus scan) makes the
+// rename fail for a moment. Between tries it waits 20ms, 40ms, ... (200ms in
+// all).
+const renameAttemptsWindows = 5
+
+// renameRetrying renames from to to, retrying briefly on Windows.
+func renameRetrying(goos string, rename func(string, string) error, from, to string) error {
+	attempts := 1
+	if goos == "windows" {
+		attempts = renameAttemptsWindows
+	}
+	var err error
+	for i := range attempts {
+		if i > 0 {
+			time.Sleep(time.Duration(i) * 20 * time.Millisecond)
+		}
+		if err = rename(from, to); err == nil {
+			return nil
+		}
+	}
+	return err
 }

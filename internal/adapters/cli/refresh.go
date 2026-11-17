@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
 	"time"
 
 	"qualflare-cli/internal/auth"
@@ -54,7 +55,16 @@ func (c *CLI) tokenFor(ctx context.Context, id string, force bool, rejected stri
 		token, _ := c.store.Get(id)
 		return token, nil
 	}
-	return auth.FreshToken(ctx, c.store, id, oauthRefresher(entry.Issuer), force, rejected)
+	return auth.FreshToken(ctx, c.store, id, oauthRefresher(entry.Issuer), force, rejected, c.warn)
+}
+
+// warn writes a warning line to stderr.
+func (c *CLI) warn(msg string) {
+	out := c.errOut
+	if out == nil {
+		out = os.Stderr
+	}
+	_, _ = fmt.Fprintln(out, "warning: "+msg)
 }
 
 // RetryUnauthorized is the HTTP client's 401 hook. For an OAuth alias it

@@ -374,3 +374,25 @@ func TestLogout_OAuthAliasOfAnotherServer(t *testing.T) {
 		t.Error("alias still saved after logout")
 	}
 }
+
+// A refresh that fails on the network or a 5xx while the token is still valid
+// lets the command go on with that token; the warning goes to stderr.
+func TestPreRun_TransientRefreshFailureUsesTheValidToken(t *testing.T) {
+	h := stubRefreshHooks(t)
+	h.err = errors.New("refresh the sign-in: unexpected status 503")
+	c, _ := newCLIForLoginTest(t)
+	var stderr bytes.Buffer
+	c.errOut = &stderr
+	saveOAuthAlias(t, c, testMetadata.Issuer, time.Now().Add(30*time.Second))
+
+	if err := runPreRun(t, c, "suites"); err != nil {
+		t.Fatalf("pre-run: %v", err)
+	}
+	if got := c.config.GetAPIKey(); got != "at-0" {
+		t.Errorf("API key = %q, want the current at-0", got)
+	}
+	if !strings.HasPrefix(stderr.String(), "warning: could not refresh the sign-in for \"myapp\"") ||
+		strings.Contains(stderr.String(), "at-0") || strings.Contains(stderr.String(), "rt-0") {
+		t.Errorf("stderr = %q, want a warning that names no token", stderr.String())
+	}
+}
