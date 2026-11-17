@@ -184,7 +184,7 @@ func parseAPIURL(raw string) (string, error) {
 	switch u.Scheme {
 	case "https":
 	case "http":
-		switch u.Hostname() {
+		switch strings.ToLower(u.Hostname()) {
 		case "127.0.0.1", "::1", "localhost":
 		default:
 			return "", fmt.Errorf("invalid QF_API_URL %q: http is only allowed for a loopback host (127.0.0.1, ::1, localhost); use https", raw)

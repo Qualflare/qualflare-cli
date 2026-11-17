@@ -112,8 +112,11 @@ func (s *Store) Entry(id string) (Identifier, bool) {
 	return v, ok
 }
 
-// SetOAuth inserts or replaces id with an OAuth entry.
+// SetOAuth inserts or replaces id with an OAuth entry. It sets Kind itself and
+// drops any pasted Token, so the entry is always read as OAuth.
 func (s *Store) SetOAuth(id string, c Identifier) {
+	c.Kind = KindOAuth
+	c.Token = ""
 	s.data.Identifiers[id] = c
 }
 

@@ -4,6 +4,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"testing"
@@ -98,3 +99,24 @@ type helperError struct {
 }
 
 func (e *helperError) Error() string { return e.err.Error() + ": " + e.out }
+
+// On a fresh install the config directory does not exist yet; taking the lock
+// must create it (0700) rather than fail.
+func TestWithFileLock_CreatesParentDir(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "fresh", "qualflare")
+	path := filepath.Join(dir, "config.toml")
+	ran := false
+	if err := WithFileLock(path, func() error { ran = true; return nil }); err != nil {
+		t.Fatalf("WithFileLock: %v", err)
+	}
+	if !ran {
+		t.Fatal("fn did not run")
+	}
+	info, err := os.Stat(dir)
+	if err != nil {
+		t.Fatalf("parent dir not created: %v", err)
+	}
+	if runtime.GOOS != "windows" && info.Mode().Perm() != 0o700 {
+		t.Errorf("parent dir mode = %04o, want 0700", info.Mode().Perm())
+	}
+}

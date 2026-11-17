@@ -268,3 +268,20 @@ func TestStore_OAuthEntryRoundTrip(t *testing.T) {
 		t.Fatal("Entry for unknown id reported ok")
 	}
 }
+
+// SetOAuth marks the entry as OAuth itself, so a caller that forgets Kind still
+// gets an entry whose Get returns the access token.
+func TestStore_SetOAuthSetsKind(t *testing.T) {
+	s, err := Load(newTempStorePath(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	s.SetOAuth("proj", Identifier{AccessToken: "at", RefreshToken: "rt", Token: "stale"})
+	got, _ := s.Entry("proj")
+	if got.Kind != KindOAuth {
+		t.Fatalf("Kind = %q, want %q", got.Kind, KindOAuth)
+	}
+	if tok, _ := s.Get("proj"); tok != "at" {
+		t.Fatalf("Get = %q, want the access token", tok)
+	}
+}

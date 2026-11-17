@@ -279,6 +279,7 @@ func TestConfig_QFAPIURL(t *testing.T) {
 		{"loopback ip", "http://127.0.0.1:8080", "http://127.0.0.1:8080", false},
 		{"loopback v6", "http://[::1]:8080", "http://[::1]:8080", false},
 		{"localhost", "http://localhost:8080", "http://localhost:8080", false},
+		{"localhost upper case", "http://LOCALHOST:8080", "http://LOCALHOST:8080", false},
 		{"http remote", "http://example.com", "", true},
 		{"no host", "https://", "", true},
 		{"bad scheme", "ftp://example.com", "", true},
