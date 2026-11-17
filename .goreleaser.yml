@@ -202,14 +202,29 @@ homebrew_casks:
     skip_upload: "{{ if and .Env.HOMEBREW_TAP_TOKEN (not .Prerelease) }}false{{ else }}true{{ end }}"
     # The binaries are not Apple-notarized. A cask downloads the archive itself,
     # so macOS quarantines it and reports "damaged and cannot be opened" -- the
-    # old formula never hit this. Guarded on OS.mac? because this same cask
-    # installs on Linux.
-    hooks:
-      post:
-        install: |
+    # old formula never hit this -- so the cask clears the quarantine flag after
+    # install.
+    #
+    # Homebrew 7 deprecates Ruby `postflight` blocks for declarative
+    # `postflight_steps` (warning: "Calling `postflight` is deprecated!").
+    # GoReleaser's `hooks.post.install` can only write a `postflight` block, so
+    # the cask carries the step itself. The `postflight` branch is for older
+    # Homebrew, which has no `postflight_steps` and would otherwise fail to load
+    # the cask. must_succeed: false because the same cask installs on Linux,
+    # where there is no xattr. `{{staged_path}}` is a Homebrew token, escaped
+    # here so GoReleaser's own templating leaves it alone.
+    custom_block: |
+      if respond_to?(:postflight_steps)
+        postflight_steps do
+          run "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "{{ "{{staged_path}}" }}/qf"], must_succeed: false
+        end
+      else
+        postflight do
           if OS.mac?
             system_command "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "#{staged_path}/qf"]
           end
+        end
+      end
 
 release:
   github:
