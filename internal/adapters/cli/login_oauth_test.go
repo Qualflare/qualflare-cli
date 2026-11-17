@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -414,5 +415,125 @@ func TestLogin_NoBrowserRefusedWhereItCannotApply(t *testing.T) {
 				t.Error("an entry was saved")
 			}
 		})
+	}
+}
+
+// Replacing an OAuth alias revokes the old sign-in's grant at its issuer, best
+// effort, once the new credentials are saved, as logout does.
+func TestLogin_ReplacingAnOAuthAliasRevokesTheOldGrant(t *testing.T) {
+	type revoke struct {
+		issuer, token string
+		savedAccess   string // what the store held when the revoke was sent
+	}
+	setup := func(t *testing.T, revokeErr error) (*CLI, string, *loginHooks, *[]revoke) {
+		t.Helper()
+		t.Setenv("QF_TOKEN", "")
+		c, storePath := newCLIForLoginTest(t)
+		err := c.saveLocked(func(s *auth.Store) {
+			s.SetOAuth("myapp", auth.Identifier{AccessToken: "at-old", RefreshToken: "rt-old",
+				ExpiresAt: time.Now().Add(time.Hour), Issuer: "https://old.example.test"})
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		h := stubLoginHooks(t, true)
+		discoverOAuth = func(_ context.Context, endpoint string) (oauth.Metadata, error) {
+			h.discoverCalls++
+			if endpoint == "https://old.example.test" {
+				return oauth.Metadata{Issuer: endpoint, RevocationEndpoint: endpoint + "/oauth/revoke"}, nil
+			}
+			return testMetadata, nil
+		}
+		var got []revoke
+		origRevoke := revokeOAuth
+		t.Cleanup(func() { revokeOAuth = origRevoke })
+		revokeOAuth = func(_ context.Context, md oauth.Metadata, rt string) error {
+			e, _ := reloadEntry(t, storePath)
+			got = append(got, revoke{issuer: md.Issuer, token: rt, savedAccess: e.AccessToken + e.Token})
+			return revokeErr
+		}
+		return c, storePath, h, &got
+	}
+
+	t.Run("browser sign-in", func(t *testing.T) {
+		c, storePath, h, got := setup(t, nil)
+		h.succeed(time.Now().Add(time.Hour))
+		if _, err := runLoginCmd(t, c, "myapp", "--force"); err != nil {
+			t.Fatalf("login: %v", err)
+		}
+		want := []revoke{{issuer: "https://old.example.test", token: "rt-old", savedAccess: "at-secret"}}
+		if !slices.Equal(*got, want) {
+			t.Errorf("revocations = %+v, want %+v (after the new sign-in was saved)", *got, want)
+		}
+		if e, _ := reloadEntry(t, storePath); e.AccessToken != "at-secret" {
+			t.Errorf("entry = %+v, want the new sign-in", e)
+		}
+	})
+	t.Run("pasted token", func(t *testing.T) {
+		c, storePath, _, got := setup(t, nil)
+		if _, err := runLoginCmd(t, c, "myapp", "qf_new", "--force"); err != nil {
+			t.Fatalf("login: %v", err)
+		}
+		want := []revoke{{issuer: "https://old.example.test", token: "rt-old", savedAccess: "qf_new"}}
+		if !slices.Equal(*got, want) {
+			t.Errorf("revocations = %+v, want %+v", *got, want)
+		}
+		assertPasted(t, storePath, "qf_new")
+	})
+	t.Run("server without browser sign-in", func(t *testing.T) {
+		c, storePath, _, got := setup(t, nil)
+		discoverOAuth = func(ctx context.Context, endpoint string) (oauth.Metadata, error) {
+			if err := ctx.Err(); err != nil {
+				return oauth.Metadata{}, err
+			}
+			if endpoint == "https://old.example.test" {
+				return oauth.Metadata{Issuer: endpoint, RevocationEndpoint: endpoint + "/oauth/revoke"}, nil
+			}
+			return oauth.Metadata{}, oauth.ErrNoAuthServer
+		}
+		readHiddenToken = func() (string, error) { return "qf_fallback", nil }
+		if _, err := runLoginCmd(t, c, "myapp", "--force"); err != nil {
+			t.Fatalf("login: %v", err)
+		}
+		want := []revoke{{issuer: "https://old.example.test", token: "rt-old", savedAccess: "qf_fallback"}}
+		if !slices.Equal(*got, want) {
+			t.Errorf("revocations = %+v, want %+v", *got, want)
+		}
+		assertPasted(t, storePath, "qf_fallback")
+	})
+	t.Run("revoke fails", func(t *testing.T) {
+		c, storePath, h, _ := setup(t, errors.New("unexpected status 503"))
+		h.succeed(time.Now().Add(time.Hour))
+		stderr, err := runLoginCmd(t, c, "myapp", "--force")
+		if err != nil {
+			t.Fatalf("login: %v", err)
+		}
+		if !strings.Contains(stderr, `warning: could not revoke the previous sign-in for "myapp"`) ||
+			strings.Contains(stderr, "rt-old") {
+			t.Errorf("stderr = %q, want a warning that names no token", stderr)
+		}
+		if e, _ := reloadEntry(t, storePath); e.AccessToken != "at-secret" {
+			t.Errorf("entry = %+v, want the new sign-in kept", e)
+		}
+	})
+}
+
+// Replacing a pasted token revokes nothing.
+func TestLogin_ReplacingAPastedAliasRevokesNothing(t *testing.T) {
+	t.Setenv("QF_TOKEN", "")
+	c, _ := newCLIForLoginTest(t)
+	if err := c.saveLocked(func(s *auth.Store) { s.Set("myapp", "qf_old") }); err != nil {
+		t.Fatal(err)
+	}
+	h := stubLoginHooks(t, true)
+	h.succeed(time.Now().Add(time.Hour))
+	origRevoke := revokeOAuth
+	t.Cleanup(func() { revokeOAuth = origRevoke })
+	revokeOAuth = func(context.Context, oauth.Metadata, string) error {
+		t.Error("revoke called for a pasted token")
+		return nil
+	}
+	if _, err := runLoginCmd(t, c, "myapp", "--force"); err != nil {
+		t.Fatalf("login: %v", err)
 	}
 }

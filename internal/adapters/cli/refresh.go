@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io"
 	"os"
 	"time"
 
@@ -19,7 +18,8 @@ var (
 	revokeOAuth  = oauth.Revoke
 )
 
-// logoutRevokeTimeout bounds the best-effort revocation on logout.
+// logoutRevokeTimeout bounds a best-effort revocation (logout, or a sign-in
+// replaced by qf login).
 const logoutRevokeTimeout = 10 * time.Second
 
 // oauthRefresher refreshes against the authorization server that issued the
@@ -82,20 +82,18 @@ func (c *CLI) RetryUnauthorized(ctx context.Context, rejected string) (string, e
 	return c.tokenFor(ctx, id, true, rejected)
 }
 
-// revokeSignIn asks the issuer of an OAuth entry to revoke its refresh token.
-// Best effort: a failure is reported to out as a warning and the caller goes on
-// to delete the alias.
-func revokeSignIn(ctx context.Context, out io.Writer, id string, entry auth.Identifier) {
+// revokeSignIn asks the issuer of an OAuth entry to revoke its refresh token,
+// and with it the sign-in's grant. A pasted entry, or one without a refresh
+// token, needs nothing. Callers treat an error as a warning.
+func revokeSignIn(ctx context.Context, entry auth.Identifier) error {
 	if entry.Kind != auth.KindOAuth || entry.RefreshToken == "" {
-		return
+		return nil
 	}
 	ctx, cancel := context.WithTimeout(ctx, logoutRevokeTimeout)
 	defer cancel()
 	md, err := discoverOAuth(ctx, entry.Issuer)
-	if err == nil {
-		err = revokeOAuth(ctx, md, entry.RefreshToken)
-	}
 	if err != nil {
-		_, _ = fmt.Fprintf(out, "warning: could not revoke the sign-in for %q on the server (%v); removing it here anyway.\n", id, err)
+		return err
 	}
+	return revokeOAuth(ctx, md, entry.RefreshToken)
 }

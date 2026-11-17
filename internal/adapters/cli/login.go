@@ -87,6 +87,9 @@ via the QF_TOKEN environment variable, by a hidden prompt with --with-token, or
 piped on stdin. Passing it as an argument exposes it to the process list and
 shell history, so prefer the prompt or a piped/env value in CI.
 
+Replacing an identifier that holds a browser sign-in asks the server to revoke
+the old sign-in once the new credentials are saved.
+
 Examples:
   qf login myapp                 # sign in through the browser
   qf login myapp --no-browser    # sign in on another device, paste the code
@@ -135,7 +138,7 @@ func (c *CLI) runLogin(cmd *cobra.Command, args []string, flags loginFlags) erro
 	if ok, err := c.confirmReplace(id, flags.force); err != nil || !ok {
 		return err
 	}
-	return c.savePastedToken(id, token)
+	return c.savePastedToken(cmd.Context(), cmd.ErrOrStderr(), id, token)
 }
 
 // useBrowserSignIn reports whether no token source was given and a person is at
@@ -181,7 +184,8 @@ func (c *CLI) loginWithOAuth(cmd *cobra.Command, id string, flags loginFlags) er
 		if strings.TrimSpace(token) == "" {
 			return errors.New("token cannot be empty")
 		}
-		return c.savePastedToken(id, strings.TrimSpace(token))
+		// ctx was cancelled by stop(); revoke a replaced sign-in on the command's.
+		return c.savePastedToken(cmd.Context(), out, id, strings.TrimSpace(token))
 	}
 	if errors.Is(err, context.Canceled) {
 		return errSignInCancelled
@@ -216,7 +220,7 @@ func (c *CLI) loginWithOAuth(cmd *cobra.Command, id string, flags loginFlags) er
 		ExpiresAt:    cred.ExpiresAt,
 		Issuer:       md.Issuer,
 	}
-	if err := c.saveLocked(func(s *auth.Store) { s.SetOAuth(id, entry) }); err != nil {
+	if err := c.saveReplacing(ctx, out, id, func(s *auth.Store) { s.SetOAuth(id, entry) }); err != nil {
 		return err
 	}
 	if !c.config.IsQuiet() {
@@ -242,11 +246,30 @@ func (c *CLI) confirmReplace(id string, force bool) (bool, error) {
 	return ok, nil
 }
 
-func (c *CLI) savePastedToken(id, token string) error {
-	if err := c.saveLocked(func(s *auth.Store) { s.Set(id, token) }); err != nil {
+func (c *CLI) savePastedToken(ctx context.Context, out io.Writer, id, token string) error {
+	if err := c.saveReplacing(ctx, out, id, func(s *auth.Store) { s.Set(id, token) }); err != nil {
 		return err
 	}
 	c.printSuccess("Saved identifier %q. Use it as the first arg, e.g. `qf %s cases`.", id, id)
+	return nil
+}
+
+// saveReplacing saves id through change and then revokes, best effort, the
+// OAuth sign-in it replaced (the entry on disk under the lock), so a re-login
+// does not leave the old grant live on the server. A failed revocation is a
+// warning on out; the new credentials stay saved.
+func (c *CLI) saveReplacing(ctx context.Context, out io.Writer, id string, change func(*auth.Store)) error {
+	var replaced auth.Identifier
+	err := c.saveLocked(func(s *auth.Store) {
+		replaced, _ = s.Entry(id)
+		change(s)
+	})
+	if err != nil {
+		return err
+	}
+	if err := revokeSignIn(ctx, replaced); err != nil {
+		_, _ = fmt.Fprintf(out, "warning: could not revoke the previous sign-in for %q on the server (%v).\n", id, err)
+	}
 	return nil
 }
 

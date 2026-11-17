@@ -25,7 +25,9 @@ local credentials anyway.`,
 				if !ok {
 					return auth.ErrNotFound
 				}
-				revokeSignIn(cmd.Context(), cmd.ErrOrStderr(), id, entry)
+				if err := revokeSignIn(cmd.Context(), entry); err != nil {
+					_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "warning: could not revoke the sign-in for %q on the server (%v); removing it here anyway.\n", id, err)
+				}
 				return s.Delete(id)
 			})
 			if errors.Is(err, auth.ErrNotFound) {
