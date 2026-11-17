@@ -319,3 +319,79 @@ func TestResourceDetailCommands_Paths(t *testing.T) {
 		})
 	}
 }
+
+func TestOverview_DefaultsToSevenDays(t *testing.T) {
+	c, api := newAPICLI(t)
+
+	if err := run(t, c.createOverviewCommand()); err != nil {
+		t.Fatalf("overview = %v", err)
+	}
+	if api.calls != 1 {
+		t.Fatalf("api called %d times, want 1", api.calls)
+	}
+	if api.path != apiV1+"/overview" {
+		t.Errorf("path = %q, want %q", api.path, apiV1+"/overview")
+	}
+	if got := api.params.Get("days"); got != "7" {
+		t.Errorf("days = %q, want 7", got)
+	}
+}
+
+func TestOverview_TwentyEightDays(t *testing.T) {
+	c, api := newAPICLI(t)
+
+	if err := run(t, c.createOverviewCommand(), "--days", "28"); err != nil {
+		t.Fatalf("overview --days 28 = %v", err)
+	}
+	if got := api.params.Get("days"); got != "28" {
+		t.Errorf("days = %q, want 28", got)
+	}
+}
+
+// The endpoint only knows the website's windows; anything else is refused here,
+// before a request, with an error that names the flag.
+func TestOverview_RejectsOtherDays(t *testing.T) {
+	for _, days := range []string{"30", "0", "-1"} {
+		c, api := newAPICLI(t)
+		err := run(t, c.createOverviewCommand(), "--days", days)
+		if err == nil || !strings.Contains(err.Error(), "--days") {
+			t.Errorf("--days %s = %v, want an error naming --days", days, err)
+		}
+		if api.calls != 0 {
+			t.Errorf("--days %s: a request was made", days)
+		}
+	}
+}
+
+// The help must say what the numbers are: latest is the most recent day with a
+// reading (not a window total), previous is a daily average over the prior window.
+func TestOverview_HelpDescribesTheNumbers(t *testing.T) {
+	c, _ := newAPICLI(t)
+	long := c.createOverviewCommand().Long
+	for _, want := range []string{"most recent day", "daily average", "buckets", "warnings"} {
+		if !strings.Contains(long, want) {
+			t.Errorf("overview help lacks %q", want)
+		}
+	}
+	if strings.Contains(long, "previous period's value") {
+		t.Error("overview help still calls previous the previous period's value")
+	}
+}
+
+// `qf --help` lists the project-scoped commands by hand; overview must be there.
+func TestRootHelp_ListsOverview(t *testing.T) {
+	c := newRootCLI(t, nil)
+	if !strings.Contains(c.CreateRootCommand().Long, "overview") {
+		t.Error("qf --help doesn't list overview")
+	}
+}
+
+func TestOverview_RejectsArguments(t *testing.T) {
+	c, api := newAPICLI(t)
+	if err := run(t, c.createOverviewCommand(), "extra"); err == nil {
+		t.Error("overview extra = nil, want an error")
+	}
+	if api.calls != 0 {
+		t.Error("a request was made despite the stray argument")
+	}
+}
