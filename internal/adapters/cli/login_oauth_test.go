@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"strings"
 	"testing"
 	"time"
@@ -35,9 +36,16 @@ func stubLoginHooks(t *testing.T, tty bool) *loginHooks {
 	t.Helper()
 	h := &loginHooks{}
 	origTTY, origHidden, origDiscover, origLogin := stdinIsTerminal, readHiddenToken, discoverOAuth, runOAuthLogin
+	origSecret, origSave := readSecret, saveTerminal
 	t.Cleanup(func() {
 		stdinIsTerminal, readHiddenToken, discoverOAuth, runOAuthLogin = origTTY, origHidden, origDiscover, origLogin
+		readSecret, saveTerminal = origSecret, origSave
 	})
+	readSecret = func(io.Writer, string) (string, error) {
+		t.Error("hidden code prompt used unexpectedly")
+		return "", errors.New("unexpected prompt")
+	}
+	saveTerminal = func() func() { return func() {} }
 	stdinIsTerminal = func() bool { return tty }
 	readHiddenToken = func() (string, error) {
 		t.Error("hidden token prompt used unexpectedly")
@@ -277,4 +285,91 @@ func TestLogin_OverwritePromptRunsBeforeOAuth(t *testing.T) {
 			t.Fatalf("entry = %+v, want it replaced by the OAuth sign-in", got)
 		}
 	})
+}
+
+// --no-browser reads the code at a hidden prompt, like a pasted token.
+func TestLogin_NoBrowserCodeIsHidden(t *testing.T) {
+	t.Setenv("QF_TOKEN", "")
+	c, _ := newCLIForLoginTest(t)
+	stubLoginHooks(t, true)
+	var gotLabel string
+	readSecret = func(_ io.Writer, label string) (string, error) {
+		gotLabel = label
+		return "code-x", nil
+	}
+	runOAuthLogin = func(_ context.Context, _ oauth.Metadata, opts oauth.LoginOptions) (oauth.Credential, error) {
+		code, err := opts.Prompt("Paste the code shown after signing in: ")
+		if err != nil || code != "code-x" {
+			return oauth.Credential{}, fmt.Errorf("Prompt = %q: %w", code, err)
+		}
+		return oauth.Credential{AccessToken: "at", RefreshToken: "rt"}, nil
+	}
+	if _, err := runLoginCmd(t, c, "myapp", "--no-browser"); err != nil {
+		t.Fatalf("login: %v", err)
+	}
+	if gotLabel != "Paste the code shown after signing in: " {
+		t.Errorf("hidden prompt label = %q", gotLabel)
+	}
+}
+
+// Ctrl-C while the hidden code prompt is open abandons the read, so the
+// terminal state saved before the sign-in is restored on the way out, and the
+// error just says the sign-in was cancelled.
+func TestLogin_InterruptRestoresTerminal(t *testing.T) {
+	t.Setenv("QF_TOKEN", "")
+	c, storePath := newCLIForLoginTest(t)
+	stubLoginHooks(t, true)
+	restored := false
+	saveTerminal = func() func() { return func() { restored = true } }
+	runOAuthLogin = func(context.Context, oauth.Metadata, oauth.LoginOptions) (oauth.Credential, error) {
+		if restored {
+			t.Error("terminal restored before the sign-in ended")
+		}
+		return oauth.Credential{}, fmt.Errorf("sign-in interrupted: %w", context.Canceled)
+	}
+	_, err := runLoginCmd(t, c, "myapp", "--no-browser")
+	if err == nil || err.Error() != "sign-in cancelled" {
+		t.Fatalf("login = %v, want exactly \"sign-in cancelled\"", err)
+	}
+	if !restored {
+		t.Error("terminal state not restored after an interrupted sign-in")
+	}
+	if _, ok := reloadEntry(t, storePath); ok {
+		t.Error("an entry was saved after an interrupted sign-in")
+	}
+}
+
+// Ctrl-C during discovery is a cancellation, not a reason to suggest --with-token.
+func TestLogin_InterruptDuringDiscovery(t *testing.T) {
+	t.Setenv("QF_TOKEN", "")
+	c, _ := newCLIForLoginTest(t)
+	stubLoginHooks(t, true)
+	discoverOAuth = func(context.Context, string) (oauth.Metadata, error) {
+		return oauth.Metadata{}, fmt.Errorf("fetch sign-in metadata: %w", context.Canceled)
+	}
+	_, err := runLoginCmd(t, c, "myapp")
+	if err == nil || err.Error() != "sign-in cancelled" {
+		t.Fatalf("login = %v, want exactly \"sign-in cancelled\"", err)
+	}
+}
+
+// The timeout message names the alias the user typed.
+func TestLogin_TimeoutNamesAlias(t *testing.T) {
+	t.Setenv("QF_TOKEN", "")
+	c, _ := newCLIForLoginTest(t)
+	stubLoginHooks(t, true)
+	runOAuthLogin = func(ctx context.Context, md oauth.Metadata, _ oauth.LoginOptions) (oauth.Credential, error) {
+		return oauth.Login(ctx, md, oauth.LoginOptions{
+			OpenBrowser: func(string) error { return nil },
+			Out:         io.Discard,
+			Timeout:     20 * time.Millisecond,
+		})
+	}
+	_, err := runLoginCmd(t, c, "myapp")
+	if !errors.Is(err, oauth.ErrTimeout) {
+		t.Fatalf("login = %v, want ErrTimeout", err)
+	}
+	if !strings.Contains(err.Error(), "Run qf login myapp again.") || strings.Contains(err.Error(), "<alias>") {
+		t.Errorf("timeout message = %q, want it to name myapp", err)
+	}
 }

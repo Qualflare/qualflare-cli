@@ -54,6 +54,9 @@ func TestLogin_LoopbackSuccess(t *testing.T) {
 	if !authURLPattern.MatchString(out) {
 		t.Errorf("authorize URL not printed; out = %q", out)
 	}
+	if !strings.Contains(out, "--no-browser") {
+		t.Errorf("out does not point SSH/remote users at --no-browser: %q", out)
+	}
 	if strings.Contains(out, "at-secret") || strings.Contains(out, "rt-secret") {
 		t.Errorf("output leaks a token: %q", out)
 	}
@@ -127,6 +130,23 @@ func TestLogin_Cancelled(t *testing.T) {
 	}
 }
 
+// A server error is printed quoted, so its text cannot forge terminal lines.
+func TestLogin_ServerErrorQuoted(t *testing.T) {
+	f := newFakeAS(t)
+	_, _, err := loginWithBrowser(t, f, 10*time.Second, func(authURL string) {
+		q := f.authorize(authURL, "code-1")
+		browserGet(t, callbackURL(q.Get("redirect_uri"), map[string]string{
+			"error": "server_error", "error_description": "bad\nOK Signed in", "state": q.Get("state"), "iss": f.srv.URL,
+		}))
+	})
+	if err == nil {
+		t.Fatal("Login = nil error for an error callback")
+	}
+	if strings.Contains(err.Error(), "\n") || !strings.Contains(err.Error(), `"bad\nOK Signed in"`) || !strings.Contains(err.Error(), `"server_error"`) {
+		t.Errorf("error = %q, want the code and description quoted", err)
+	}
+}
+
 func TestLogin_Timeout(t *testing.T) {
 	f := newFakeAS(t)
 	_, _, err := loginWithBrowser(t, f, 150*time.Millisecond, func(string) {})
@@ -184,6 +204,15 @@ func TestLogin_BrowserOpenFails(t *testing.T) {
 	}
 	if !authURLPattern.MatchString(out.String()) {
 		t.Errorf("authorize URL not printed when the browser failed; out = %q", out.String())
+	}
+	var failed string
+	for _, l := range strings.Split(out.String(), "\n") {
+		if strings.HasPrefix(l, "Could not open a browser") {
+			failed = l
+		}
+	}
+	if !strings.Contains(failed, "--no-browser") {
+		t.Errorf("failed-open line %q should mention --no-browser", failed)
 	}
 }
 

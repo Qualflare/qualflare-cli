@@ -2,6 +2,7 @@ package cli
 
 import (
 	"bufio"
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -20,17 +21,48 @@ import (
 var (
 	stdinIsTerminal = func() bool { return term.IsTerminal(int(os.Stdin.Fd())) }
 	readHiddenToken = func() (string, error) {
-		fmt.Fprint(os.Stderr, "API token: ")
-		b, err := term.ReadPassword(int(os.Stdin.Fd()))
-		fmt.Fprintln(os.Stderr)
+		s, err := readSecret(os.Stderr, "API token: ")
 		if err != nil {
 			return "", fmt.Errorf("read token: %w", err)
 		}
-		return strings.TrimSpace(string(b)), nil
+		return strings.TrimSpace(s), nil
 	}
 	discoverOAuth = oauth.Discover
 	runOAuthLogin = oauth.Login
+	// readSecret writes label to w and reads a line from the terminal without
+	// echo. It needs a terminal: browser sign-in, and with it the --no-browser
+	// code prompt, only runs when stdin is one.
+	readSecret = func(w io.Writer, label string) (string, error) {
+		if !stdinIsTerminal() {
+			return "", errors.New("a hidden prompt needs a terminal on stdin")
+		}
+		_, _ = fmt.Fprint(w, label)
+		b, err := term.ReadPassword(int(os.Stdin.Fd()))
+		_, _ = fmt.Fprintln(w)
+		return string(b), err
+	}
+	// saveTerminal records stdin's terminal state and returns a func restoring it.
+	saveTerminal = func() func() {
+		fd := int(os.Stdin.Fd())
+		st, err := term.GetState(fd)
+		if err != nil {
+			return func() {}
+		}
+		return func() { _ = term.Restore(fd, st) }
+	}
 )
+
+// errSignInCancelled is what Ctrl-C during a browser sign-in reports.
+var errSignInCancelled = errors.New("sign-in cancelled")
+
+// aliasError fills the alias into an oauth message that names "<alias>".
+type aliasError struct {
+	id  string
+	err error
+}
+
+func (e aliasError) Error() string { return strings.ReplaceAll(e.err.Error(), "<alias>", e.id) }
+func (e aliasError) Unwrap() error { return e.err }
 
 type loginFlags struct {
 	force     bool
@@ -130,18 +162,30 @@ func (c *CLI) loginWithOAuth(cmd *cobra.Command, id string, flags loginFlags) er
 		}
 		return c.savePastedToken(id, strings.TrimSpace(token))
 	}
+	if errors.Is(err, context.Canceled) {
+		return errSignInCancelled
+	}
 	if err != nil {
 		return fmt.Errorf("sign in: %w (qf login %s --with-token pastes a token instead)", err, id)
 	}
 
+	// The --no-browser code prompt turns echo off; if Ctrl-C abandons it, the
+	// terminal is put back as it was before the sign-in.
+	restore := saveTerminal()
+	defer restore()
 	cred, err := runOAuthLogin(ctx, md, oauth.LoginOptions{
 		NoBrowser:   flags.noBrowser,
 		OpenBrowser: func(u string) error { return oauth.OpenBrowser(ctx, u) },
-		Prompt:      linePrompt(out),
+		Prompt:      func(label string) (string, error) { return readSecret(out, label) },
 		Out:         out,
 		Timeout:     oauth.DefaultTimeout,
 	})
-	if err != nil {
+	switch {
+	case errors.Is(err, context.Canceled):
+		return errSignInCancelled
+	case errors.Is(err, oauth.ErrTimeout):
+		return aliasError{id: id, err: err}
+	case err != nil:
 		return err
 	}
 	entry := auth.Identifier{
@@ -205,20 +249,6 @@ func (c *CLI) saveLocked(change func(*auth.Store)) error {
 		return fmt.Errorf("save credentials: %w", err)
 	}
 	return nil
-}
-
-// linePrompt writes label to w and reads one visible line from stdin. The
-// copy-the-code flow uses it: the code is single-use and bound to this
-// process's PKCE verifier, so echoing it is harmless.
-func linePrompt(w io.Writer) func(string) (string, error) {
-	return func(label string) (string, error) {
-		_, _ = fmt.Fprint(w, label)
-		line, err := bufio.NewReader(os.Stdin).ReadString('\n')
-		if err != nil && (!errors.Is(err, io.EOF) || line == "") {
-			return "", err
-		}
-		return line, nil
-	}
 }
 
 // resolveLoginToken resolves the API token WITHOUT requiring it on the command

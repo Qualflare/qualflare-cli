@@ -88,9 +88,9 @@ func checkCallback(q url.Values, state, issuer string) (string, error) {
 			return "", ErrCancelled
 		}
 		if d := q.Get("error_description"); d != "" {
-			return "", fmt.Errorf("sign-in failed: %s: %s", clip(e), clip(d))
+			return "", fmt.Errorf("sign-in failed: %q: %q", clip(e), clip(d))
 		}
-		return "", fmt.Errorf("sign-in failed: %s", clip(e))
+		return "", fmt.Errorf("sign-in failed: %q", clip(e))
 	}
 	code := q.Get("code")
 	if code == "" {

@@ -130,10 +130,11 @@ func codeFromLoopback(ctx context.Context, cfg *oauth2.Config, md Metadata, stat
 	cfg.RedirectURL = lb.redirectURI
 	authURL := authCodeURL(cfg, md, state, verifier)
 
-	_, _ = fmt.Fprintf(out, "Opening your browser to sign in. If it does not open, visit:\n\n  %s\n\n", authURL)
+	_, _ = fmt.Fprintf(out, "Opening your browser to sign in. If it does not open, visit the URL below,\n"+
+		"or on a remote or SSH session run qf login again with --no-browser:\n\n  %s\n\n", authURL)
 	if opts.OpenBrowser != nil {
 		if err := opts.OpenBrowser(authURL); err != nil {
-			_, _ = fmt.Fprintf(out, "Could not open a browser (%v). Open the URL above to continue.\n", err)
+			_, _ = fmt.Fprintf(out, "Could not open a browser (%v). Open the URL above, or on a remote or SSH session run qf login again with --no-browser.\n", err)
 		}
 	}
 	_, _ = fmt.Fprintln(out, "Waiting for sign-in...")
