@@ -62,8 +62,8 @@ func (c *CLI) CreateRootCommand() *cobra.Command {
 		Long: `qf is a CLI tool for Qualflare — parse test results and manage test data.
 
 Authentication:
-  login            Save credentials for a project (qf login <id> <token>)
-  logout           Remove saved credentials
+  login            Sign in to a project (qf login <id>)
+  logout           Sign out and remove saved credentials
   projects         List locally saved project identifiers
 
 Project-scoped commands (run as ` + "`qf <identifier> <command>`" + `):
@@ -93,7 +93,7 @@ Supported frameworks:
 		SilenceErrors: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if len(args) == 0 && len(c.store.List()) == 0 {
-				fmt.Println("No projects configured. Run 'qf login <identifier> <token>' to get started.")
+				fmt.Println("No projects configured. Run 'qf login <identifier>' to sign in.")
 				return nil
 			}
 			return cmd.Help()

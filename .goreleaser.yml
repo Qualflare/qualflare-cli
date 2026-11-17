@@ -241,7 +241,7 @@ release:
 
     ## Quick Start
     ```bash
-    qf login my-app YOUR_API_TOKEN
+    qf login my-app
     qf my-app collect results.xml
     ```
 

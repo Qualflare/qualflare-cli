@@ -46,21 +46,27 @@ To collect results from a pipeline, mount your workspace and pass your token —
 
 ## Getting Started
 
-**1. Get your API token**
+**1. Sign in**
 
-Open **Project → Settings → Access Tokens** in the [Qualflare dashboard](https://app.qualflare.com) (`/project/<slug>/settings/access-tokens/`) and create a new token.
-
-**2. Log in**
-
-Save your token under a short local identifier (the project slug shown in the dashboard works well):
+Pick a short local identifier (the project slug shown in the dashboard works well):
 
 ```bash
-qf login myapp qf_your_token_here
+qf login myapp
 ```
 
-This writes credentials to `~/.config/qualflare/config.toml` (`0600`). Run `qf login --help` for options.
+This opens your browser to sign in. On a remote or SSH machine, add `--no-browser`: `qf` prints a link to open on any device, then asks for the code shown there.
 
-**3. Upload your first report**
+```bash
+qf login myapp --no-browser
+```
+
+Credentials, including the refresh token, are written to `~/.config/qualflare/config.toml` (`0600`) and renewed automatically. Run `qf login --help` for options.
+
+**Using an API token instead**
+
+Create a token under **Project → Settings → Access Tokens** in the [Qualflare dashboard](https://app.qualflare.com) (`/project/<slug>/settings/access-tokens/`), then run `qf login myapp --with-token` and paste it at the hidden prompt.
+
+**2. Upload your first report**
 
 ```bash
 qf myapp collect path/to/results.xml
@@ -186,7 +192,7 @@ Run `qf myapp <command> --help` for pagination, filtering, and sorting options.
 
 ## CI/CD
 
-Add a single step after your test run. Store your token in a repository secret named `QF_TOKEN`:
+CI and scripts sign in with an API token, not the browser. Add a single step after your test run. Store your token in a repository secret named `QF_TOKEN`:
 
 ```yaml
 - name: Upload test results
@@ -205,8 +211,8 @@ Add a single step after your test run. Store your token in a repository secret n
 
 | Command | Description |
 |---------|-------------|
-| `qf login <id> <token>` | Save credentials for a project identifier |
-| `qf logout <id>` | Remove saved credentials |
+| `qf login <id> [token] [--no-browser] [--with-token]` | Sign in through the browser, or save an API token, for a project identifier |
+| `qf logout <id>` | Remove saved credentials (revokes a browser sign-in) |
 | `qf projects` | List all saved identifiers |
 | `qf list-formats` | List all supported test frameworks |
 | `qf version` | Print version information |
@@ -287,12 +293,13 @@ The directory is never guessed: without the flag, nothing is scanned.
 
 ## Configuration
 
-Credentials are stored per identifier in `$XDG_CONFIG_HOME/qualflare/config.toml` (permissions `0600`). Treat this file like an SSH key.
+Credentials are stored per identifier in `$XDG_CONFIG_HOME/qualflare/config.toml` (permissions `0600`). It holds access and refresh tokens, so treat it like an SSH key.
 
 Key environment variables:
 
 | Variable | Description |
 |----------|-------------|
+| `QF_API_URL` | Override the API endpoint, e.g. for a self-hosted or stage server (`https`, or `http` on loopback) |
 | `QF_VERBOSE` | Set to `true` for debug request/response logging |
 | `QF_BRANCH` / `QF_COMMIT` | Git context (auto-detected from common CI vars if unset) |
 | `QF_ENVIRONMENT` | Environment uid to upload into. Overrides the environment recorded in a `qualflare-json` report; `--environment` overrides both. Falls back to `development`. |

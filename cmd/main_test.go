@@ -53,7 +53,7 @@ func TestRewriteUnknownCommandError(t *testing.T) {
 	t.Run("rewrites a valid identifier", func(t *testing.T) {
 		err := rewriteUnknownCommandError(errors.New(`unknown command "myapp" for "qf"`))
 		got := err.Error()
-		for _, want := range []string{`no identifier "myapp"`, "qf login myapp <token>", "qf projects"} {
+		for _, want := range []string{`no identifier "myapp"`, "qf login myapp", "to sign in", "qf projects"} {
 			if !strings.Contains(got, want) {
 				t.Errorf("message %q missing %q", got, want)
 			}

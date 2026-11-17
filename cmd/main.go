@@ -117,5 +117,5 @@ func rewriteUnknownCommandError(err error) error {
 	if auth.Validate(candidate) != nil {
 		return err
 	}
-	return fmt.Errorf("no identifier %q configured. Run 'qf login %s <token>' to add it. (See 'qf projects' for the list.)", candidate, candidate)
+	return fmt.Errorf("no identifier %q configured. Run 'qf login %s' to sign in. (See 'qf projects' for the list.)", candidate, candidate)
 }

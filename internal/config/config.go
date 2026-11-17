@@ -127,7 +127,7 @@ func NewConfig() (*Config, error) {
 
 // LoadFromEnv loads configuration from environment variables.
 // Note: QF_API_KEY is intentionally NOT read here — tokens come from the
-// auth store via `qf login <identifier> <token>`.
+// auth store via `qf login <identifier>`.
 //
 // QF_API_URL overrides the API endpoint. It must be https, or http on a loopback
 // host; anything else is returned as an error rather than ignored, because a
@@ -481,7 +481,7 @@ func (c *Config) Validate() error {
 	if !c.DryRun && c.APIKey == "" {
 		return &ValidationError{
 			Field:   "api_key",
-			Message: "no token loaded; run 'qf login <identifier> <token>' first",
+			Message: "no token loaded; run 'qf login <identifier>' first",
 		}
 	}
 	if c.RetryMax > maxRetryCount {

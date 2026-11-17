@@ -473,7 +473,7 @@ type APIError struct {
 func (e *APIError) actionHint() string {
 	switch e.StatusCode {
 	case http.StatusUnauthorized:
-		return " — run `qf login <identifier> <token>` to re-authenticate"
+		return " — run 'qf login <id>' to sign in again"
 	case http.StatusForbidden:
 		return " — the token lacks access to this project"
 	case http.StatusPaymentRequired:
