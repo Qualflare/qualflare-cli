@@ -151,3 +151,27 @@ func TestDiscover_ServerError(t *testing.T) {
 		t.Errorf("error %q should name the status", err)
 	}
 }
+
+func TestSameOrigin(t *testing.T) {
+	cases := []struct {
+		a, b string
+		want bool
+	}{
+		{"https://api.example.test", "https://api.example.test", true},
+		{"https://api.example.test", "https://api.example.test/", true},
+		{"https://api.example.test", "HTTPS://API.Example.test:443/api/v1", true},
+		{"http://127.0.0.1:80", "http://127.0.0.1", true},
+		{"http://127.0.0.1:8003", "http://127.0.0.1:8001", false},
+		{"https://api.example.test", "http://api.example.test", false},
+		{"https://api.example.test", "https://api.example.test:8443", false},
+		{"https://api.example.test", "https://stage.example.test", false},
+		{"https://api.example.test", "", false},
+		{"", "", false},
+		{"ftp://api.example.test", "ftp://api.example.test", false},
+	}
+	for _, tc := range cases {
+		if got := SameOrigin(tc.a, tc.b); got != tc.want {
+			t.Errorf("SameOrigin(%q, %q) = %v, want %v", tc.a, tc.b, got, tc.want)
+		}
+	}
+}

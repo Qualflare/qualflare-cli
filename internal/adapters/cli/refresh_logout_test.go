@@ -54,8 +54,11 @@ func newFakeIssuer(t *testing.T) *fakeIssuer {
 	return f
 }
 
+// saveOAuthAlias saves an OAuth "myapp" signed in at issuer and points the API
+// endpoint at that issuer, as a sign-in leaves it.
 func saveOAuthAlias(t *testing.T, c *CLI, issuer string, expires time.Time) {
 	t.Helper()
+	c.config.APIEndpoint = issuer
 	err := c.saveLocked(func(s *auth.Store) {
 		s.SetOAuth("myapp", auth.Identifier{
 			AccessToken: "at-0", RefreshToken: "rt-0", ExpiresAt: expires, Issuer: issuer,
@@ -189,7 +192,8 @@ func TestPreRun_RefreshesAnExpiringOAuthToken(t *testing.T) {
 	h := stubRefreshHooks(t)
 	c, storePath := newCLIForLoginTest(t)
 	saveOAuthAlias(t, c, testMetadata.Issuer, time.Now().Add(20*time.Second))
-	c.config.APIEndpoint = "https://elsewhere.example.test"
+	// The same origin, written differently: still the issuer's server.
+	c.config.APIEndpoint = "https://API.example.test:443/"
 
 	if err := runPreRun(t, c, "suites"); err != nil {
 		t.Fatalf("pre-run: %v", err)
@@ -311,5 +315,62 @@ func TestRetryUnauthorized_NoActiveAlias(t *testing.T) {
 	tok, err := c.RetryUnauthorized(t.Context(), "x")
 	if err != nil || tok != "" {
 		t.Errorf("RetryUnauthorized = %q, %v; want no retry", tok, err)
+	}
+}
+
+// An OAuth alias belongs to the server that issued it. With the API endpoint
+// pointing elsewhere, the command is refused before any refresh or request, so
+// its tokens never reach the other server.
+func TestPreRun_RefusesAnEndpointOtherThanTheIssuer(t *testing.T) {
+	cases := []struct {
+		name, endpoint, shown string
+	}{
+		{"QF_API_URL override", "http://127.0.0.1:8003", "http://127.0.0.1:8003"},
+		{"default endpoint", "", "https://api.qualflare.com"},
+		{"other port", "https://api.example.test:8443", "https://api.example.test:8443"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			h := stubRefreshHooks(t)
+			c, storePath := newCLIForLoginTest(t)
+			// Expired, so a pre-run that went ahead would refresh.
+			saveOAuthAlias(t, c, testMetadata.Issuer, time.Now().Add(-time.Minute))
+			c.config.APIEndpoint = tc.endpoint
+
+			err := runPreRun(t, c, "suites")
+			want := `"myapp" was signed in at https://api.example.test, but the API endpoint is ` + tc.shown +
+				`. Unset QF_API_URL, or run qf login myapp again.`
+			if err == nil || err.Error() != want {
+				t.Fatalf("pre-run = %v, want %q", err, want)
+			}
+			if len(h.discovered) != 0 || len(h.refreshed) != 0 {
+				t.Errorf("discovered %v, refreshed %v; want neither", h.discovered, h.refreshed)
+			}
+			if got := c.config.GetAPIKey(); got != "" {
+				t.Errorf("API key = %q, want none set", got)
+			}
+			if e, _ := reloadEntry(t, storePath); e.RefreshToken != "rt-0" {
+				t.Errorf("entry changed: %+v", e)
+			}
+		})
+	}
+}
+
+// Logging out of an alias whose issuer is not the configured endpoint still
+// revokes at the issuer and removes the alias.
+func TestLogout_OAuthAliasOfAnotherServer(t *testing.T) {
+	f := newFakeIssuer(t)
+	c, storePath := newCLIForLoginTest(t)
+	saveOAuthAlias(t, c, f.srv.URL, time.Now().Add(time.Hour))
+	c.config.APIEndpoint = "http://127.0.0.1:1"
+
+	if _, err := runLogoutCmd(t, c); err != nil {
+		t.Fatalf("logout: %v", err)
+	}
+	if len(f.revokes) != 1 || f.revokes[0].Get("token") != "rt-0" {
+		t.Errorf("revocations = %v, want one of rt-0 at the issuer", f.revokes)
+	}
+	if _, ok := reloadEntry(t, storePath); ok {
+		t.Error("alias still saved after logout")
 	}
 }

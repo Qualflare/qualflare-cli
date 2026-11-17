@@ -120,6 +120,27 @@ func originOf(raw string) (string, error) {
 	return u.Scheme + "://" + strings.ToLower(u.Host), nil
 }
 
+// SameOrigin reports whether a and b are absolute http(s) URLs on the same
+// origin: scheme, host (any case) and port, a scheme's default port written or
+// not. Paths and trailing slashes are ignored.
+func SameOrigin(a, b string) bool {
+	oa, okA := canonicalOrigin(a)
+	ob, okB := canonicalOrigin(b)
+	return okA && okB && oa == ob
+}
+
+func canonicalOrigin(raw string) (string, bool) {
+	u, err := url.Parse(strings.TrimSpace(raw))
+	if err != nil || (u.Scheme != "https" && u.Scheme != "http") || u.Hostname() == "" {
+		return "", false
+	}
+	port := u.Port()
+	if port == "" {
+		port = map[string]string{"https": "443", "http": "80"}[u.Scheme]
+	}
+	return u.Scheme + "://" + strings.ToLower(u.Hostname()) + ":" + port, true
+}
+
 // checkEndpoint accepts an absolute https URL, or http on a loopback host (a
 // local server, as QF_API_URL allows).
 func checkEndpoint(raw string) error {

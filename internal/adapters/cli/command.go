@@ -15,8 +15,10 @@ import (
 	"qualflare-cli/internal/config"
 	"qualflare-cli/internal/core/domain"
 	"qualflare-cli/internal/core/ports"
+	"qualflare-cli/internal/oauth"
 	"qualflare-cli/internal/version"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -151,6 +153,9 @@ func (c *CLI) createIdentifierCommand(identifier, token string) *cobra.Command {
 					c.config.SetAPIKey(entry.AccessToken)
 					return nil
 				}
+				if err := checkIssuer(identifier, entry.Issuer, c.config.GetAPIEndpoint()); err != nil {
+					return err
+				}
 				fresh, err := c.tokenFor(cmd.Context(), identifier, false, "")
 				if err != nil {
 					return err
@@ -165,6 +170,24 @@ func (c *CLI) createIdentifierCommand(identifier, token string) *cobra.Command {
 		parent.AddCommand(sub)
 	}
 	return parent
+}
+
+// checkIssuer refuses an OAuth alias whose issuer is not the API endpoint's
+// origin. Its tokens were issued by that server alone: sending them, or
+// refreshing them on a 401, against another endpoint (a QF_API_URL override, or
+// the default for a stage sign-in) would hand them to the wrong server.
+func checkIssuer(id, issuer, endpoint string) error {
+	if oauth.SameOrigin(issuer, endpoint) {
+		return nil
+	}
+	return issuerMismatchError{id: id, issuer: issuer, endpoint: endpoint}
+}
+
+type issuerMismatchError struct{ id, issuer, endpoint string }
+
+func (e issuerMismatchError) Error() string {
+	return strconv.Quote(e.id) + " was signed in at " + e.issuer + ", but the API endpoint is " + e.endpoint +
+		". Unset QF_API_URL, or run qf login " + e.id + " again."
 }
 
 // buildAuthedSubtree returns a fresh slice of authed subcommands. Each call
