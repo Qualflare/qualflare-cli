@@ -93,6 +93,9 @@ qf myapp collect results.xml --dry-run --output json
 
 # Upload videos and Playwright traces too (opt-in — see below)
 qf myapp collect ./qualflare-results --upload-artifacts=video,trace
+
+# Warn instead of failing the job when a plan limit refuses the upload (opt-in — see below)
+qf myapp collect results.xml --warn-on-plan-limit
 ```
 
 Run `qf myapp collect --help` for the full flag list (`--branch`, `--commit`, `--environment`, `--timeout`, etc.).
@@ -208,6 +211,45 @@ CI and scripts sign in with an API token, not the browser. Add a single step aft
 
 `qf` is a single static binary with no runtime dependencies. If you're using GitLab CI, CircleCI, Jenkins, or another platform, download the binary from [Releases](https://github.com/qualflare/qualflare-cli/releases/latest) and run the same two commands. See [the CI/CD guides](https://docs.qualflare.com/docs/cli/ci-cd) for platform-specific snippets.
 
+### Exit codes
+
+| Code | Meaning | Retry? |
+|------|---------|--------|
+| `0` | Success | |
+| `1` | Any other failure: a bad file or flag, a rejected report (`400`), or no answer from the server | |
+| `3` | The token is invalid or expired (`401`) | No |
+| `4` | A plan limit, a frozen workspace or another billing refusal (`402`), or access denied (`403`) | No |
+| `5` | Not found (`404`) | No |
+| `7` | Temporary server problem (`429` or `5xx`) | Yes |
+
+### Keeping CI green at a plan limit
+
+When a workspace has reached a plan limit, the server refuses the upload and `collect` exits `4`, so
+the CI job fails even if every test passed. If you would rather keep the job green, opt in:
+
+| | |
+|---|---|
+| flag | `--warn-on-plan-limit` |
+| env | `QF_WARN_ON_PLAN_LIMIT=true` (or `1`) |
+| default | off: the refusal fails with exit code `4` |
+
+`--warn-on-plan-limit=false` turns it off for one command when the variable is set.
+
+With the option on, the refusal prints a warning with the server's reason to stderr and `collect`
+exits `0`:
+
+```
+warning: test results were NOT uploaded: this workspace has reached a plan limit. Not failing the build because --warn-on-plan-limit or QF_WARN_ON_PLAN_LIMIT is set. Reason from Qualflare: Launches quota exceeded (100/100) [request_id: …]
+```
+
+**The results of that run are not in Qualflare.** All the files of one `collect`, shards included,
+go up as one launch that is accepted or refused as a whole, so none of them arrived. Screenshots
+upload before the report does, so some may already have been stored.
+
+The option covers only the plan limits on monthly reports, test cases and test suites. Everything
+else fails as usual: an invalid token, access denied, a frozen workspace, full storage, an inactive
+subscription, a rejected report, network errors and server errors.
+
 ## Commands
 
 | Command | Description |
@@ -312,6 +354,7 @@ Key environment variables:
 | `QF_API_URL` | Override the API endpoint (`https`, or `http` on loopback) |
 | `QF_VERBOSE` | Set to `true` for debug request/response logging |
 | `QF_BRANCH` / `QF_COMMIT` | Git context (auto-detected from common CI vars if unset) |
+| `QF_WARN_ON_PLAN_LIMIT` | Set to `true` or `1` to warn instead of failing when a plan limit refuses the upload. See [Keeping CI green at a plan limit](#keeping-ci-green-at-a-plan-limit). |
 | `QF_ENVIRONMENT` | Environment uid to upload into. Overrides the environment recorded in a `qualflare-json` report; `--environment` overrides both. Falls back to `development`. |
 
 Run `qf --help` for the full list of flags and environment variables.
