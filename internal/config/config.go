@@ -88,6 +88,10 @@ type Config struct {
 	// environment printed during a test run. Test status and failure messages are
 	// still uploaded; only the bulk captured output is dropped (SEC-04).
 	NoCaptureOutput bool
+	// WarnOnPlanLimit is QF_WARN_ON_PLAN_LIMIT, the default of collect's
+	// --warn-on-plan-limit: an upload refused because of a plan limit warns
+	// instead of failing the command.
+	WarnOnPlanLimit bool
 }
 
 // DefaultConfig returns the default configuration
@@ -172,6 +176,7 @@ func (c *Config) LoadFromEnv() error {
 	envBool(&c.Quiet, "QF_QUIET")
 	envBool(&c.Debug, "QF_DEBUG")
 	envBool(&c.NoCaptureOutput, "QF_NO_CAPTURE_OUTPUT")
+	envBool(&c.WarnOnPlanLimit, "QF_WARN_ON_PLAN_LIMIT")
 	return nil
 }
 

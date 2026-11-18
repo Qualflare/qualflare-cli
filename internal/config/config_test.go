@@ -307,3 +307,20 @@ func TestConfig_QFAPIURL(t *testing.T) {
 		})
 	}
 }
+
+// QF_WARN_ON_PLAN_LIMIT follows the other boolean variables: only "true" and "1"
+// turn it on, and it is off when unset, so nobody opts in by accident.
+func TestLoadFromEnv_WarnOnPlanLimit(t *testing.T) {
+	for value, want := range map[string]bool{"": false, "true": true, "1": true, "false": false, "0": false, "yes": false} {
+		t.Run("value "+value, func(t *testing.T) {
+			t.Setenv("QF_WARN_ON_PLAN_LIMIT", value)
+			cfg, err := NewConfig()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if cfg.WarnOnPlanLimit != want {
+				t.Errorf("WarnOnPlanLimit = %v, want %v", cfg.WarnOnPlanLimit, want)
+			}
+		})
+	}
+}

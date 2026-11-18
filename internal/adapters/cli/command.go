@@ -235,6 +235,7 @@ func (c *CLI) createCollectCommand() *cobra.Command {
 		shard           bool
 		output          string
 		artifactsDir    string
+		warnOnPlanLimit bool
 	)
 
 	cmd := &cobra.Command{
@@ -243,7 +244,12 @@ func (c *CLI) createCollectCommand() *cobra.Command {
 		Long: `Parse test result files and send them to the Qualflare API.
 
 Files can be specified as arguments, using glob patterns, or as a directory.
-The format is auto-detected if not specified.`,
+The format is auto-detected if not specified.
+
+Exit codes: 0 success, 1 other failure, 3 token rejected (401), 4 plan limit or
+access denied (402/403), 5 not found (404), 7 temporary, safe to retry (429/5xx).
+With --warn-on-plan-limit, an upload refused because of a plan limit warns and
+exits 0 instead of 4.`,
 		Example: `  # Collect JUnit XML files for project 'my-app'
   qf my-app collect results.xml --format junit
 
@@ -262,7 +268,10 @@ The format is auto-detected if not specified.`,
   qf my-app collect results.xml --dry-run
 
   # Output parsed results as JSON
-  qf my-app collect results.xml --dry-run --output json`,
+  qf my-app collect results.xml --dry-run --output json
+
+  # Do not fail the CI job when a plan limit refuses the upload
+  qf my-app collect results.xml --warn-on-plan-limit`,
 		Args: cobra.MinimumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return c.runCollect(cmd.Context(), args, collectOptions{
@@ -280,6 +289,7 @@ The format is auto-detected if not specified.`,
 				allowMixed:      allowMixed,
 				uploadArtifacts: uploadArtifacts,
 				artifactsDir:    artifactsDir,
+				warnOnPlanLimit: warnOnPlanLimit,
 			})
 		},
 	}
@@ -317,6 +327,13 @@ The format is auto-detected if not specified.`,
 	cmd.Flags().BoolVar(&allowMixed, "allow-mixed-runs", false,
 		"Upload even when the report files come from different runs (by default this is refused, "+
 			"because a stale file from an earlier run would be merged into this launch)")
+	// Seeded from the config, like the global flags, so QF_WARN_ON_PLAN_LIMIT turns
+	// it on and an explicit --warn-on-plan-limit=false still turns it off.
+	cmd.Flags().BoolVar(&warnOnPlanLimit, "warn-on-plan-limit", c.config.WarnOnPlanLimit,
+		"When the server refuses the upload because the workspace reached a plan limit (monthly "+
+			"reports, test cases or test suites), print a warning and exit 0 instead of 4. The results "+
+			"are NOT uploaded. Every other failure, a frozen workspace included, still fails. Also "+
+			"settable via QF_WARN_ON_PLAN_LIMIT=true.")
 
 	return cmd
 }
@@ -341,6 +358,9 @@ type collectOptions struct {
 	// left on disk, matched to cases and attached. Empty means the flag was
 	// not passed.
 	artifactsDir string
+	// warnOnPlanLimit is --warn-on-plan-limit: a plan-limit refusal of the upload
+	// warns instead of failing the command.
+	warnOnPlanLimit bool
 }
 
 // validPlatforms mirrors the server's launch platform enum
@@ -714,6 +734,14 @@ func (c *CLI) runCollect(ctx context.Context, files []string, opts collectOption
 	}
 
 	if err := c.reportService.ProcessTestResults(ctx, files, framework); err != nil {
+		if reason, ok := planLimitReason(err); ok && opts.warnOnPlanLimit {
+			// Not printInfo: --quiet must not hide that the results are missing. And
+			// no success line follows, because nothing was collected.
+			c.warn("test results were NOT uploaded: this workspace has reached a plan limit. " +
+				"Not failing the build because --warn-on-plan-limit or QF_WARN_ON_PLAN_LIMIT is set. " +
+				"Reason from Qualflare: " + reason)
+			return nil
+		}
 		return fmt.Errorf("failed to process test results: %w", err)
 	}
 
@@ -726,6 +754,17 @@ func (c *CLI) runCollect(ctx context.Context, files []string, opts collectOption
 	}
 
 	return nil
+}
+
+// planLimitReason returns the server's reason when err is a refusal because of a
+// plan limit. Every input file goes up in one request that the server accepts or
+// refuses whole, so such a refusal always means that none of the results arrived.
+func planLimitReason(err error) (string, bool) {
+	var refusal ports.PlanLimitRefusal
+	if !errors.As(err, &refusal) {
+		return "", false
+	}
+	return refusal.PlanLimitReason()
 }
 
 // printReportJSON parses the files and writes the report to stdout rather than uploading

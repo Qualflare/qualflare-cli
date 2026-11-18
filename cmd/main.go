@@ -18,6 +18,9 @@ import (
 
 // Exit codes let CI distinguish failure classes (API-04): a transient network
 // blip is retryable, a bad token or quota wall is not.
+//
+// collect --warn-on-plan-limit handles one 402 itself, the plan-limit refusal, and
+// returns no error for it, so that run exits 0 without reaching exitCodeForError.
 const (
 	exitOK        = 0
 	exitGeneric   = 1
