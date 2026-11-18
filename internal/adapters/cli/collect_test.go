@@ -3,6 +3,7 @@ package cli
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -381,5 +382,98 @@ func TestRunCollect_PassesFrameworkThrough(t *testing.T) {
 	}
 	if svc2.lastFW != "" {
 		t.Errorf("framework = %q, want empty so the service auto-detects", svc2.lastFW)
+	}
+}
+
+// --- --warn-on-plan-limit ---------------------------------------------------------------
+
+// planLimitErr stands in for the HTTP client's error; ok says whether it is a
+// plan-limit refusal. The full path, real client included, is covered in cmd.
+type planLimitErr struct {
+	reason string
+	ok     bool
+}
+
+func (e *planLimitErr) Error() string                   { return "send: refused (status: 402)" }
+func (e *planLimitErr) PlanLimitReason() (string, bool) { return e.reason, e.ok }
+
+func TestRunCollect_PlanLimit(t *testing.T) {
+	refusal := fmt.Errorf("wrapped: %w", &planLimitErr{reason: "Launches quota exceeded (100/100)", ok: true})
+
+	t.Run("off by default: the refusal is an error", func(t *testing.T) {
+		c, svc, f := newCollectCLI(t)
+		var stderr strings.Builder
+		c.errOut = &stderr
+		c.config.Quiet = true
+		svc.processErr = refusal
+
+		err := c.runCollect(context.Background(), []string{f}, baseOpts())
+		if !errors.Is(err, refusal) {
+			t.Fatalf("runCollect() = %v, want the refusal", err)
+		}
+		if stderr.Len() != 0 {
+			t.Errorf("unexpected warning: %q", stderr.String())
+		}
+	})
+
+	t.Run("opted in: a warning replaces the error", func(t *testing.T) {
+		c, svc, f := newCollectCLI(t)
+		var stderr strings.Builder
+		c.errOut = &stderr
+		c.config.Quiet = true // the warning must survive --quiet
+		svc.processErr = refusal
+		opts := baseOpts()
+		opts.warnOnPlanLimit = true
+
+		if err := c.runCollect(context.Background(), []string{f}, opts); err != nil {
+			t.Fatalf("runCollect() = %v, want nil", err)
+		}
+		for _, want := range []string{"warning: ", "NOT uploaded", "Launches quota exceeded (100/100)"} {
+			if !strings.Contains(stderr.String(), want) {
+				t.Errorf("warning %q lacks %q", stderr.String(), want)
+			}
+		}
+	})
+
+	t.Run("opted in: any other error still fails", func(t *testing.T) {
+		for name, other := range map[string]error{
+			"plain error":              errors.New("boom"),
+			"error of the same family": &planLimitErr{ok: false},
+		} {
+			t.Run(name, func(t *testing.T) {
+				c, svc, f := newCollectCLI(t)
+				var stderr strings.Builder
+				c.errOut = &stderr
+				c.config.Quiet = true
+				svc.processErr = other
+				opts := baseOpts()
+				opts.warnOnPlanLimit = true
+
+				if err := c.runCollect(context.Background(), []string{f}, opts); !errors.Is(err, other) {
+					t.Fatalf("runCollect() = %v, want %v", err, other)
+				}
+				if stderr.Len() != 0 {
+					t.Errorf("unexpected warning: %q", stderr.String())
+				}
+			})
+		}
+	})
+}
+
+// The flag's default comes from the loaded config, so QF_WARN_ON_PLAN_LIMIT turns
+// it on and an explicit --warn-on-plan-limit=false can still turn it off.
+func TestCollectCommand_WarnOnPlanLimitDefaultsFromConfig(t *testing.T) {
+	for _, want := range []bool{false, true} {
+		cfg := config.DefaultConfig()
+		cfg.WarnOnPlanLimit = want
+		c := NewCLI(&stubReportService{}, cfg, nil, nil, nil)
+
+		flag := c.createCollectCommand().Flags().Lookup("warn-on-plan-limit")
+		if flag == nil {
+			t.Fatal("collect has no --warn-on-plan-limit flag")
+		}
+		if got := flag.DefValue == "true"; got != want {
+			t.Errorf("config %v: flag default = %q", want, flag.DefValue)
+		}
 	}
 }

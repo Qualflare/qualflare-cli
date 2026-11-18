@@ -19,6 +19,51 @@ func TestActionHint(t *testing.T) {
 	}
 }
 
+// TestPlanLimitReason pins what counts as a plan-limit refusal: the 402 with the
+// code quota.exceeded, and nothing that merely shares one of the two. The server
+// also sends quota.exceeded with a 400 for limits that are not about the plan.
+func TestPlanLimitReason(t *testing.T) {
+	cases := []struct {
+		name string
+		err  APIError
+		want string
+		ok   bool
+	}{
+		{
+			name: "402 quota.exceeded",
+			err:  APIError{StatusCode: 402, Code: "quota.exceeded", Message: "Launches quota exceeded (100/100)"},
+			want: "Launches quota exceeded (100/100)",
+			ok:   true,
+		},
+		{
+			name: "the request id is kept for support",
+			err:  APIError{StatusCode: 402, Code: "quota.exceeded", Message: "limit", RequestID: "req-1"},
+			want: "limit [request_id: req-1]",
+			ok:   true,
+		},
+		{
+			name: "server text cannot forge a log line",
+			err:  APIError{StatusCode: 402, Code: "quota.exceeded", Message: "limit\nOK done", RequestID: "req\n1"},
+			want: "limit OK done [request_id: req 1]",
+			ok:   true,
+		},
+		{name: "frozen workspace", err: APIError{StatusCode: 402, Code: "billing.workspace_frozen", Message: "x"}},
+		{name: "storage full", err: APIError{StatusCode: 402, Code: "quota.storage_exceeded", Message: "x"}},
+		{name: "402 without a code", err: APIError{StatusCode: 402, Message: "x"}},
+		{name: "400 with the code", err: APIError{StatusCode: 400, Code: "quota.exceeded", Message: "x"}},
+		{name: "403 with the code", err: APIError{StatusCode: 403, Code: "quota.exceeded", Message: "x"}},
+		{name: "no response at all", err: APIError{Code: "quota.exceeded", Message: "x"}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got, ok := tc.err.PlanLimitReason()
+			if got != tc.want || ok != tc.ok {
+				t.Fatalf("PlanLimitReason() = %q, %v; want %q, %v", got, ok, tc.want, tc.ok)
+			}
+		})
+	}
+}
+
 // TestResolveErrorMessage (SYNC-01/10) pins the error-message selection: the
 // server's message wins, and the generic 404 code common.resource_not_found no
 // longer renders as "Language not found".

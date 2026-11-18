@@ -512,6 +512,22 @@ func (e *APIError) ErrorCode() string { return e.Code }
 // print it as it is. Error() is not changed.
 func (e *APIError) ErrorMessage() string { return oneLine(e.Message) }
 
+// PlanLimitReason makes *APIError a ports.PlanLimitRefusal. Both the status and
+// the code have to match: the server also sends quota.exceeded with a 400 for
+// limits that are not about the plan, and a 402 can mean a frozen workspace, a
+// full storage or a lapsed subscription. The request id stays with the reason so
+// the refusal can still be quoted to support.
+func (e *APIError) PlanLimitReason() (string, bool) {
+	if e.StatusCode != http.StatusPaymentRequired || e.Code != ports.CodeQuotaExceeded {
+		return "", false
+	}
+	reason := e.ErrorMessage()
+	if e.RequestID != "" {
+		reason += " [request_id: " + oneLine(e.RequestID) + "]"
+	}
+	return reason, true
+}
+
 func (e *APIError) Unwrap() error {
 	return e.Err
 }
