@@ -5,10 +5,10 @@ go 1.26.0
 require (
 	github.com/BurntSushi/toml v1.6.0
 	github.com/spf13/cobra v1.10.2
-	golang.org/x/net v0.61.0
+	golang.org/x/net v0.62.0
 	golang.org/x/oauth2 v0.38.0
-	golang.org/x/sys v0.49.0
-	golang.org/x/term v0.47.0
+	golang.org/x/sys v0.50.0
+	golang.org/x/term v0.48.0
 	resty.dev/v3 v3.0.0-rc.4
 )
 
