@@ -15,7 +15,7 @@ import (
 	"qualflare-cli/internal/core/domain"
 )
 
-// tokenGate answers 401 to any QF_TOKEN other than valid and records every
+// tokenGate answers 401 to any bearer token other than valid and records every
 // request's token and body.
 type tokenGate struct {
 	mu     sync.Mutex
@@ -26,7 +26,7 @@ type tokenGate struct {
 
 func (g *tokenGate) handler(w http.ResponseWriter, r *http.Request) {
 	b, _ := io.ReadAll(r.Body)
-	tok := r.Header.Get("QF_TOKEN")
+	tok := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
 	g.mu.Lock()
 	g.tokens = append(g.tokens, tok)
 	g.bodies = append(g.bodies, string(b))
@@ -178,15 +178,15 @@ func TestClient_NoRetryHookKeeps401(t *testing.T) {
 func TestClient_UnauthorizedRetryOnPresign(t *testing.T) {
 	var puts atomic.Int32
 	put := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Header.Get("QF_TOKEN") != "" {
-			t.Error("PUT to storage carried QF_TOKEN")
+		if r.Header.Get("Authorization") != "" {
+			t.Error("PUT to storage carried the Authorization header")
 		}
 		puts.Add(1)
 	}))
 	t.Cleanup(put.Close)
 	g := &tokenGate{valid: "at-new"}
 	api := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Header.Get("QF_TOKEN") != "at-new" {
+		if r.Header.Get("Authorization") != "Bearer at-new" {
 			g.handler(w, r)
 			return
 		}
