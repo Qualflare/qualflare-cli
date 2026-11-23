@@ -30,7 +30,7 @@ func TestUploadVideoRoundTrip(t *testing.T) {
 		}
 		gotPutBody = body
 		gotPutContentType = r.Header.Get("Content-Type")
-		gotPutToken = r.Header.Get("QF_TOKEN")
+		gotPutToken = r.Header.Get("Authorization")
 		w.WriteHeader(http.StatusOK)
 	}))
 	defer putServer.Close()
@@ -72,10 +72,10 @@ func TestUploadVideoRoundTrip(t *testing.T) {
 	if gotPutContentType != "video/mp4" {
 		t.Errorf("PUT Content-Type = %q", gotPutContentType)
 	}
-	// The presigned URL is itself the credential; forwarding QF_TOKEN to R2
+	// The presigned URL is itself the credential; forwarding the token to R2
 	// would leak the Qualflare API token to a third-party host.
 	if gotPutToken != "" {
-		t.Errorf("QF_TOKEN was sent on the PUT = %q, want no auth header", gotPutToken)
+		t.Errorf("Authorization was sent on the PUT = %q, want no auth header", gotPutToken)
 	}
 	presignBody := string(gotPresignBody)
 	if !strings.Contains(presignBody, `"filename":"clip.mp4"`) ||

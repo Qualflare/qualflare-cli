@@ -82,12 +82,14 @@ func TestNewHTTPClient_AppliesOptions(t *testing.T) {
 }
 
 // TestSendReport_Success also pins the two headers the upload contract depends on: the
-// auth token (CLI-H2) and a stable Idempotency-Key, without which a retried 5xx could
+// auth token (CLI-H2), sent as "Authorization: Bearer" and never as the legacy
+// QF_TOKEN header, and a stable Idempotency-Key, without which a retried 5xx could
 // double-create a launch.
 func TestSendReport_Success(t *testing.T) {
-	var gotToken, gotKey, gotPath string
+	var gotAuth, gotLegacy, gotKey, gotPath string
 	c := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
-		gotToken = r.Header.Get("QF_TOKEN")
+		gotAuth = r.Header.Get("Authorization")
+		gotLegacy = r.Header.Get("QF_TOKEN")
 		gotKey = r.Header.Get("Idempotency-Key")
 		gotPath = r.URL.Path
 		w.WriteHeader(http.StatusOK)
@@ -99,8 +101,11 @@ func TestSendReport_Success(t *testing.T) {
 	if gotPath != apiBasePath+"/collect" {
 		t.Errorf("path = %q, want %q", gotPath, apiBasePath+"/collect")
 	}
-	if gotToken != "qf_secret" {
-		t.Errorf("QF_TOKEN = %q, want the configured key", gotToken)
+	if gotAuth != "Bearer qf_secret" {
+		t.Errorf("Authorization = %q, want %q", gotAuth, "Bearer qf_secret")
+	}
+	if gotLegacy != "" {
+		t.Errorf("QF_TOKEN header = %q, want none", gotLegacy)
 	}
 	if gotKey == "" {
 		t.Error("Idempotency-Key header was not sent")
@@ -185,7 +190,7 @@ func TestSendReport_TransportError(t *testing.T) {
 
 // TestSendReport_DoesNotFollowRedirects guards the token leak in NewHTTPClient's comment:
 // the auth middleware re-runs on every hop, so following a cross-host redirect would
-// forward QF_TOKEN to that host.
+// forward the token to that host.
 func TestSendReport_DoesNotFollowRedirects(t *testing.T) {
 	var elsewhereHit bool
 	elsewhere := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -202,7 +207,7 @@ func TestSendReport_DoesNotFollowRedirects(t *testing.T) {
 		t.Error("SendReport() = nil; a redirect must not be followed silently")
 	}
 	if elsewhereHit {
-		t.Error("the redirect target was contacted — QF_TOKEN could leak to another host")
+		t.Error("the redirect target was contacted — the token could leak to another host")
 	}
 }
 

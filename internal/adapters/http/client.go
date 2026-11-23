@@ -25,7 +25,10 @@ import (
 
 const (
 	apiBasePath = "/api/v1"
-	tokenHeader = "QF_TOKEN"
+	// The token travels as "Authorization: Bearer <token>". Earlier versions
+	// sent a QF_TOKEN header, which the server still accepts from them.
+	authHeader   = "Authorization"
+	bearerPrefix = "Bearer "
 )
 
 // Client handles HTTP communication with the API
@@ -78,7 +81,7 @@ func NewHTTPClient(config ports.ConfigProvider, opts ...ClientOption) *Client {
 		// server resolves to the existing launch, so a retry cannot double-create.
 		SetRetryAllowNonIdempotent(true).
 		// Do not follow redirects: the auth middleware re-runs on every hop, so
-		// a redirect to a different host would forward QF_TOKEN to that host.
+		// a redirect to a different host would forward the token to that host.
 		SetRedirectPolicy(resty.RedirectNoPolicy()).
 		SetHeader("User-Agent", version.UserAgent()).
 		SetHeader("Accept", "application/json").
@@ -113,7 +116,7 @@ func NewHTTPClient(config ports.ConfigProvider, opts ...ClientOption) *Client {
 	// so a token replaced after a 401 is picked up.
 	rc.AddRequestMiddleware(func(_ *resty.Client, req *resty.Request) error {
 		if token := c.currentToken(); token != "" {
-			req.SetHeader(tokenHeader, token)
+			req.SetHeader(authHeader, bearerPrefix+token)
 		}
 		return nil
 	})
@@ -152,7 +155,7 @@ func (c *Client) send(ctx context.Context, method, reqURL string, build func() *
 	if err != nil || c.onUnauthorized == nil || resp.StatusCode() != http.StatusUnauthorized {
 		return resp, err
 	}
-	rejected := resp.Request.Header.Get(tokenHeader)
+	rejected := strings.TrimPrefix(resp.Request.Header.Get(authHeader), bearerPrefix)
 	token, err := c.onUnauthorized(ctx, rejected)
 	if err != nil {
 		return nil, &retryError{err: err}
@@ -336,7 +339,7 @@ func (c *Client) uploadBytes(ctx context.Context, body []byte, mimeType, filenam
 	}
 
 	// A bare resty.New() client, not c.resty: the PUT target is R2, not the
-	// Qualflare API, and must not carry the QF_TOKEN auth middleware that
+	// Qualflare API, and must not carry the Authorization auth middleware that
 	// c.resty's request middleware attaches to every request — the presigned
 	// URL itself is the credential, matching the reporters' putObject, which
 	// explicitly sends no auth header on the PUT.
@@ -408,16 +411,16 @@ func (c *Client) Get(ctx context.Context, path string, params url.Values) (json.
 }
 
 // redactDebugLog strips the API token from a --debug log entry before resty
-// formats it. resty invokes this callback BEFORE the formatter, so the mutation
-// takes effect and the credential never reaches stderr (OBS-06).
+// formats it. resty invokes this callback BEFORE the formatter, on a copy of
+// the headers, so the mutation takes effect without touching the request and
+// the credential never reaches stderr (OBS-06).
 func redactDebugLog(dl *resty.DebugLog) {
 	if dl == nil || dl.Request == nil || dl.Request.Header == nil {
 		return
 	}
-	if dl.Request.Header.Get(tokenHeader) != "" {
-		dl.Request.Header.Set(tokenHeader, "***REDACTED***")
+	if dl.Request.Header.Get(authHeader) != "" {
+		dl.Request.Header.Set(authHeader, bearerPrefix+"***REDACTED***")
 	}
-	dl.Request.Header.Del("Authorization")
 }
 
 // buildAPIError creates an APIError from a non-success response
